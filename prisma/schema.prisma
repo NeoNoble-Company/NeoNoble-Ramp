@@ -1,0 +1,103 @@
+// NeoNoble Ramp - Prisma Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  apiClients ApiClient[]
+
+  @@index([email])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model ApiClient {
+  id           String   @id @default(uuid())
+  ownerId      String
+  name         String
+  apiKey       String   @unique
+  apiSecret    String
+  status       ApiClientStatus @default(ACTIVE)
+  rateLimitDay Int      @default(1000)
+  totalCalls   Int      @default(0)
+  totalFeeBase Decimal  @default(0) @db.Decimal(20, 2)
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  apiCallLogs  ApiCallLog[]
+  rampSessions RampSession[]
+
+  @@index([apiKey])
+  @@index([ownerId])
+}
+
+enum ApiClientStatus {
+  ACTIVE
+  DISABLED
+}
+
+model ApiCallLog {
+  id          String   @id @default(uuid())
+  apiClientId String
+  endpoint    String
+  method      String
+  statusCode  Int
+  createdAt   DateTime @default(now())
+  extraMeta   Json?
+
+  apiClient ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+
+  @@index([apiClientId])
+  @@index([createdAt])
+}
+
+model RampSession {
+  id                String            @id
+  apiClientId       String
+  type              RampSessionType
+  tokenSymbol       String
+  chain             String
+  amountFiat        Decimal           @db.Decimal(20, 2)
+  tokens            Decimal           @db.Decimal(30, 18)
+  feeBase           Decimal           @db.Decimal(20, 2)
+  status            RampSessionStatus @default(PENDING)
+  checkoutUrl       String
+  userWallet        String?
+  payoutDestination String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  apiClient ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+
+  @@index([apiClientId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum RampSessionType {
+  ONRAMP
+  OFFRAMP
+}
+
+enum RampSessionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
