@@ -81,6 +81,24 @@ model RampSession {
   checkoutUrl       String
   userWallet        String?
   payoutDestination String?
+  
+  // Payment Gateway Fields
+  paymentProvider   String?           // 'stripe', 'mock', etc.
+  paymentSessionId  String?           // Stripe checkout session ID
+  paymentIntentId   String?           // Stripe payment intent ID
+  paymentStatus     String?           // Gateway-specific status
+  
+  // Blockchain Fields
+  txHash            String?           // BSC transaction hash
+  txStatus          String?           // pending, confirmed, failed
+  blockNumber       Int?              // Block number of confirmation
+  gasUsed           String?           // Gas used for transaction
+  
+  // Metadata
+  errorMessage      String?           @db.Text
+  retryCount        Int               @default(0)
+  lastProcessedAt   DateTime?
+  
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -89,6 +107,8 @@ model RampSession {
   @@index([apiClientId])
   @@index([status])
   @@index([createdAt])
+  @@index([paymentSessionId])
+  @@index([txHash])
 }
 
 enum RampSessionType {
