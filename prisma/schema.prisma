@@ -164,7 +164,7 @@ model PlatformApiKey {
   id            String   @id @default(uuid())
   name          String   // Label: "NeoExchange Main", "Partner ABC"
   apiKey        String   @unique  // Public key shown to client
-  secretHash    String   // SHA256 hash of secret - NEVER store plaintext
+  secretHash    String   // AES-256-GCM encrypted secret
   status        PlatformApiKeyStatus @default(ACTIVE)
   
   // Rate limiting
@@ -183,9 +183,6 @@ model PlatformApiKey {
   lastUsedAt    DateTime?
   revokedAt     DateTime?
   revokedBy     String?
-  
-  // Relations
-  apiCallLogs   ApiCallLog[]
 
   @@index([apiKey])
   @@index([status])
