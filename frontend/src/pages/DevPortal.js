@@ -203,7 +203,7 @@ export default function DevPortal() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white">API Key Created!</h3>
-                  <p className="text-gray-400 text-sm">Save your secret now - it won't be shown again</p>
+                  <p className="text-gray-400 text-sm">Save your secret now - it will not be shown again</p>
                 </div>
               </div>
 
