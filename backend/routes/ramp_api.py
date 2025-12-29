@@ -137,7 +137,7 @@ async def create_offramp_quote(request: OfframpQuoteRequest, http_request: Reque
     
     **HMAC Authentication Required**
     """
-    auth_info = await hmac_middleware.authenticate(http_request)
+    await hmac_middleware.authenticate(http_request)
     
     if request.crypto_currency.upper() not in SUPPORTED_CRYPTOS:
         raise HTTPException(
