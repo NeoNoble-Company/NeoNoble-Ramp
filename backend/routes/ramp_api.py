@@ -85,7 +85,7 @@ async def create_onramp_quote(request: OnrampQuoteRequest, http_request: Request
     - X-SIGNATURE: HMAC-SHA256(timestamp + bodyJson, apiSecret)
     """
     # Authenticate with HMAC
-    auth_info = await hmac_middleware.authenticate(http_request)
+    await hmac_middleware.authenticate(http_request)
     
     # Validate crypto currency
     if request.crypto_currency.upper() not in SUPPORTED_CRYPTOS:
