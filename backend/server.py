@@ -86,6 +86,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Root-level health check for Kubernetes (without /api prefix)
+@app.get("/health")
+async def root_health():
+    return {"status": "healthy", "service": "NeoNoble Ramp"}
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -98,7 +103,7 @@ async def root():
         "docs": "/docs"
     }
 
-# Health check
+# Health check (also available at /api/health)
 @api_router.get("/health")
 async def health():
     return {"status": "healthy", "service": "NeoNoble Ramp"}
