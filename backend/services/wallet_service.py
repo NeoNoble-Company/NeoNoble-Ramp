@@ -53,9 +53,9 @@ class WalletService:
                 "Please provide a valid BIP39 mnemonic phrase."
             )
         
-        # Validate mnemonic
+        # Validate mnemonic by trying to derive an account
         try:
-            Mnemonic("english").to_entropy(mnemonic)
+            Account.from_mnemonic(mnemonic, account_path="m/44'/60'/0'/0/0")
         except Exception as e:
             raise ValueError(f"Invalid mnemonic phrase: {e}")
         
