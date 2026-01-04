@@ -166,7 +166,7 @@ class BlockchainListener:
         """
         Check for NENO transfers to a specific address.
         
-        Returns list of transfer events.
+        Uses get_logs instead of create_filter for better RPC compatibility.
         """
         transfers = []
         
@@ -174,30 +174,44 @@ class BlockchainListener:
             contract = self._get_contract()
             web3 = self._get_web3()
             
-            # Get Transfer events to this address
-            transfer_filter = contract.events.Transfer.create_filter(
-                from_block=from_block,
-                to_block=to_block,
-                argument_filters={'to': Web3.to_checksum_address(address)}
-            )
+            # Use get_logs instead of create_filter (more reliable with various RPC providers)
+            # Transfer event topic: keccak256("Transfer(address,address,uint256)")
+            transfer_topic = web3.keccak(text="Transfer(address,address,uint256)").hex()
             
-            events = transfer_filter.get_all_entries()
+            # Pad address to 32 bytes for topic filter
+            padded_address = "0x" + address[2:].lower().zfill(64)
             
-            for event in events:
-                tx_hash = event['transactionHash'].hex()
-                block_number = event['blockNumber']
+            logs = web3.eth.get_logs({
+                'fromBlock': from_block,
+                'toBlock': to_block,
+                'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
+                'topics': [
+                    transfer_topic,
+                    None,  # from (any)
+                    padded_address  # to (our address)
+                ]
+            })
+            
+            for log in logs:
+                tx_hash = log['transactionHash'].hex()
+                block_number = log['blockNumber']
                 
-                # Get transaction receipt for confirmation count
+                # Decode the log data
+                # Transfer event: Transfer(address indexed from, address indexed to, uint256 value)
+                from_addr = "0x" + log['topics'][1].hex()[-40:]
+                to_addr = "0x" + log['topics'][2].hex()[-40:]
+                amount_wei = int(log['data'].hex(), 16)
+                
+                # Get confirmation count
                 current_block = web3.eth.block_number
                 confirmations = current_block - block_number
                 
-                amount_wei = event['args']['value']
                 amount = Decimal(amount_wei) / Decimal(10 ** self._token_decimals)
                 
                 transfer = {
                     'transaction_hash': tx_hash,
-                    'from_address': event['args']['from'].lower(),
-                    'to_address': event['args']['to'].lower(),
+                    'from_address': from_addr.lower(),
+                    'to_address': to_addr.lower(),
                     'amount': float(amount),
                     'amount_wei': str(amount_wei),
                     'block_number': block_number,
