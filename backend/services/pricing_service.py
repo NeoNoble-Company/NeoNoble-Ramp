@@ -254,16 +254,23 @@ class PricingService:
         """Get prices for all supported cryptocurrencies."""
         prices = {"NENO": NENO_PRICE_EUR}
         
-        # Check if we have fresh cache for all
-        all_cached = True
+        # Check if we have fresh cache for most cryptos (allow some missing)
+        cached_count = 0
         for crypto in CRYPTO_TO_COINGECKO.keys():
             cached = self._get_cached_price(crypto)
             if cached is not None:
                 prices[crypto] = cached
-            else:
-                all_cached = False
+                cached_count += 1
         
-        if all_cached:
+        # If we have >80% cached, don't fetch from API
+        cache_threshold = len(CRYPTO_TO_COINGECKO) * 0.8
+        if cached_count >= cache_threshold:
+            # Also try stale cache for any missing
+            for crypto in CRYPTO_TO_COINGECKO.keys():
+                if crypto not in prices:
+                    stale = self._get_cached_price(crypto, allow_stale=True)
+                    if stale is not None:
+                        prices[crypto] = stale
             return prices
         
         # Fetch from API
