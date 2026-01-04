@@ -4,11 +4,19 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Configure logging first
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Validate required environment variables
 def validate_env():
@@ -19,10 +27,25 @@ def validate_env():
     
     # Warn about optional but recommended vars
     if not os.environ.get('API_SECRET_ENCRYPTION_KEY'):
-        logging.warning(
-            "API_SECRET_ENCRYPTION_KEY not set. Platform API keys will not work. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        logger.warning(
+            "API_SECRET_ENCRYPTION_KEY not set. Platform API keys will not work."
         )
+    
+    # Log blockchain integration status
+    if os.environ.get('BSC_RPC_URL'):
+        logger.info("BSC_RPC_URL configured - blockchain integration enabled")
+    else:
+        logger.warning("BSC_RPC_URL not set - blockchain monitoring disabled")
+    
+    if os.environ.get('NENO_WALLET_MNEMONIC'):
+        logger.info("NENO_WALLET_MNEMONIC configured - HD wallet enabled")
+    else:
+        logger.warning("NENO_WALLET_MNEMONIC not set - deposit address generation disabled")
+    
+    if os.environ.get('STRIPE_SECRET_KEY'):
+        logger.info("STRIPE_SECRET_KEY configured - Stripe payouts enabled")
+    else:
+        logger.warning("STRIPE_SECRET_KEY not set - payouts will be logged for manual processing")
 
 validate_env()
 
@@ -36,6 +59,9 @@ from services.auth_service import AuthService
 from services.api_key_service import PlatformApiKeyService
 from services.ramp_service import RampService
 from services.pricing_service import pricing_service
+from services.wallet_service import WalletService
+from services.blockchain_listener import BlockchainListener
+from services.stripe_payout_service import StripePayoutService
 
 # Import routes
 from routes.auth import router as auth_router, set_auth_service
@@ -47,6 +73,14 @@ from routes.user_ramp import router as user_ramp_router, set_ramp_service
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
 ramp_service = RampService(db)
+wallet_service = WalletService(db)
+blockchain_listener = BlockchainListener(db)
+payout_service = StripePayoutService(db)
+
+# Wire up services
+ramp_service.set_wallet_service(wallet_service)
+ramp_service.set_blockchain_listener(blockchain_listener)
+ramp_service.set_payout_service(payout_service)
 
 # Wire up services to routes
 set_auth_service(auth_service)
@@ -54,11 +88,40 @@ set_api_key_service(api_key_service)
 set_ramp_api_services(ramp_service, api_key_service)
 set_ramp_service(ramp_service)
 
+# Background task for blockchain monitoring
+blockchain_poll_task = None
+
+async def on_deposit_confirmed(result: dict):
+    """Callback when a deposit is confirmed on-chain."""
+    quote_id = result['quote_id']
+    tx_hash = result['transfer']['transaction_hash']
+    amount = result['transfer']['amount']
+    
+    logger.info(f"Deposit confirmed for quote {quote_id}: {amount} NENO (tx: {tx_hash})")
+    
+    # Process the deposit
+    success, error = await ramp_service.process_deposit_received(
+        quote_id=quote_id,
+        tx_hash=tx_hash,
+        amount_received=amount
+    )
+    
+    if success:
+        logger.info(f"Successfully processed deposit for quote {quote_id}")
+    else:
+        logger.error(f"Failed to process deposit for quote {quote_id}: {error}")
+
+async def get_active_quotes_for_monitoring():
+    """Get active quotes for blockchain monitoring."""
+    return await ramp_service.get_active_offramp_quotes()
+
 # Lifespan context manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global blockchain_poll_task
+    
     # Startup
-    logging.info("NeoNoble Ramp API starting up...")
+    logger.info("NeoNoble Ramp API starting up...")
     
     # Create database indexes
     await db.users.create_index("email", unique=True)
@@ -69,20 +132,59 @@ async def lifespan(app: FastAPI):
     await db.transactions.create_index("id", unique=True)
     await db.transactions.create_index("user_id")
     await db.transactions.create_index("reference", unique=True)
+    await db.transactions.create_index("metadata.quote_id")
     
-    logging.info("Database indexes created")
+    # Initialize wallet service
+    try:
+        await wallet_service.initialize()
+        logger.info("Wallet service initialized")
+    except Exception as e:
+        logger.warning(f"Wallet service initialization failed: {e}")
+    
+    # Initialize payout service
+    try:
+        await payout_service.initialize()
+        logger.info("Payout service initialized")
+    except Exception as e:
+        logger.warning(f"Payout service initialization failed: {e}")
+    
+    # Start blockchain monitoring if configured
+    if os.environ.get('BSC_RPC_URL'):
+        try:
+            await blockchain_listener.initialize()
+            blockchain_poll_task = asyncio.create_task(
+                blockchain_listener.start_polling(
+                    get_active_quotes_for_monitoring,
+                    on_deposit_confirmed
+                )
+            )
+            logger.info("Blockchain monitoring started")
+        except Exception as e:
+            logger.warning(f"Blockchain monitoring failed to start: {e}")
+    
+    logger.info("Database indexes created")
     yield
     
     # Shutdown
-    logging.info("NeoNoble Ramp API shutting down...")
+    logger.info("NeoNoble Ramp API shutting down...")
+    
+    # Stop blockchain monitoring
+    if blockchain_poll_task:
+        blockchain_listener.stop_polling()
+        blockchain_poll_task.cancel()
+        try:
+            await blockchain_poll_task
+        except asyncio.CancelledError:
+            pass
+    
     await pricing_service.close()
     client.close()
 
 # Create the main app
 app = FastAPI(
     title="NeoNoble Ramp API",
-    description="Crypto on/off-ramp platform with HMAC-secured API access",
-    version="1.0.0",
+    description="Crypto on/off-ramp platform with HMAC-secured API access and BSC blockchain integration",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -99,7 +201,12 @@ api_router = APIRouter(prefix="/api")
 async def root():
     return {
         "message": "Welcome to NeoNoble Ramp API",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "features": {
+            "blockchain_monitoring": bool(os.environ.get('BSC_RPC_URL')),
+            "hd_wallet": bool(os.environ.get('NENO_WALLET_MNEMONIC')),
+            "stripe_payouts": bool(os.environ.get('STRIPE_SECRET_KEY'))
+        },
         "docs": "/docs"
     }
 
@@ -125,10 +232,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
