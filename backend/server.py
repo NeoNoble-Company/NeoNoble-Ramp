@@ -88,6 +88,7 @@ set_auth_service(auth_service)
 set_api_key_service(api_key_service)
 set_ramp_api_services(ramp_service, api_key_service)
 set_ramp_service(ramp_service)
+set_payout_service(payout_service)
 
 # Background task for blockchain monitoring
 blockchain_poll_task = None
