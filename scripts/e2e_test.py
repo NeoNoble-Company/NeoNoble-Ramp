@@ -11,6 +11,9 @@ This script tests the complete flow of the platform including:
 
 Usage:
     python scripts/e2e_test.py
+    
+    # Or with custom API URL:
+    API_URL=https://crypto-onramp-2.preview.emergentagent.com/api python scripts/e2e_test.py
 
 Requirements:
     pip install requests
@@ -22,8 +25,10 @@ import hmac
 import hashlib
 import time
 import sys
+import os
 
-BASE_URL = "http://localhost:8001/api"
+# Use environment variable or default to production URL
+BASE_URL = os.environ.get('API_URL', 'https://crypto-onramp-2.preview.emergentagent.com/api')
 
 # Colors for output
 GREEN = '\033[92m'
