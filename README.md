@@ -2,12 +2,14 @@
 
 A complete crypto on/off-ramp platform with HMAC-secured API access, real-time pricing from CoinGecko, and a fixed NENO token price of €10,000.
 
+**Live URL**: https://crypto-onramp-2.preview.emergentagent.com
+
 ## Features
 
 ### Public NeoNoble Ramp App (End Users)
 - User signup/login with email and password
 - Buy crypto (onramp): EUR → Crypto
-- Sell crypto (offramp): Crypto → EUR
+- Sell crypto (offramp): Crypto → EUR with **real BSC deposit addresses**
 - Real-time price display from CoinGecko
 - Transaction history
 
@@ -22,6 +24,18 @@ A complete crypto on/off-ramp platform with HMAC-secured API access, real-time p
 - Replay protection with timestamp window (±5 minutes)
 - Rate limiting per API key
 - Onramp/Offramp quote and execution endpoints
+
+### Blockchain Integration
+- **BNB Smart Chain (BSC)** for NENO BEP-20 token
+- HD wallet address generation for deposits
+- On-chain transaction monitoring
+- Automatic payout trigger on confirmed deposits
+
+### SEPA Payout System
+- **Stripe integration** (when balance available)
+- **Pending transfer records** for manual/external SEPA execution
+- Admin API for transfer management
+- Works like Transak/MoonPay/MetaMask Sell liquidity model
 
 ### Pricing Engine
 - **NENO**: Fixed at €10,000 per token (deterministic)
