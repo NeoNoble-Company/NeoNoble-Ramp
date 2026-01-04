@@ -83,10 +83,10 @@ class NeoNobleAPITester:
         """Test health check endpoints"""
         logger.info("\n=== Testing Health Checks ===")
         
-        # Test root health check
-        success, data, status = await self.make_request("GET", "/../health")
+        # Test API health check
+        success, data, status = await self.make_request("GET", "/health")
         self.log_test_result(
-            "Health Check (Root)", 
+            "Health Check (API)", 
             success and status == 200,
             f"Status: {status}, Response: {data}"
         )
