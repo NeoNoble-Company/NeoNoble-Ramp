@@ -1,13 +1,11 @@
 """
-Stripe Connect SEPA Transfer Service for NeoNoble Ramp.
+Stripe SEPA Transfer Service for NeoNoble Ramp.
 
-PRODUCTION-READY implementation for SEPA bank transfers using Stripe Connect.
-Works like Transak/MoonPay/MetaMask Sell - real fiat off-ramp model.
-
-Flow:
-1. Platform creates a Connected Account with external bank account (IBAN)
-2. When crypto deposit is confirmed, transfer funds to connected account
-3. Stripe automatically pays out to the external bank account
+PRODUCTION-READY implementation for SEPA bank transfers.
+Supports multiple payout methods:
+1. Stripe Balance Payout (if balance available)
+2. Stripe Connect Transfer (if Connect enabled)
+3. Pending Manual Processing (fallback for SEPA wire)
 
 Environment Variables:
 - STRIPE_SECRET_KEY: Stripe API secret key (required)
@@ -15,7 +13,6 @@ Environment Variables:
 - STRIPE_PAYOUT_MODE: 'live' or 'test' (default: 'live')
 - STRIPE_PAYOUT_IBAN: Destination IBAN
 - STRIPE_PAYOUT_BENEFICIARY_NAME: Beneficiary name
-- STRIPE_CONNECTED_ACCOUNT_ID: Pre-configured connected account ID (optional)
 """
 
 import os
@@ -30,19 +27,21 @@ logger = logging.getLogger(__name__)
 
 class StripePayoutService:
     """
-    Stripe Connect integration for SEPA bank transfers.
+    Stripe integration for SEPA bank transfers.
     
-    Uses Stripe Connect to transfer funds to external bank accounts,
-    eliminating the need for platform balance.
+    Supports multiple transfer methods with automatic fallback:
+    1. Stripe Payout (requires balance)
+    2. Stripe Connect Transfer (requires Connect)
+    3. Pending for manual processing
     """
     
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.payouts_collection = db.stripe_payouts
-        self.accounts_collection = db.stripe_connected_accounts
         self._initialized = False
         self._stripe_configured = False
-        self._connected_account_id: Optional[str] = None
+        self._has_connect = False
+        self._stripe_balance_eur = 0
     
     def _get_config(self) -> Dict:
         """Get payout configuration from environment."""
@@ -50,8 +49,7 @@ class StripePayoutService:
             'iban': os.environ.get('STRIPE_PAYOUT_IBAN', 'IT22B0200822800000103317304'),
             'beneficiary_name': os.environ.get('STRIPE_PAYOUT_BENEFICIARY_NAME', 'Massimo Fornara'),
             'mode': os.environ.get('STRIPE_PAYOUT_MODE', 'live'),
-            'webhook_secret': os.environ.get('STRIPE_WEBHOOK_SECRET'),
-            'connected_account_id': os.environ.get('STRIPE_CONNECTED_ACCOUNT_ID')
+            'webhook_secret': os.environ.get('STRIPE_WEBHOOK_SECRET')
         }
     
     def _initialize_stripe(self) -> bool:
@@ -61,9 +59,7 @@ class StripePayoutService:
         
         api_key = os.environ.get('STRIPE_SECRET_KEY')
         if not api_key:
-            logger.error(
-                "STRIPE_SECRET_KEY not set. Stripe transfers are DISABLED."
-            )
+            logger.error("STRIPE_SECRET_KEY not set. Stripe transfers are DISABLED.")
             return False
         
         stripe.api_key = api_key
@@ -71,129 +67,86 @@ class StripePayoutService:
         
         config = self._get_config()
         logger.info(
-            f"Stripe Connect initialized in {config['mode'].upper()} mode. "
+            f"Stripe initialized in {config['mode'].upper()} mode. "
             f"Transfers will go to: {config['beneficiary_name']} ({config['iban'][:8]}...)"
         )
         return True
     
     async def initialize(self):
-        """Initialize the payout service and ensure connected account exists."""
-        # Create indexes
-        await self.payouts_collection.create_index("payout_id", unique=True, sparse=True)
-        await self.payouts_collection.create_index("transfer_id", unique=True, sparse=True)
-        await self.payouts_collection.create_index("quote_id")
-        await self.payouts_collection.create_index("transaction_id")
-        await self.payouts_collection.create_index("status")
-        await self.payouts_collection.create_index("created_at")
+        """Initialize the payout service."""
+        # Create indexes with unique names to avoid conflicts
+        try:
+            await self.payouts_collection.create_index(
+                "payout_id", unique=True, sparse=True, name="payout_id_unique"
+            )
+        except Exception:
+            pass
         
-        await self.accounts_collection.create_index("account_id", unique=True)
-        await self.accounts_collection.create_index("iban")
+        try:
+            await self.payouts_collection.create_index(
+                "transfer_id", unique=True, sparse=True, name="transfer_id_unique"
+            )
+        except Exception:
+            pass
+        
+        try:
+            await self.payouts_collection.create_index("quote_id", name="quote_id_idx")
+        except Exception:
+            pass
+        
+        try:
+            await self.payouts_collection.create_index("transaction_id", name="transaction_id_idx")
+        except Exception:
+            pass
+        
+        try:
+            await self.payouts_collection.create_index("status", name="status_idx")
+        except Exception:
+            pass
+        
+        try:
+            await self.payouts_collection.create_index("created_at", name="created_at_idx")
+        except Exception:
+            pass
         
         # Initialize Stripe
         if not self._initialize_stripe():
             return
         
-        # Check for existing connected account or create one
-        config = self._get_config()
-        
-        # Try to use pre-configured account ID
-        if config['connected_account_id']:
-            self._connected_account_id = config['connected_account_id']
-            logger.info(f"Using pre-configured Connected Account: {self._connected_account_id}")
-        else:
-            # Look for existing account in DB
-            existing = await self.accounts_collection.find_one({
-                'iban': config['iban'],
-                'status': 'active'
-            })
-            
-            if existing:
-                self._connected_account_id = existing['account_id']
-                logger.info(f"Found existing Connected Account: {self._connected_account_id}")
-            else:
-                # Create new connected account
-                account_id, error = await self._create_connected_account()
-                if account_id:
-                    self._connected_account_id = account_id
-                    logger.info(f"Created new Connected Account: {account_id}")
-                else:
-                    logger.warning(f"Could not create Connected Account: {error}")
+        # Check Stripe account capabilities
+        await self._check_stripe_capabilities()
         
         self._initialized = True
     
-    async def _create_connected_account(self) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Create a Stripe Connected Account with external bank account.
-        
-        This creates a Custom connected account for receiving transfers.
-        """
-        config = self._get_config()
-        
+    async def _check_stripe_capabilities(self):
+        """Check what Stripe capabilities are available."""
         try:
-            # Create a Custom connected account
-            account = stripe.Account.create(
-                type='custom',
-                country='IT',  # Italy for IT IBAN
-                email='payouts@neonoble.com',
-                capabilities={
-                    'transfers': {'requested': True},
-                },
-                business_type='individual',
-                individual={
-                    'first_name': config['beneficiary_name'].split()[0],
-                    'last_name': ' '.join(config['beneficiary_name'].split()[1:]) or 'User',
-                    'email': 'payouts@neonoble.com',
-                },
-                tos_acceptance={
-                    'date': int(datetime.now().timestamp()),
-                    'ip': '127.0.0.1',  # Should be actual IP in production
-                },
-                business_profile={
-                    'mcc': '6051',  # Cryptocurrency services
-                    'url': 'https://neonoble.com',
-                },
-                metadata={
-                    'platform': 'neonoble_ramp',
-                    'purpose': 'sepa_payouts',
-                    'beneficiary': config['beneficiary_name'],
-                }
-            )
+            # Check balance
+            balance = stripe.Balance.retrieve()
+            for b in balance.available:
+                if b.currency == 'eur':
+                    self._stripe_balance_eur = b.amount / 100
             
-            # Add external bank account (IBAN)
-            bank_account = stripe.Account.create_external_account(
-                account.id,
-                external_account={
-                    'object': 'bank_account',
-                    'country': 'IT',
-                    'currency': 'eur',
-                    'account_holder_name': config['beneficiary_name'],
-                    'account_holder_type': 'individual',
-                    # For IBAN, use account_number field
-                    'account_number': config['iban'],
-                }
-            )
+            logger.info(f"Stripe Balance: €{self._stripe_balance_eur:,.2f}")
             
-            # Store in database
-            await self.accounts_collection.insert_one({
-                'account_id': account.id,
-                'iban': config['iban'],
-                'beneficiary_name': config['beneficiary_name'],
-                'bank_account_id': bank_account.id,
-                'status': 'active',
-                'created_at': datetime.now(timezone.utc).isoformat(),
-                'capabilities': dict(account.capabilities) if account.capabilities else {}
-            })
-            
-            logger.info(f"Created Connected Account {account.id} with bank account {bank_account.id}")
-            return account.id, None
-            
+            # Check if Connect is available
+            try:
+                stripe.Account.list(limit=1)
+                self._has_connect = True
+                logger.info("Stripe Connect: Available")
+            except stripe.error.PermissionError:
+                self._has_connect = False
+                logger.info("Stripe Connect: Not available")
+            except stripe.error.InvalidRequestError:
+                self._has_connect = False
+                logger.info("Stripe Connect: Not enabled")
+                
         except stripe.error.StripeError as e:
-            logger.error(f"Failed to create Connected Account: {e}")
-            return None, str(e)
+            logger.warning(f"Could not check Stripe capabilities: {e}")
     
     def is_available(self) -> bool:
-        """Check if Stripe transfers are available."""
-        return self._initialize_stripe() and self._connected_account_id is not None
+        """Check if Stripe is available."""
+        return self._initialize_stripe()
     
     async def create_payout(
         self,
@@ -203,10 +156,11 @@ class StripePayoutService:
         reference: str = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """
-        Create a SEPA transfer via Stripe Connect.
+        Create a SEPA transfer.
         
-        Uses Stripe PaymentIntent with transfer_data to send funds
-        directly to the connected account's bank.
+        Tries multiple methods in order:
+        1. Stripe Payout (if balance available)
+        2. Record for processing (always works)
         """
         config = self._get_config()
         iban = config['iban']
@@ -216,11 +170,13 @@ class StripePayoutService:
         # Check if already processed
         existing = await self.payouts_collection.find_one({
             'quote_id': quote_id,
-            'status': {'$in': ['pending', 'processing', 'succeeded', 'paid']}
+            'status': {'$in': ['pending', 'processing', 'succeeded', 'paid', 'pending_transfer']}
         })
         
         if existing:
             logger.warning(f"Transfer already exists for quote {quote_id}")
+            # Remove _id for JSON serialization
+            existing.pop('_id', None)
             return existing, None
         
         # Create transfer record
@@ -233,7 +189,7 @@ class StripePayoutService:
             'beneficiary_name': beneficiary_name,
             'reference': reference,
             'mode': config['mode'],
-            'method': 'stripe_connect_transfer',
+            'method': None,
             'status': 'pending',
             'created_at': datetime.now(timezone.utc).isoformat(),
             'transfer_id': None,
@@ -249,19 +205,25 @@ class StripePayoutService:
             await self.payouts_collection.insert_one(transfer_record)
             return None, error_msg
         
-        # Method 1: Try direct Transfer to connected account
-        if self._connected_account_id:
-            result, error = await self._create_transfer_to_connected_account(
-                transfer_record, amount_eur
-            )
+        # Refresh balance check
+        try:
+            balance = stripe.Balance.retrieve()
+            for b in balance.available:
+                if b.currency == 'eur':
+                    self._stripe_balance_eur = b.amount / 100
+        except Exception:
+            pass
+        
+        # Method 1: Try Stripe Payout if sufficient balance
+        if self._stripe_balance_eur >= amount_eur:
+            result, error = await self._create_stripe_payout(transfer_record, amount_eur)
             if result:
                 return result, None
-            logger.warning(f"Transfer method failed: {error}, trying alternative...")
+            logger.warning(f"Stripe Payout failed: {error}")
         
-        # Method 2: Create PaymentIntent with manual capture for bank transfer
-        result, error = await self._create_direct_bank_transfer(
-            transfer_record, amount_eur, iban, beneficiary_name
-        )
+        # Method 2: Record for SEPA processing
+        # This creates a verified record that can be processed manually or via banking API
+        result, error = await self._create_pending_transfer(transfer_record, amount_eur)
         
         if result:
             return result, None
@@ -273,23 +235,20 @@ class StripePayoutService:
         
         return None, transfer_record['error']
     
-    async def _create_transfer_to_connected_account(
+    async def _create_stripe_payout(
         self,
         transfer_record: Dict,
         amount_eur: float
     ) -> Tuple[Optional[Dict], Optional[str]]:
-        """Create a transfer to the connected account."""
+        """Create a Stripe Payout from balance."""
         try:
-            logger.info(
-                f"Creating Stripe Transfer: €{amount_eur:,.2f} to account {self._connected_account_id}"
-            )
+            logger.info(f"Creating Stripe Payout: €{amount_eur:,.2f}")
             
-            # Create transfer to connected account
-            transfer = stripe.Transfer.create(
+            payout = stripe.Payout.create(
                 amount=int(amount_eur * 100),
                 currency='eur',
-                destination=self._connected_account_id,
                 description=f"NeoNoble Ramp - {transfer_record['reference']}",
+                statement_descriptor="NEONOBLE",
                 metadata={
                     'quote_id': transfer_record['quote_id'],
                     'transaction_id': transfer_record['transaction_id'],
@@ -299,72 +258,97 @@ class StripePayoutService:
                 }
             )
             
-            transfer_record['transfer_id'] = transfer.id
-            transfer_record['status'] = 'processing'
+            transfer_record['payout_id'] = payout.id
+            transfer_record['method'] = 'stripe_payout'
+            transfer_record['status'] = payout.status
             transfer_record['stripe_response'] = {
-                'id': transfer.id,
-                'object': transfer.object,
-                'amount': transfer.amount,
-                'currency': transfer.currency,
-                'destination': transfer.destination,
-                'created': transfer.created
+                'id': payout.id,
+                'object': payout.object,
+                'status': payout.status,
+                'amount': payout.amount,
+                'currency': payout.currency,
+                'arrival_date': payout.arrival_date,
+                'created': payout.created
+            }
+            transfer_record['processed_at'] = datetime.now(timezone.utc).isoformat()
+            
+            await self.payouts_collection.insert_one(transfer_record)
+            
+            logger.info(f"✓ Stripe Payout CREATED: {payout.id} - €{amount_eur:,.2f}")
+            
+            # Remove _id for JSON serialization
+            transfer_record.pop('_id', None)
+            return transfer_record, None
+            
+        except stripe.error.StripeError as e:
+            return None, str(e)
+    
+    async def _create_pending_transfer(
+        self,
+        transfer_record: Dict,
+        amount_eur: float
+    ) -> Tuple[Optional[Dict], Optional[str]]:
+        """
+        Create a pending transfer record for SEPA processing.
+        
+        This records the transfer request with all details needed for:
+        - Manual SEPA wire transfer processing
+        - Integration with banking APIs (future)
+        - Stripe Treasury (if enabled)
+        """
+        try:
+            logger.info(
+                f"Creating SEPA transfer record: €{amount_eur:,.2f} to {transfer_record['beneficiary_name']}"
+            )
+            
+            transfer_record['method'] = 'sepa_pending'
+            transfer_record['status'] = 'pending_transfer'
+            transfer_record['transfer_details'] = {
+                'type': 'SEPA Credit Transfer',
+                'iban': transfer_record['iban'],
+                'bic': self._get_bic_from_iban(transfer_record['iban']),
+                'beneficiary_name': transfer_record['beneficiary_name'],
+                'amount_eur': amount_eur,
+                'currency': 'EUR',
+                'reference': transfer_record['reference'],
+                'purpose': 'Crypto off-ramp payout',
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'instructions': (
+                    f"Execute SEPA Credit Transfer of €{amount_eur:,.2f} to:\n"
+                    f"Beneficiary: {transfer_record['beneficiary_name']}\n"
+                    f"IBAN: {transfer_record['iban']}\n"
+                    f"Reference: {transfer_record['reference']}"
+                )
             }
             transfer_record['processed_at'] = datetime.now(timezone.utc).isoformat()
             
             await self.payouts_collection.insert_one(transfer_record)
             
             logger.info(
-                f"✓ Stripe Transfer CREATED: {transfer.id} - €{amount_eur:,.2f}"
+                f"✓ SEPA Transfer RECORDED: {transfer_record['reference']} - €{amount_eur:,.2f} "
+                f"to {transfer_record['iban']}"
             )
             
-            return transfer_record, None
-            
-        except stripe.error.StripeError as e:
-            return None, str(e)
-    
-    async def _create_direct_bank_transfer(
-        self,
-        transfer_record: Dict,
-        amount_eur: float,
-        iban: str,
-        beneficiary_name: str
-    ) -> Tuple[Optional[Dict], Optional[str]]:
-        """
-        Create a direct bank transfer using Stripe's bank transfer payment method.
-        
-        Note: This requires the platform to have bank transfer capabilities enabled.
-        """
-        try:
-            # For platforms without Connect, we can use Stripe Treasury or 
-            # fall back to recording for manual processing
-            
-            logger.info(
-                f"Recording bank transfer request: €{amount_eur:,.2f} to {beneficiary_name}"
-            )
-            
-            # Record the transfer request - in production this would integrate
-            # with a banking API or Stripe Treasury
-            transfer_record['status'] = 'pending_manual'
-            transfer_record['requires_manual_processing'] = True
-            transfer_record['bank_transfer_details'] = {
-                'iban': iban,
-                'beneficiary_name': beneficiary_name,
-                'amount_eur': amount_eur,
-                'currency': 'EUR',
-                'reference': transfer_record['reference'],
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            
-            await self.payouts_collection.insert_one(transfer_record)
-            
-            logger.info(
-                f"✓ Bank transfer request recorded: €{amount_eur:,.2f} to {iban}"
-            )
-            
+            # Remove _id for JSON serialization
+            transfer_record.pop('_id', None)
             return transfer_record, None
             
         except Exception as e:
             return None, str(e)
+    
+    def _get_bic_from_iban(self, iban: str) -> str:
+        """Extract or lookup BIC from IBAN."""
+        # For IT (Italy) IBANs, the bank code is positions 5-9
+        if iban.startswith('IT'):
+            bank_code = iban[5:10]
+            # Common Italian BICs (simplified mapping)
+            bic_map = {
+                'B0200': 'UNCRITMMXXX',  # UniCredit
+                '03069': 'BCITITMM',     # Intesa Sanpaolo
+                '05034': 'BPMOIT22XXX',  # Banco BPM
+            }
+            return bic_map.get(bank_code, 'UNCRITMMXXX')  # Default to UniCredit
+        return 'UNKNOWN'
     
     async def execute_payout(
         self,
@@ -373,10 +357,29 @@ class StripePayoutService:
         amount_eur: float,
         reference: str = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
-        """
-        Execute a SEPA payout - alias for create_payout for backward compatibility.
-        """
+        """Alias for create_payout."""
         return await self.create_payout(quote_id, transaction_id, amount_eur, reference)
+    
+    async def mark_transfer_completed(self, quote_id: str, external_ref: str = None) -> bool:
+        """
+        Mark a pending transfer as completed (called after manual SEPA execution).
+        """
+        result = await self.payouts_collection.update_one(
+            {'quote_id': quote_id, 'status': 'pending_transfer'},
+            {
+                '$set': {
+                    'status': 'paid',
+                    'external_reference': external_ref,
+                    'completed_at': datetime.now(timezone.utc).isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            logger.info(f"✓ Transfer marked as PAID for quote {quote_id}")
+            return True
+        return False
     
     async def handle_webhook(self, payload: bytes, sig_header: str) -> Tuple[bool, Optional[str]]:
         """Handle Stripe webhook events."""
@@ -403,62 +406,21 @@ class StripePayoutService:
         
         logger.info(f"Received Stripe webhook: {event_type}")
         
-        # Handle transfer events
-        if event_type == 'transfer.created':
-            await self._handle_transfer_created(data)
-        elif event_type == 'transfer.updated':
-            await self._handle_transfer_updated(data)
-        elif event_type == 'transfer.reversed':
-            await self._handle_transfer_reversed(data)
-        # Handle payout events (from connected account)
-        elif event_type == 'payout.paid':
+        if event_type == 'payout.paid':
             await self._handle_payout_paid(data)
         elif event_type == 'payout.failed':
             await self._handle_payout_failed(data)
+        elif event_type == 'payout.canceled':
+            await self._handle_payout_canceled(data)
         
         return True, None
     
-    async def _handle_transfer_created(self, transfer_data: dict):
-        """Handle transfer.created webhook event."""
-        transfer_id = transfer_data['id']
-        logger.info(f"Transfer created: {transfer_id}")
-    
-    async def _handle_transfer_updated(self, transfer_data: dict):
-        """Handle transfer.updated webhook event."""
-        transfer_id = transfer_data['id']
-        
-        await self.payouts_collection.update_one(
-            {'transfer_id': transfer_id},
-            {
-                '$set': {
-                    'status': 'processing',
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }
-            }
-        )
-        logger.info(f"Transfer updated: {transfer_id}")
-    
-    async def _handle_transfer_reversed(self, transfer_data: dict):
-        """Handle transfer.reversed webhook event."""
-        transfer_id = transfer_data['id']
-        
-        await self.payouts_collection.update_one(
-            {'transfer_id': transfer_id},
-            {
-                '$set': {
-                    'status': 'reversed',
-                    'reversed_at': datetime.now(timezone.utc).isoformat()
-                }
-            }
-        )
-        logger.error(f"Transfer reversed: {transfer_id}")
-    
     async def _handle_payout_paid(self, payout_data: dict):
-        """Handle payout.paid webhook event (from connected account)."""
+        """Handle payout.paid webhook event."""
         payout_id = payout_data['id']
         
         result = await self.payouts_collection.update_one(
-            {'$or': [{'payout_id': payout_id}, {'transfer_id': {'$exists': True}}]},
+            {'payout_id': payout_id},
             {
                 '$set': {
                     'status': 'paid',
@@ -488,31 +450,36 @@ class StripePayoutService:
         )
         logger.error(f"✗ Payout {payout_id} FAILED: {failure_message}")
     
-    async def get_transfer_status(self, transfer_id: str) -> Optional[Dict]:
-        """Get the current status of a transfer from Stripe."""
-        if not self._initialize_stripe():
-            return None
+    async def _handle_payout_canceled(self, payout_data: dict):
+        """Handle payout.canceled webhook event."""
+        payout_id = payout_data['id']
         
-        try:
-            transfer = stripe.Transfer.retrieve(transfer_id)
-            return {
-                'id': transfer.id,
-                'amount': transfer.amount / 100,
-                'currency': transfer.currency,
-                'destination': transfer.destination,
-                'created': transfer.created,
-                'reversed': transfer.reversed
+        await self.payouts_collection.update_one(
+            {'payout_id': payout_id},
+            {
+                '$set': {
+                    'status': 'canceled',
+                    'canceled_at': datetime.now(timezone.utc).isoformat()
+                }
             }
-        except stripe.error.StripeError as e:
-            logger.error(f"Failed to get transfer status: {e}")
-            return None
+        )
+        logger.warning(f"Payout {payout_id} was CANCELED")
     
     async def get_payout_by_quote(self, quote_id: str) -> Optional[Dict]:
         """Get payout/transfer record by quote ID."""
-        return await self.payouts_collection.find_one(
+        doc = await self.payouts_collection.find_one(
             {'quote_id': quote_id},
             {'_id': 0}
         )
+        return doc
+    
+    async def list_pending_transfers(self) -> list:
+        """List all pending transfers that need manual processing."""
+        cursor = self.payouts_collection.find(
+            {'status': 'pending_transfer'},
+            {'_id': 0}
+        ).sort('created_at', -1)
+        return await cursor.to_list(length=100)
     
     async def list_payouts(self, limit: int = 50, status: str = None) -> list:
         """List recent payouts/transfers."""
@@ -524,3 +491,25 @@ class StripePayoutService:
             query, {'_id': 0}
         ).sort('created_at', -1).limit(limit)
         return await cursor.to_list(length=limit)
+    
+    async def get_transfer_summary(self) -> Dict:
+        """Get summary of all transfers."""
+        pipeline = [
+            {
+                '$group': {
+                    '_id': '$status',
+                    'count': {'$sum': 1},
+                    'total_eur': {'$sum': '$amount_eur'}
+                }
+            }
+        ]
+        
+        results = await self.payouts_collection.aggregate(pipeline).to_list(length=10)
+        
+        summary = {
+            'by_status': {r['_id']: {'count': r['count'], 'total_eur': r['total_eur']} for r in results},
+            'stripe_balance_eur': self._stripe_balance_eur,
+            'has_connect': self._has_connect
+        }
+        
+        return summary
