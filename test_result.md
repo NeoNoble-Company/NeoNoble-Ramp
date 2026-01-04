@@ -110,11 +110,11 @@ user_problem_statement: |
 backend:
   - task: "Stripe SEPA Payout Integration"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/services/stripe_payout_service.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -127,14 +127,23 @@ backend:
           - STRIPE_PAYOUT_BENEFICIARY_NAME=Massimo Fornara
           Connected webhook router to server.py.
           Stripe initialized in LIVE mode confirmed in logs.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: Stripe integration working correctly
+          - Stripe initialized in LIVE mode with correct beneficiary (Massimo Fornara)
+          - Webhook endpoint /api/webhooks/stripe properly secured
+          - Correctly rejects requests without Stripe-Signature header (400 status)
+          - Correctly handles invalid signatures (returns error status)
+          - Backend logs confirm: "Stripe initialized in LIVE mode. Payouts will go to: Massimo Fornara (IT22B020...)"
 
   - task: "Stripe Webhook Route"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/routes/webhooks.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -142,14 +151,22 @@ backend:
           Webhook router integrated into server.py.
           Endpoint /api/webhooks/stripe is accessible.
           Returns 422 "Missing Stripe-Signature header" when called without signature (expected).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: Webhook route working correctly
+          - Endpoint /api/webhooks/stripe accessible and properly secured
+          - Returns 400 with "Missing Stripe-Signature header" when no signature provided
+          - Correctly processes invalid signatures and returns error status
+          - Webhook security implementation is correct
 
   - task: "Blockchain Listener Configuration"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/services/blockchain_listener.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -157,42 +174,77 @@ backend:
           Updated blockchain listener to use configurable NENO_CONTRACT_ADDRESS.
           BSC_RPC_URL updated to user's Infura endpoint.
           Listener confirmed connected to BSC at block ~74081835.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: Blockchain listener working correctly
+          - Backend logs confirm: "Connected to BSC RPC"
+          - Successfully initialized at block 74081835
+          - Blockchain monitoring started successfully
+          - API root endpoint shows blockchain_monitoring: true
 
   - task: "Off-Ramp Quote Generation"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/services/ramp_service.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Quote generation with deposit address should work. QUOTE_TTL_MINUTES=60"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: Off-ramp quote generation working correctly
+          - Successfully creates quotes for 100 NENO -> 1,000,000 EUR
+          - Generates valid BSC deposit addresses (0x format, 42 characters)
+          - Example generated address: 0x60d5878f5422F0eC326592c284eeB52FE79521Bc
+          - Backend logs confirm: "Generated deposit address for quote" and "Created offramp quote"
+          - Quote TTL configured to 60 minutes as expected
 
   - task: "Auth Registration/Login"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/routes/auth.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "User/Developer authentication with JWT"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: Authentication working correctly
+          - User registration works (returns 400 if user exists, which is correct)
+          - User login successful with JWT token generation
+          - Developer registration works (returns 400 if user exists, which is correct)
+          - Developer login successful with JWT token generation
+          - Backend logs confirm successful user registration and login events
 
   - task: "Developer Portal API Keys"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/routes/dev_portal.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "API key generation for platform access with HMAC authentication"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: Developer portal API keys working correctly
+          - API key creation successful for developers
+          - Returns both api_key and api_secret (one-time only)
+          - API key listing works correctly
+          - Backend logs confirm: "Created API key for user" with proper key format
+          - HMAC authentication system properly integrated
 
 frontend:
   - task: "Landing Page"
