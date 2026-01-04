@@ -27,6 +27,7 @@ class QuoteResponse(BaseModel):
     total_fiat: float  # fiat_amount + fee for onramp, fiat_amount - fee for offramp
     valid_until: datetime
     price_source: str  # "fixed" for NENO, "coingecko" for others
+    deposit_address: Optional[str] = None  # For offramp: address to send crypto to
 
 
 class RampRequest(BaseModel):
