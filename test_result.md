@@ -101,3 +101,169 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Enable real Stripe SEPA payout integration for the NeoNoble Ramp platform.
+  The off-ramp flow should automatically trigger a SEPA payout to the configured IBAN
+  after a NENO deposit is confirmed on the BSC blockchain.
+
+backend:
+  - task: "Stripe SEPA Payout Integration"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/services/stripe_payout_service.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Integrated live Stripe credentials into .env:
+          - STRIPE_SECRET_KEY (live key)
+          - STRIPE_WEBHOOK_SECRET
+          - STRIPE_PAYOUT_MODE=live
+          - STRIPE_PAYOUT_IBAN=IT22B0200822800000103317304
+          - STRIPE_PAYOUT_BENEFICIARY_NAME=Massimo Fornara
+          Connected webhook router to server.py.
+          Stripe initialized in LIVE mode confirmed in logs.
+
+  - task: "Stripe Webhook Route"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/routes/webhooks.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Webhook router integrated into server.py.
+          Endpoint /api/webhooks/stripe is accessible.
+          Returns 422 "Missing Stripe-Signature header" when called without signature (expected).
+
+  - task: "Blockchain Listener Configuration"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/services/blockchain_listener.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Updated blockchain listener to use configurable NENO_CONTRACT_ADDRESS.
+          BSC_RPC_URL updated to user's Infura endpoint.
+          Listener confirmed connected to BSC at block ~74081835.
+
+  - task: "Off-Ramp Quote Generation"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/services/ramp_service.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Quote generation with deposit address should work. QUOTE_TTL_MINUTES=60"
+
+  - task: "Auth Registration/Login"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/routes/auth.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "User/Developer authentication with JWT"
+
+  - task: "Developer Portal API Keys"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/routes/dev_portal.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "API key generation for platform access with HMAC authentication"
+
+frontend:
+  - task: "Landing Page"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/LandingPage.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Landing page for NeoNoble Ramp"
+
+  - task: "User Dashboard"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Dashboard for on-ramp/off-ramp flows"
+
+  - task: "Developer Portal UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/DevPortal.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Developer portal for API key management"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Stripe SEPA Payout Integration"
+    - "Off-Ramp Quote Generation"
+    - "Auth Registration/Login"
+    - "Developer Portal API Keys"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      I've completed the Stripe SEPA payout integration:
+      1. Added live Stripe credentials to /app/backend/.env
+      2. Integrated webhook router into server.py
+      3. Updated blockchain listener with configurable contract address
+      4. Backend logs confirm Stripe is in LIVE mode with correct beneficiary
+      
+      Please test:
+      1. Auth: Register/Login flows
+      2. Off-ramp quote generation with deposit address
+      3. (If possible) Simulate the full E2E flow:
+         - Create off-ramp quote
+         - Confirm quote execution
+         - Verify payout service would be triggered
+      
+      Note: The actual Stripe payout will only trigger after a real NENO deposit
+      is confirmed on BSC blockchain. We can test the quote/confirmation flow
+      and verify the payout service is correctly wired up.
