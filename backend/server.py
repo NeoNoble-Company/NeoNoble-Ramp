@@ -222,6 +222,7 @@ api_router.include_router(auth_router)
 api_router.include_router(dev_router)
 api_router.include_router(ramp_api_router)
 api_router.include_router(user_ramp_router)
+api_router.include_router(webhooks_router)
 
 # Include the main router
 app.include_router(api_router)
