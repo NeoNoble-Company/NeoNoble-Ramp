@@ -1,0 +1,195 @@
+<analysis>**original_problem_statement:**
+The user wants to build a complete NeoNoble Ramp platform from scratch. The initial problem statement was to fix an existing project, but it was discovered that the codebase was a barebones template.
+
+**PRODUCT REQUIREMENTS:**
+1.  **Full-Stack Application:** A full-stack app with a FastAPI backend and React frontend.
+2.  **Dual User Systems:**
+    *   **NeoNoble Ramp (Public Users):** Signup/Login, dashboard for on-ramp/off-ramp flows.
+    *   **NeoNoble Dev Portal (Developers):** Signup/Login, dashboard to create and manage platform API keys.
+3.  **Authentication:**
+    *   **Users/Developers:** Email + password authentication with secure password hashing (bcrypt) and JWT sessions.
+    *   **Platform API:** HMAC-SHA256 signature-based authentication for programmatic access.
+4.  **Platform API Key System:**
+    *   Developers can generate API key/secret pairs.
+    *   API secrets must be encrypted at rest (AES-256-GCM).
+    *   System should support key status (active, revoked), rate limiting, and usage stats.
+5.  **Ramp Functionality & Pricing:**
+    *   API endpoints for on-ramp and off-ramp quotes and execution.
+    *   Real-time pricing for major cryptocurrencies (BTC, ETH, etc.) via CoinGecko.
+    *   **NENO Token:** A special token with a fixed price of **1 NENO = 10,000 EUR**.
+6.  **Real Blockchain & Payout Integration (Off-Ramp):**
+    *   **Chain:** BNB Smart Chain (BEP-20) for the NENO token.
+    *   **Deposit Addresses:** Generate a unique, deterministic deposit address for each off-ramp quote using an HD wallet (mnemonic provided via env var).
+    *   **On-Chain Listener:** A background service must monitor the blockchain, detect incoming NENO deposits to active addresses, validate the amount, and wait for confirmations.
+    *   **Real SEPA Payouts:** Upon confirmed deposit, automatically trigger a real SEPA payout to a specified IBAN using **Stripe Global Payouts**.
+7.  **Configuration & Persistence:**
+    *   The original request was for **PostgreSQL + Prisma**, but the agent implemented it with **MongoDB**.
+    *   All sensitive keys, secrets, and connection strings must be configurable via environment variables.
+
+**User's preferred language**: English
+
+**what currently exists?**
+A complete full-stack application has been built from scratch.
+-   **Backend (FastAPI):** Features user/developer authentication (JWT), a Platform API Key system (HMAC), a pricing service integrating CoinGecko with a fixed price for NENO, and a robust off-ramp flow. It uses MongoDB for persistence.
+-   **Blockchain Integration:** The off-ramp flow includes a full, real blockchain integration: an HD wallet generates unique BSC deposit addresses, and a background listener actively monitors for NENO token deposits.
+-   **Quote Management:** Implemented a quote locking mechanism to prevent double spending and a configurable quote Time-To-Live (TTL) set to 60 minutes.
+-   **Frontend (React):** A comprehensive UI with separate flows for public users (Ramp) and developers (Dev Portal). Includes dashboards for crypto transactions and API key management.
+-   **Stripe Integration:** The foundation for real Stripe SEPA payouts is in place, including service files and a webhook route, but it's not yet fully enabled or using live credentials.
+
+**Last working item**:
+-   **Last item agent was working:** Enabling the real Stripe SEPA payout flow. The user provided live production credentials and requested the removal of any simulated payout logic. The agent created  and a new webhook route in  to handle this.
+-   **Status:** IN PROGRESS
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** backend testing agent. The agent must write a test to validate the end-to-end flow: create an off-ramp quote, simulate a blockchain deposit, and verify that a real Stripe payout is initiated by checking backend logs. This requires using the live Stripe key provided by the user.
+-   **User Testing Done:** N
+
+**All Pending/In progress Issue list**:
+-   **Issue 1 (P0):** Enable and test the real Stripe SEPA Payout flow.
+-   **Issue 2 (P1):** The CoinGecko API is subject to rate limiting, which can cause quote generation to fail.
+
+**Issues Detail:**
+-   **Issue 1: Enable and test the real Stripe SEPA Payout flow.**
+    -   **Attempted fixes:** The agent created  to handle live payouts and  for Stripe events.
+    -   **Next debug checklist:**
+        1.  Add the Stripe credentials from the user's last message to .
+        2.  Integrate the new  router into the main FastAPI app in .
+        3.  Modify  to unconditionally use the live Stripe keys and remove all simulation/fallback logic.
+        4.  In the  service, ensure  is called after a NENO deposit is successfully confirmed.
+        5.  Write and execute a new end-to-end test script to verify that a confirmed deposit triggers a real Stripe payout to the specified IBAN.
+    -   **Why fix this issue?** This is a critical user requirement to make the off-ramp flow production-ready.
+    -   **Status:** IN PROGRESS
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Backend
+    -   **Blocked on other issue:** None
+
+-   **Issue 2: CoinGecko API Rate Limiting.**
+    -   **Attempted fixes:** None. The agent noted it was a temporary issue during testing.
+    -   **Next debug checklist:**
+        1.  Implement a caching mechanism in  to reduce API calls.
+        2.  Add robust error handling to the pricing service to manage API unavailability gracefully.
+    -   **Why fix this issue?** To improve the reliability and robustness of the quote generation feature.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y (potential)
+    -   **Should Test frontend/backend/both after fix?** Backend
+    -   **Blocked on other issue:** None
+
+**In progress Task List**:
+-   **Task 1: Finalize Stripe Integration.**
+    -   **Where to resume:** Integrate the newly created  into , populate  with the user's Stripe keys, and update the service logic to use them.
+    -   **What will be achieved with this?** A fully functional, production-ready off-ramp flow that automatically triggers a real SEPA payout via Stripe upon a confirmed NENO deposit.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Backend
+    -   **Blocked on something:** None.
+
+**Upcoming and Future Tasks**
+-   **Future Tasks:**
+    *   **PostgreSQL Migration (P2):** The user originally requested PostgreSQL with Prisma. A future task could be to migrate the data persistence layer from MongoDB to align with this requirement. This would involve rewriting all database interactions in  to use Prisma Client.
+    *   **On-Ramp Flow Implementation (P2):** The UI for the on-ramp flow (fiat-to-crypto) exists, but the backend logic for processing fiat payments is not implemented. This would require integrating a payment processor like Stripe for fiat deposits.
+
+**Completed work in this session**
+-   Built the entire NeoNoble Ramp platform (backend and frontend) from scratch.
+-   **Backend:**
+    -   Implemented User/Developer authentication and a Platform API Key system with HMAC middleware (, ).
+    -   Created a real-time pricing service using CoinGecko and a fixed price for the NENO token ().
+    -   Built a complete, real-world blockchain off-ramp flow including HD wallet address generation () and an on-chain transaction listener ().
+    -   Implemented a quote locking mechanism to prevent double-confirms ().
+    -   Fixed a deployment health check issue by adding a root  endpoint ().
+-   **Frontend:**
+    -   Developed a complete React UI with routing for a landing page, user/dev auth, a user dashboard, and a developer portal ().
+-   **Testing:**
+    -   Created comprehensive E2E test scripts for the backend and the specific blockchain off-ramp flow (, ).
+
+**Earlier issues found/mentioned but not fixed**
+-   **Issue 1: PostgreSQL vs. MongoDB Database Choice.**
+    -   **Debug checklist:** The user requested PostgreSQL, but the agent implemented with MongoDB due to initial environment checks. This was a deviation from the specified tech stack.
+    -   **Why to solve this issue and what will be achieved with this?** To align the project with the user's original technical requirements.
+    -   **Should Test frontend/backend/both after fix:** Backend
+    -   **Is recurring issue?** N
+
+**Known issue recurrence from previous fork**
+-   N/A
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Backend:** FastAPI, MongoDB (), Pydantic
+-   **Frontend:** React, 
+-   **Authentication:** JWT (users), HMAC-SHA256 (API)
+-   **Blockchain:** ,  for BNB Smart Chain (BEP-20) interaction, HD wallet.
+-   **Payments:** Stripe Global Payouts for SEPA transfers.
+-   **Async:**  for background tasks (blockchain listener).
+
+**key DB schema**
+-   **users**: 
+-   **platform_api_keys**: 
+-   **quotes**: 
+
+**changes in tech stack**
+-   The agent chose to use **MongoDB** instead of the user-requested **PostgreSQL with Prisma**, citing environment constraints.
+
+**All files of reference**
+-   : Main app file. **Needs to be modified** to integrate the Stripe webhook router.
+-   : Handles Stripe payouts. **Needs to be modified** to use live keys and remove simulation logic.
+-   : Contains the logic that will trigger the Stripe payout.
+-   : New file for the Stripe webhook endpoint.
+-   : Configuration and secrets file. **Needs to be updated** with the user's Stripe credentials.
+
+**Areas that need refactoring**:
+-   The database logic is tightly coupled within the service layer using . If a future migration to PostgreSQL/Prisma is undertaken, abstracting this into a repository pattern would be beneficial.
+
+**key api endpoints**
+-    & 
+-   
+-    (Root endpoint for Kubernetes)
+-    (HMAC protected)
+-    (Needs to be activated)
+
+**Critical Info for New Agent**
+-   The most critical task is to enable the **real Stripe SEPA payout flow**. The user has provided live, production credentials in the last message. The simulation/fallback code must be removed, and the implementation must be made production-ready.
+-   The project uses MongoDB, which was a deviation from the user's original request for PostgreSQL. Be aware of this if the user brings it up again.
+-   The application was built from scratch in this session.
+
+**documents and test reports created in this job**
+-   
+-   
+-   
+-   
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **[PENDING] User:** Requested to enable real Stripe SEPA payouts using provided live credentials and remove any simulated logic.
+2.  **Agent:** Acknowledged the request to implement the production Stripe flow.
+3.  **User:** Confirmed the app was working and requested deployment.
+4.  **Agent:** Stated intent to deploy.
+5.  **User:** Reported a Web server returned an unknown error and asked to restore the frontend UI.
+6.  **Agent:** Summarized the implementation of the quote locking mechanism.
+7.  **User:** Confirmed the 60-minute TTL works and requested a quote locking mechanism.
+8.  **Agent:** Confirmed the 60-minute TTL was working.
+9.  **User:** Asked for a test to confirm the 60-minute TTL.
+10. **Agent:** Summarized setting the  environment variable.
+
+**Project Health Check:**
+-   **Working:** Backend API, Frontend UI, User Auth, Dev Portal, API Key Management, Off-Ramp Quote Generation, Blockchain Address Generation, On-Chain Listener, Quote Locking.
+-   **Broken:** None.
+-   **Mocked:** The final Stripe SEPA payout step is currently disabled/mocked. The immediate task is to make this live.
+
+**3rd Party Integrations**
+-   **CoinGecko:** Public API for real-time cryptocurrency prices. No key required.
+-   **Stripe Global Payout:** For SEPA bank transfers. Requires  and  (User-provided key).
+-   **BNB Smart Chain:** For NENO token interaction. Requires  and  (User-provided).
+
+**Testing status**
+-   **Testing agent used:** NO
+-   **Troubleshoot agent used:** NO
+-   **Test files created:**
+    -   
+    -   
+-   **Known regressions:** The CoinGecko API can be rate-limited, causing quote generation to fail intermittently.
+
+**Credentials to test flow:**
+-   Register new users/developers via the frontend UI.
+-   The  is in .
+-   The **Stripe credentials must be added** to  from the user's last message to test the full E2E payout flow.
+
+**What agent forgot to execute**
+-   The agent created the Stripe webhook route file () but forgot to integrate its router into the main FastAPI application in . This is a crucial step to make the webhook endpoint accessible.</analysis>
