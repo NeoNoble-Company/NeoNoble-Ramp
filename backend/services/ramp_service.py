@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 import logging
 import uuid
+import os
 
 from models.transaction import (
     Transaction,
@@ -16,8 +17,8 @@ from services.pricing_service import pricing_service
 
 logger = logging.getLogger(__name__)
 
-# Quote validity duration
-QUOTE_VALIDITY_MINUTES = 5
+# Quote validity duration - configurable via environment variable
+QUOTE_VALIDITY_MINUTES = int(os.environ.get('QUOTE_TTL_MINUTES', 5))
 
 # In-memory quote cache (in production, use Redis)
 _quote_cache = {}
