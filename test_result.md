@@ -246,6 +246,32 @@ backend:
           - Backend logs confirm: "Created API key for user" with proper key format
           - HMAC authentication system properly integrated
 
+  - task: "PoR Engine API Implementation"
+    implemented: true
+    working: true
+    file: "/app/backend/services/por_engine.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Provider-of-Record Engine with autonomous off-ramp capabilities"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED: PoR Engine API working correctly
+          - PoR Engine Status: Provider info, capabilities, liquidity status verified
+          - Create Off-Ramp Quote: NENO price = €10,000, deposit address generated, state = QUOTE_CREATED
+          - Accept Quote: State transitions to DEPOSIT_PENDING, timeline updated correctly
+          - Process Deposit: Instant settlement to COMPLETED state, settlement_id and payout_reference generated
+          - Transaction Details: Full transaction data with compliance info and timeline
+          - Transaction Timeline: All state transitions from QUOTE_CREATED to COMPLETED (11 events)
+          - Developer Endpoints: Supported cryptos and transaction states listed correctly
+          - Settlement Mode Configuration: Mode changes confirmed
+          - Key Verifications: NENO fixed price €10,000, Fee 1.5%, KYC/AML handled by PoR, Instant settlement, No credentials required, Liquidity always available
+          - Backend logs confirm: "PoR Engine initialized", "PoR quote created", "PoR settlement completed"
+
 frontend:
   - task: "Landing Page"
     implemented: true
