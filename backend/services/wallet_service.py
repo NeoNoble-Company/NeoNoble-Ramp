@@ -40,24 +40,23 @@ class WalletService:
         self.addresses_collection = db.deposit_addresses
         self._mnemonic: Optional[str] = None
         self._initialized = False
+        self._enabled = False
     
-    def _get_mnemonic(self) -> str:
+    def _get_mnemonic(self) -> Optional[str]:
         """Get mnemonic from environment variable."""
         if self._mnemonic:
             return self._mnemonic
         
         mnemonic = os.environ.get('NENO_WALLET_MNEMONIC')
         if not mnemonic:
-            raise ValueError(
-                "NENO_WALLET_MNEMONIC environment variable is not set. "
-                "Please provide a valid BIP39 mnemonic phrase."
-            )
+            return None
         
         # Validate mnemonic by trying to derive an account
         try:
             Account.from_mnemonic(mnemonic, account_path="m/44'/60'/0'/0/0")
         except Exception as e:
-            raise ValueError(f"Invalid mnemonic phrase: {e}")
+            logger.error(f"Invalid mnemonic phrase: {e}")
+            return None
         
         self._mnemonic = mnemonic
         logger.info("Wallet mnemonic loaded successfully")
