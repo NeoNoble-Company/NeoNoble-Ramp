@@ -377,6 +377,417 @@ class NeoNobleAPITester:
         
         return prices_valid
     
+    # ===== COMPREHENSIVE PoR ENGINE VALIDATION =====
+    
+    async def test_user_ui_por_flow(self):
+        """Test complete User UI PoR Engine flow with JWT authentication"""
+        logger.info("\n=== Testing User UI PoR Engine Flow (JWT) ===")
+        
+        if not self.auth_token:
+            self.log_test_result("User UI PoR Flow", False, "No user auth token available")
+            return False
+        
+        # Step 1: Create Off-Ramp Quote (NENO)
+        quote_data = {
+            "crypto_amount": 1.0,
+            "crypto_currency": "NENO",
+            "bank_account": "DE89370400440532013000"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/offramp/quote", quote_data, auth_token=self.auth_token
+        )
+        
+        quote_valid = False
+        if success and isinstance(data, dict):
+            self.user_quote_id = data.get("quote_id")
+            exchange_rate = data.get("exchange_rate")
+            fiat_amount = data.get("fiat_amount")
+            fee_percentage = data.get("fee_percentage")
+            state = data.get("state")
+            deposit_address = data.get("deposit_address")
+            compliance = data.get("compliance", {})
+            
+            quote_valid = (
+                self.user_quote_id and self.user_quote_id.startswith("por_") and
+                exchange_rate == 10000 and
+                fiat_amount == 10000 and
+                fee_percentage == 1.5 and
+                state == "QUOTE_CREATED" and
+                deposit_address and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "User UI - Create PoR Quote", 
+            success and status == 200 and quote_valid,
+            f"Status: {status}, Quote ID: {self.user_quote_id}, Rate: {data.get('exchange_rate') if isinstance(data, dict) else 'N/A'}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not quote_valid:
+            return False
+        
+        # Step 2: Accept/Execute Quote
+        execute_data = {
+            "quote_id": self.user_quote_id,
+            "bank_account": "DE89370400440532013000"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/offramp/execute", execute_data, auth_token=self.auth_token
+        )
+        
+        execute_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            message = data.get("message", "")
+            timeline = data.get("timeline", [])
+            
+            execute_valid = (
+                state == "DEPOSIT_PENDING" and
+                "deposit address" in message.lower() and
+                len(timeline) >= 2  # QUOTE_ACCEPTED and DEPOSIT_PENDING events
+            )
+        
+        self.log_test_result(
+            "User UI - Execute PoR Quote", 
+            success and status == 200 and execute_valid,
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        if not execute_valid:
+            return False
+        
+        # Step 3: Process Deposit (Simulate Blockchain Confirmation)
+        deposit_data = {
+            "quote_id": self.user_quote_id,
+            "tx_hash": "0x123abc456def789user001",
+            "amount": 1.0
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/offramp/deposit/process", deposit_data, auth_token=self.auth_token
+        )
+        
+        settlement_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            timeline = data.get("timeline", [])
+            metadata = data.get("metadata", {})
+            
+            settlement_valid = (
+                state == "COMPLETED" and
+                len(timeline) >= 11 and  # All 11 state transitions
+                metadata.get("settlement_id") and
+                metadata.get("payout_reference")
+            )
+        
+        self.log_test_result(
+            "User UI - Process PoR Deposit (Instant Settlement)", 
+            success and status == 200 and settlement_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        # Step 4: Get Transaction Details
+        success, data, status = await self.make_request(
+            "GET", f"/ramp/offramp/transaction/{self.user_quote_id}", auth_token=self.auth_token
+        )
+        
+        details_valid = False
+        if success and isinstance(data, dict):
+            compliance = data.get("compliance", {})
+            details_valid = (
+                data.get("quote_id") == self.user_quote_id and
+                data.get("state") == "COMPLETED" and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "User UI - Get Transaction Details", 
+            success and status == 200 and details_valid,
+            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.user_quote_id if isinstance(data, dict) else False}"
+        )
+        
+        # Step 5: Get Timeline
+        success, data, status = await self.make_request(
+            "GET", f"/ramp/offramp/transaction/{self.user_quote_id}/timeline", auth_token=self.auth_token
+        )
+        
+        timeline_valid = False
+        if success and isinstance(data, list):
+            timeline_valid = len(data) >= 11  # All state transitions logged
+        
+        self.log_test_result(
+            "User UI - Get Transaction Timeline", 
+            success and status == 200 and timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data) if isinstance(data, list) else 0}"
+        )
+        
+        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
+    
+    async def test_developer_api_por_flow(self):
+        """Test complete Developer API PoR Engine flow with HMAC authentication"""
+        logger.info("\n=== Testing Developer API PoR Engine Flow (HMAC) ===")
+        
+        if not self.api_key or not self.api_secret:
+            self.log_test_result("Developer API PoR Flow", False, "No API key/secret available")
+            return False
+        
+        # Step 1: Create Off-Ramp Quote via Dev API
+        quote_data = {
+            "crypto_amount": 2.0,
+            "crypto_currency": "NENO",
+            "bank_account": "IT60X0542811101000000123456"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-offramp-quote", quote_data, use_hmac=True
+        )
+        
+        quote_valid = False
+        if success and isinstance(data, dict):
+            self.dev_quote_id = data.get("quote_id")
+            exchange_rate = data.get("exchange_rate")
+            fiat_amount = data.get("fiat_amount")
+            fee_percentage = data.get("fee_percentage")
+            state = data.get("state")
+            deposit_address = data.get("deposit_address")
+            compliance = data.get("compliance", {})
+            
+            quote_valid = (
+                self.dev_quote_id and self.dev_quote_id.startswith("por_") and
+                exchange_rate == 10000 and
+                fiat_amount == 20000 and  # 2.0 * 10000
+                fee_percentage == 1.5 and
+                state == "QUOTE_CREATED" and
+                deposit_address and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "Dev API - Create PoR Quote (HMAC)", 
+            success and status == 200 and quote_valid,
+            f"Status: {status}, Quote ID: {self.dev_quote_id}, Rate: {data.get('exchange_rate') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not quote_valid:
+            return False
+        
+        # Step 2: Execute Off-Ramp via Dev API
+        execute_data = {
+            "quote_id": self.dev_quote_id,
+            "bank_account": "IT60X0542811101000000123456"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-offramp", execute_data, use_hmac=True
+        )
+        
+        execute_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            timeline = data.get("timeline", [])
+            
+            execute_valid = (
+                state == "DEPOSIT_PENDING" and
+                len(timeline) >= 2
+            )
+        
+        self.log_test_result(
+            "Dev API - Execute PoR Quote (HMAC)", 
+            success and status == 200 and execute_valid,
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not execute_valid:
+            return False
+        
+        # Step 3: Process Deposit via Dev API
+        deposit_data = {
+            "quote_id": self.dev_quote_id,
+            "tx_hash": "0xabc123def456dev002",
+            "amount": 2.0
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-deposit-process", deposit_data, use_hmac=True
+        )
+        
+        settlement_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            timeline = data.get("timeline", [])
+            metadata = data.get("metadata", {})
+            
+            settlement_valid = (
+                state == "COMPLETED" and
+                len(timeline) >= 11 and
+                metadata.get("settlement_id") and
+                metadata.get("payout_reference")
+            )
+        
+        self.log_test_result(
+            "Dev API - Process PoR Deposit (HMAC)", 
+            success and status == 200 and settlement_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        # Step 4: Get Transaction via Dev API
+        success, data, status = await self.make_request(
+            "GET", f"/ramp-api-transaction/{self.dev_quote_id}", use_hmac=True
+        )
+        
+        details_valid = False
+        if success and isinstance(data, dict):
+            compliance = data.get("compliance", {})
+            details_valid = (
+                data.get("quote_id") == self.dev_quote_id and
+                data.get("state") == "COMPLETED" and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "Dev API - Get Transaction Details (HMAC)", 
+            success and status == 200 and details_valid,
+            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.dev_quote_id if isinstance(data, dict) else False}"
+        )
+        
+        # Step 5: Get Timeline via Dev API
+        success, data, status = await self.make_request(
+            "GET", f"/ramp-api-transaction/{self.dev_quote_id}/timeline", use_hmac=True
+        )
+        
+        timeline_valid = False
+        if success and isinstance(data, list):
+            timeline_valid = len(data) >= 11
+        
+        self.log_test_result(
+            "Dev API - Get Transaction Timeline (HMAC)", 
+            success and status == 200 and timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data) if isinstance(data, list) else 0}"
+        )
+        
+        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
+    
+    async def test_public_endpoints(self):
+        """Test public endpoints"""
+        logger.info("\n=== Testing Public Endpoints ===")
+        
+        # Test crypto prices
+        success, data, status = await self.make_request("GET", "/ramp/prices")
+        
+        prices_valid = False
+        if success and isinstance(data, dict):
+            prices = data.get("prices", {})
+            supported = data.get("supported", [])
+            neno_price = data.get("neno_fixed_price")
+            
+            prices_valid = (
+                "NENO" in supported and
+                neno_price == 10000 and
+                isinstance(prices, dict)
+            )
+        
+        self.log_test_result(
+            "Public - Get Crypto Prices", 
+            success and status == 200 and prices_valid,
+            f"Status: {status}, NENO Price: {data.get('neno_fixed_price') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test PoR engine status
+        success, data, status = await self.make_request("GET", "/ramp-api-por-status")
+        
+        por_status_valid = False
+        if success and isinstance(data, dict):
+            provider = data.get("provider", {})
+            capabilities = data.get("capabilities", {})
+            liquidity = data.get("liquidity", {})
+            
+            por_status_valid = (
+                provider.get("name") == "NeoNoble Internal PoR" and
+                capabilities.get("instant_settlement") == True and
+                liquidity.get("available") == True
+            )
+        
+        self.log_test_result(
+            "Public - Get PoR Engine Status", 
+            success and status == 200 and por_status_valid,
+            f"Status: {status}, Provider: {provider.get('name') if isinstance(data, dict) and 'provider' in data else 'N/A'}"
+        )
+        
+        # Test API health check
+        success, data, status = await self.make_request("GET", "/ramp-api-health")
+        
+        health_valid = False
+        if success and isinstance(data, dict):
+            health_valid = data.get("status") == "healthy"
+        
+        self.log_test_result(
+            "Public - API Health Check", 
+            success and status == 200 and health_valid,
+            f"Status: {status}, Health: {data.get('status') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return prices_valid and por_status_valid and health_valid
+    
+    async def test_consistency_validation(self):
+        """Validate consistency between User UI and Developer API responses"""
+        logger.info("\n=== Testing Consistency Validation ===")
+        
+        if not self.user_quote_id or not self.dev_quote_id:
+            self.log_test_result("Consistency Validation", False, "Missing quote IDs from previous tests")
+            return False
+        
+        # Get both transactions for comparison
+        user_success, user_data, user_status = await self.make_request(
+            "GET", f"/ramp/offramp/transaction/{self.user_quote_id}", auth_token=self.auth_token
+        )
+        
+        dev_success, dev_data, dev_status = await self.make_request(
+            "GET", f"/ramp-api-transaction/{self.dev_quote_id}", use_hmac=True
+        )
+        
+        consistency_valid = False
+        if user_success and dev_success and isinstance(user_data, dict) and isinstance(dev_data, dict):
+            # Check state machine consistency
+            state_consistent = (
+                user_data.get("state") == "COMPLETED" and
+                dev_data.get("state") == "COMPLETED"
+            )
+            
+            # Check compliance metadata structure
+            user_compliance = user_data.get("compliance", {})
+            dev_compliance = dev_data.get("compliance", {})
+            compliance_consistent = (
+                user_compliance.get("por_responsible") == True and
+                dev_compliance.get("por_responsible") == True
+            )
+            
+            # Check fee calculation (1.5%)
+            user_fee = user_data.get("fee_percentage")
+            dev_fee = dev_data.get("fee_percentage")
+            fee_consistent = user_fee == 1.5 and dev_fee == 1.5
+            
+            # Check NENO price (€10,000)
+            user_rate = user_data.get("exchange_rate")
+            dev_rate = dev_data.get("exchange_rate")
+            price_consistent = user_rate == 10000 and dev_rate == 10000
+            
+            consistency_valid = (
+                state_consistent and
+                compliance_consistent and
+                fee_consistent and
+                price_consistent
+            )
+        
+        self.log_test_result(
+            "Consistency - State Machine & Metadata", 
+            consistency_valid,
+            f"User State: {user_data.get('state') if isinstance(user_data, dict) else 'N/A'}, Dev State: {dev_data.get('state') if isinstance(dev_data, dict) else 'N/A'}, Fee Match: {user_data.get('fee_percentage') == dev_data.get('fee_percentage') if isinstance(user_data, dict) and isinstance(dev_data, dict) else False}"
+        )
+        
+        return consistency_valid
+    
     async def run_all_tests(self):
         """Run all tests in sequence"""
         logger.info("🚀 Starting NeoNoble Ramp Backend API Tests")
