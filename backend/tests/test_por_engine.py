@@ -176,7 +176,7 @@ class PoREngineAPITester:
         if success and isinstance(data, dict):
             accept_valid = (
                 data.get("quote_id") == self.quote_id and
-                data.get("state") == "deposit_pending" and
+                data.get("state") == "DEPOSIT_PENDING" and
                 len(data.get("timeline", [])) >= 3  # Should have QUOTE_CREATED, QUOTE_ACCEPTED, DEPOSIT_PENDING
             )
         
