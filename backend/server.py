@@ -114,21 +114,54 @@ async def on_deposit_confirmed(result: dict):
     
     logger.info(f"Deposit confirmed for quote {quote_id}: {amount} NENO (tx: {tx_hash})")
     
-    # Process the deposit
-    success, error = await ramp_service.process_deposit_received(
-        quote_id=quote_id,
-        tx_hash=tx_hash,
-        amount_received=amount
-    )
-    
-    if success:
-        logger.info(f"Successfully processed deposit for quote {quote_id}")
+    # Check if this is a PoR quote (starts with 'por_')
+    if quote_id.startswith('por_'):
+        # Process via PoR engine
+        quote, error = await por_engine.process_deposit(
+            quote_id=quote_id,
+            tx_hash=tx_hash,
+            amount=amount
+        )
+        if quote:
+            logger.info(f"PoR deposit processed for {quote_id}: state={quote.state.value}")
+        else:
+            logger.error(f"Failed to process PoR deposit for {quote_id}: {error}")
     else:
-        logger.error(f"Failed to process deposit for quote {quote_id}: {error}")
+        # Process via legacy ramp service
+        success, error = await ramp_service.process_deposit_received(
+            quote_id=quote_id,
+            tx_hash=tx_hash,
+            amount_received=amount
+        )
+        
+        if success:
+            logger.info(f"Successfully processed deposit for quote {quote_id}")
+        else:
+            logger.error(f"Failed to process deposit for quote {quote_id}: {error}")
 
 async def get_active_quotes_for_monitoring():
-    """Get active quotes for blockchain monitoring."""
-    return await ramp_service.get_active_offramp_quotes()
+    """Get active quotes for blockchain monitoring (both PoR and legacy)."""
+    # Get legacy quotes
+    legacy_quotes = await ramp_service.get_active_offramp_quotes()
+    
+    # Get PoR quotes in DEPOSIT_PENDING state
+    from services.provider_interface import TransactionState
+    por_quotes = await por_engine.list_transactions(
+        state=TransactionState.DEPOSIT_PENDING,
+        limit=100
+    )
+    
+    # Convert PoR quotes to monitoring format
+    por_monitoring = []
+    for q in por_quotes:
+        if q.deposit_address:
+            por_monitoring.append({
+                'quote_id': q.quote_id,
+                'deposit_address': q.deposit_address,
+                'expected_amount': q.crypto_amount
+            })
+    
+    return legacy_quotes + por_monitoring
 
 # Lifespan context manager
 @asynccontextmanager
