@@ -1,4 +1,4 @@
-"""Default pitch deck slides data for NeoNoble Ramp & NeoExchange - Bidirectional On-Ramp & Off-Ramp"""
+"""Default pitch deck slides data for NeoNoble Ramp & NeoExchange - With NENO Token Fixed-Value Model"""
 
 DEFAULT_SLIDES = [
     {
@@ -11,9 +11,9 @@ DEFAULT_SLIDES = [
             "keyPoints": [
                 "UX, routing, and integration layer — not a financial intermediary",
                 "Bidirectional flow: On-Ramp (fiat → crypto) & Off-Ramp (crypto → fiat)",
+                "NENO Token: Fixed-value model at €10,000/unit on BSC",
                 "Partner-centric architecture with regulated Provider-of-Record model",
-                "European-focused compliance alignment (EU + EEA)",
-                "Developer-first routing and automation capabilities"
+                "European-focused compliance alignment (EU + EEA)"
             ],
             "website": "https://crypto-onramp-2.emergent.host"
         }
@@ -25,22 +25,30 @@ DEFAULT_SLIDES = [
         "content": {
             "vision": "To provide seamless, compliant crypto access through intelligent bidirectional routing and best-in-class UX — while ensuring all regulated operations (KYC, KYB, AML, custody, settlement) remain with licensed partners.",
             "valueProps": [
-                {"title": "Bidirectional Flow", "description": "Complete on-ramp and off-ramp coverage for full crypto lifecycle support"},
-                {"title": "Separation of Concerns", "description": "Clear distinction between UX layer and regulated financial/payout rails"},
-                {"title": "Routing Intelligence", "description": "Smart order routing to optimize for speed, cost, and availability across providers"},
+                {"title": "NENO Fixed-Value Model", "description": "Platform-defined €10,000/unit token enabling predictable on/off-ramp conversions"},
+                {"title": "Separation of Concerns", "description": "Clear distinction between UX/token abstraction and regulated financial rails"},
+                {"title": "Routing Intelligence", "description": "Smart order routing with integrated pricing orchestration layer"},
                 {"title": "Compliance-First Design", "description": "Built from the ground up with KYC, KYB, and AML regulatory alignment"}
             ],
             "dualFlow": {
                 "onRamp": {
                     "title": "On-Ramp",
-                    "flow": "Fiat (EUR) → Provider-of-Record → Digital Assets",
-                    "benefits": ["Bank transfer (SEPA)", "Card payments", "Instant settlement"]
+                    "flow": "Fiat (EUR) → Provider-of-Record → Digital Assets / NENO",
+                    "benefits": ["Bank transfer (SEPA)", "Card payments", "NENO at €10,000/unit"]
                 },
                 "offRamp": {
                     "title": "Off-Ramp",
-                    "flow": "Digital Assets → Provider-of-Record → Fiat (EUR IBAN)",
-                    "benefits": ["SEPA payouts", "Business settlements", "Automated withdrawals"]
+                    "flow": "Digital Assets / NENO → Provider-of-Record → Fiat (EUR IBAN)",
+                    "benefits": ["SEPA payouts", "NENO redemption at €10,000/unit", "Business settlements"]
                 }
+            },
+            "nenoModel": {
+                "token": "NeoNoble Token (NENO)",
+                "chain": "BSC (Binance Smart Chain)",
+                "fixedValue": "€10,000 per unit",
+                "onRamp": "Fiat → NENO purchase at fixed €10,000/unit",
+                "offRamp": "NENO → Fiat redemption at fixed €10,000/unit",
+                "valueNote": "Platform-defined fixed value — not market-driven"
             }
         }
     },
@@ -55,12 +63,12 @@ DEFAULT_SLIDES = [
                 {"segment": "Developers & Integrators", "description": "Teams building fintech applications with bidirectional crypto components"}
             ],
             "useCases": [
-                "On-Ramp: Fiat → major digital assets (BTC, ETH, USDC, etc.)",
-                "Off-Ramp: Crypto → EUR IBAN (SEPA payouts)",
+                "On-Ramp: Fiat → NENO (€10,000/unit) or major digital assets",
+                "Off-Ramp: NENO/Crypto → EUR IBAN (SEPA payouts)",
+                "NENO Token: Fixed-value conversion at €10,000 per unit",
                 "Business settlements: Automated crypto-to-fiat treasury management",
                 "Embedded partner integrations for B2B platforms",
-                "Developer-focused routing and automation workflows",
-                "Revenue-share partnership model implementation"
+                "Developer-focused routing and automation workflows"
             ]
         }
     },
@@ -90,35 +98,42 @@ DEFAULT_SLIDES = [
         "subtitle": "Regulatory Architecture",
         "content": {
             "model": "Provider-of-Record Partnership",
-            "description": "All regulated financial operations are handled by our licensed Provider-of-Record partners. NeoNoble does not hold funds, process payments, custody assets, or conduct settlement.",
+            "description": "All regulated financial operations are handled by our licensed Provider-of-Record partners. NeoNoble does not hold funds, process payments, custody assets, or conduct settlement. NENO token pricing is platform-defined at the application layer.",
             "partnerResponsibilities": [
                 "KYC/KYB verification and identity management",
                 "AML monitoring and transaction screening",
                 "Banking relationships and fiat settlement",
                 "Liquidity provision and order execution",
-                "Asset custody and wallet management",
+                "Asset custody and wallet management (including NENO on BSC)",
                 "Regulatory reporting and compliance obligations",
                 "Risk management and fraud prevention",
-                "Fiat payout processing (Off-Ramp)"
+                "Fiat payout processing (Off-Ramp / NENO redemption)"
             ],
             "neonobleRole": [
                 "User experience and interface design",
+                "NENO token pricing orchestration (€10,000 fixed value)",
                 "Routing logic and optimization",
                 "API development and integration support",
-                "Partner coordination and onboarding",
                 "Technical infrastructure and uptime"
             ],
             "complianceSplit": {
                 "onRamp": {
                     "kyc": "Provider handles user identity verification",
                     "aml": "Provider monitors incoming fiat transactions",
-                    "settlement": "Provider executes crypto delivery"
+                    "settlement": "Provider executes NENO/crypto delivery",
+                    "pricing": "NeoNoble defines NENO fixed value (€10,000/unit)"
                 },
                 "offRamp": {
                     "kyb": "Provider handles business verification for payouts",
                     "aml": "Provider screens outgoing fiat transactions",
-                    "payout": "Provider executes SEPA transfers to user IBAN"
+                    "payout": "Provider executes SEPA transfers for NENO redemption",
+                    "pricing": "NeoNoble defines NENO redemption value (€10,000/unit)"
                 }
+            },
+            "nenoCompliance": {
+                "title": "NENO Token Compliance Boundaries",
+                "platformLayer": "Price anchoring & value abstraction (NeoNoble)",
+                "regulatedLayer": "Fiat rails, custody & AML (Provider-of-Record)"
             }
         }
     },
@@ -129,17 +144,28 @@ DEFAULT_SLIDES = [
         "content": {
             "layers": [
                 {"name": "Presentation Layer", "components": ["Web Application", "Mobile-Responsive UI", "Partner Widgets"]},
+                {"name": "Pricing & Value Layer", "components": ["NENO Price Anchoring (€10,000)", "Value Mapping Engine", "Token Abstraction"]},
                 {"name": "Routing Layer", "components": ["Smart Order Router", "Rate Aggregation", "Provider Selection", "Flow Direction Handler"]},
-                {"name": "Integration Layer", "components": ["Partner APIs", "Webhook Events", "Status Tracking", "Payout Orchestration"]},
+                {"name": "Integration Layer", "components": ["Partner APIs", "BSC Integration", "Webhook Events", "Payout Orchestration"]},
                 {"name": "Provider Layer", "components": ["Transak", "MoonPay", "Ramp Network", "Banxa"]}
             ],
             "features": [
-                "RESTful API with comprehensive documentation",
+                "NENO fixed-value pricing at €10,000/unit (platform-defined)",
+                "BSC chain integration for NENO token operations",
                 "Real-time rate comparison and optimization",
                 "Multi-provider failover and redundancy",
-                "Comprehensive logging and audit trails",
                 "Bidirectional flow management (On-Ramp & Off-Ramp)"
-            ]
+            ],
+            "nenoArchitecture": {
+                "title": "NENO Token Technical Model",
+                "chain": "BSC (Binance Smart Chain)",
+                "pricing": "Fixed €10,000 per unit — platform-defined, not market-driven",
+                "layers": {
+                    "uxLayer": "User interface & token value abstraction",
+                    "pricingLayer": "Price anchoring at application/orchestration layer",
+                    "providerLayer": "Fiat rails & settlement via Provider-of-Record"
+                }
+            }
         }
     },
     {
@@ -149,24 +175,24 @@ DEFAULT_SLIDES = [
         "content": {
             "workflows": {
                 "onRamp": {
-                    "title": "On-Ramp: Fiat → Crypto",
-                    "description": "User purchases digital assets using fiat currency",
+                    "title": "On-Ramp: Fiat → NENO/Crypto",
+                    "description": "User purchases NENO (€10,000/unit) or other digital assets",
                     "steps": [
-                        {"phase": "Initiation", "description": "User selects asset and amount via NeoNoble UX", "owner": "NeoNoble"},
-                        {"phase": "Routing", "description": "Smart router selects optimal provider based on rate, speed, availability", "owner": "NeoNoble"},
+                        {"phase": "Initiation", "description": "User selects NENO or asset amount via NeoNoble UX", "owner": "NeoNoble"},
+                        {"phase": "Pricing", "description": "NENO priced at fixed €10,000/unit by platform", "owner": "NeoNoble"},
                         {"phase": "Verification", "description": "KYC identity verification performed", "owner": "Provider-of-Record"},
                         {"phase": "Collection", "description": "Fiat collected via SEPA transfer or card payment", "owner": "Provider-of-Record"},
-                        {"phase": "Execution", "description": "Crypto purchased and delivered to user wallet", "owner": "Provider-of-Record"}
+                        {"phase": "Execution", "description": "NENO (BSC) or crypto delivered to user wallet", "owner": "Provider-of-Record"}
                     ]
                 },
                 "offRamp": {
-                    "title": "Off-Ramp: Crypto → Fiat",
-                    "description": "User converts digital assets to fiat payout",
+                    "title": "Off-Ramp: NENO/Crypto → Fiat",
+                    "description": "User redeems NENO (€10,000/unit) or converts crypto to fiat",
                     "steps": [
-                        {"phase": "Initiation", "description": "User initiates sell/withdrawal via NeoNoble UX", "owner": "NeoNoble"},
-                        {"phase": "Routing", "description": "Smart router selects optimal payout provider", "owner": "NeoNoble"},
+                        {"phase": "Initiation", "description": "User initiates NENO redemption or sell via NeoNoble UX", "owner": "NeoNoble"},
+                        {"phase": "Pricing", "description": "NENO redemption at fixed €10,000/unit by platform", "owner": "NeoNoble"},
                         {"phase": "Verification", "description": "KYC/KYB verification for payout eligibility", "owner": "Provider-of-Record"},
-                        {"phase": "Custody", "description": "Crypto received and held in provider custody", "owner": "Provider-of-Record"},
+                        {"phase": "Custody", "description": "NENO/Crypto received in provider custody", "owner": "Provider-of-Record"},
                         {"phase": "Settlement", "description": "Fiat payout executed to user IBAN via SEPA", "owner": "Provider-of-Record"}
                     ]
                 }
@@ -175,18 +201,28 @@ DEFAULT_SLIDES = [
                 "title": "Risk & Custody Boundary Model",
                 "neonoble": [
                     "UX presentation and user journey",
+                    "NENO price anchoring (€10,000 fixed value)",
+                    "Token value abstraction layer",
                     "Routing logic and provider selection",
-                    "API orchestration and webhooks",
-                    "Status tracking and notifications"
+                    "API orchestration and webhooks"
                 ],
                 "provider": [
                     "Fiat custody and banking relationships",
-                    "Crypto custody and wallet management",
+                    "NENO/Crypto custody and wallet management (BSC)",
                     "KYC/KYB identity verification",
                     "AML transaction monitoring",
                     "Settlement and payout execution",
                     "Regulatory compliance and reporting"
                 ]
+            },
+            "nenoFlow": {
+                "title": "NENO Token Operating Model",
+                "token": "NeoNoble Token (NENO)",
+                "chain": "BSC (Binance Smart Chain)",
+                "fixedValue": "€10,000 per unit",
+                "onRampFlow": "EUR → Provider-of-Record → NENO (BSC wallet)",
+                "offRampFlow": "NENO (BSC) → Provider-of-Record → EUR (IBAN)",
+                "valueNote": "Fixed value is platform-defined at application layer"
             }
         }
     },
@@ -198,8 +234,8 @@ DEFAULT_SLIDES = [
             "partnershipTypes": [
                 {
                     "type": "Provider-of-Record Partner",
-                    "description": "Licensed entities handling KYC, KYB, AML, custody, banking, and settlement for both on-ramp and off-ramp flows",
-                    "benefits": ["Access to compliant user base", "Revenue share model", "Technical integration support", "Bidirectional volume"]
+                    "description": "Licensed entities handling KYC, KYB, AML, custody, banking, and settlement for both on-ramp and off-ramp flows including NENO",
+                    "benefits": ["Access to compliant user base", "Revenue share model", "Technical integration support", "NENO token volume"]
                 },
                 {
                     "type": "Distribution Partner",
@@ -214,8 +250,8 @@ DEFAULT_SLIDES = [
                 "Custom implementation support"
             ],
             "providerTouchpoints": {
-                "onRamp": ["Quote request", "KYC handoff", "Payment initiation", "Crypto delivery confirmation"],
-                "offRamp": ["Payout request", "KYC/KYB verification", "Crypto deposit address", "SEPA payout confirmation"]
+                "onRamp": ["Quote request", "KYC handoff", "Payment initiation", "NENO/Crypto delivery confirmation"],
+                "offRamp": ["Payout request", "KYC/KYB verification", "NENO/Crypto deposit address", "SEPA payout confirmation"]
             }
         }
     },
@@ -225,24 +261,24 @@ DEFAULT_SLIDES = [
         "subtitle": "Dual-Side Monetization",
         "content": {
             "revenueModel": "Bidirectional Revenue Share Partnership",
-            "description": "NeoNoble operates on a revenue-share basis with Provider-of-Record partners, capturing value from both on-ramp (fiat → crypto) and off-ramp (crypto → fiat) transaction flows.",
+            "description": "NeoNoble operates on a revenue-share basis with Provider-of-Record partners, capturing value from both on-ramp (fiat → NENO/crypto) and off-ramp (NENO/crypto → fiat) transaction flows.",
             "projections": {
                 "earlyStage": "€10,000 – €50,000 / month",
                 "scalingPhase": "€50,000 – €200,000 / month",
                 "growthPhase": "€200,000+ / month"
             },
             "revenueStreams": [
-                {"stream": "On-Ramp Fees", "description": "Revenue share on fiat-to-crypto transactions"},
-                {"stream": "Off-Ramp Fees", "description": "Revenue share on crypto-to-fiat payouts"},
+                {"stream": "On-Ramp Fees", "description": "Revenue share on fiat-to-NENO/crypto transactions"},
+                {"stream": "Off-Ramp Fees", "description": "Revenue share on NENO/crypto-to-fiat payouts"},
                 {"stream": "B2B Integrations", "description": "Enterprise API access and volume commitments"},
                 {"stream": "White-Label", "description": "Platform licensing and customization fees"}
             ],
             "growthDrivers": [
+                "NENO token adoption and fixed-value conversions",
                 "Partner network expansion (on-ramp & off-ramp providers)",
                 "Geographic coverage increase across EU/EEA",
                 "B2B integration pipeline for embedded finance",
-                "Off-ramp volume growth from business payouts",
-                "Marketing and user acquisition"
+                "Off-ramp volume growth from business payouts"
             ]
         }
     },
@@ -258,10 +294,10 @@ DEFAULT_SLIDES = [
                     "timeline": "Current",
                     "items": [
                         "Core platform development",
+                        "NENO token (BSC) integration at €10,000/unit",
                         "Initial Provider-of-Record partnership",
                         "EUR SEPA on-ramp launch",
-                        "Basic off-ramp (crypto → EUR) capability",
-                        "Basic API availability"
+                        "Basic off-ramp (NENO/crypto → EUR) capability"
                     ]
                 },
                 {
@@ -270,7 +306,7 @@ DEFAULT_SLIDES = [
                     "timeline": "6-12 Months",
                     "items": [
                         "Multi-provider routing (on-ramp & off-ramp)",
-                        "Advanced rate optimization",
+                        "Advanced NENO pricing orchestration",
                         "B2B off-ramp for business payouts",
                         "Enhanced developer tools",
                         "KYB flow for business accounts"
@@ -296,10 +332,10 @@ DEFAULT_SLIDES = [
         "title": "Contact & Partnership Discussion",
         "subtitle": "Let's Build Together",
         "content": {
-            "callToAction": "We're seeking strategic partnerships with regulated on-ramp and off-ramp providers who share our vision for compliant, user-friendly bidirectional crypto access.",
+            "callToAction": "We're seeking strategic partnerships with regulated on-ramp and off-ramp providers who share our vision for compliant, user-friendly bidirectional crypto access including NENO token operations.",
             "discussionTopics": [
                 "Provider-of-Record partnership structure",
-                "On-Ramp & Off-Ramp integration requirements",
+                "NENO token on-ramp & off-ramp integration",
                 "Revenue share and commercial terms",
                 "Compliance and regulatory alignment",
                 "Geographic expansion opportunities"
@@ -311,15 +347,22 @@ DEFAULT_SLIDES = [
                 ],
                 "email": "massimoadmin@neonoble.it"
             },
-            "closing": "Thank you for your consideration. We look forward to exploring how NeoNoble can complement your regulated services and expand access to compliant bidirectional crypto solutions across Europe."
+            "closing": "Thank you for your consideration. We look forward to exploring how NeoNoble can complement your regulated services and expand access to compliant bidirectional crypto solutions — including NENO token — across Europe."
         }
     }
 ]
 
 COMPANY_INFO = {
     "name": "NeoNoble Ramp & NeoExchange",
-    "tagline": "Fiat-to-Crypto & Crypto-to-Fiat Routing Platform",
-    "description": "A regulated-partner-powered bidirectional fiat-crypto routing platform",
+    "tagline": "Fiat-to-Crypto & Crypto-to-Fiat Routing Platform with NENO Token",
+    "description": "A regulated-partner-powered bidirectional fiat-crypto routing platform with NENO Token fixed-value model",
+    "nenoToken": {
+        "name": "NeoNoble Token",
+        "symbol": "NENO",
+        "chain": "BSC (Binance Smart Chain)",
+        "fixedValue": "€10,000 per unit",
+        "valueModel": "Platform-defined fixed value"
+    },
     "platforms": [
         {"name": "NeoNoble Ramp", "description": "Crypto on-ramp platform", "website": "https://crypto-onramp-2.emergent.host"},
         {"name": "NeoExchange", "description": "Fintech infrastructure & partner stack", "website": "https://neoexchange.io"}
