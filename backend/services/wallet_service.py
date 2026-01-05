@@ -131,6 +131,10 @@ class WalletService:
         try:
             await self.initialize()
             
+            # Check if wallet service is enabled
+            if not self._enabled:
+                return None, "Wallet service not configured (missing NENO_WALLET_MNEMONIC)"
+            
             # Check if quote already has an address
             existing = await self.addresses_collection.find_one({"quote_id": quote_id})
             if existing:
