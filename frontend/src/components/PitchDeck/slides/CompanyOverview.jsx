@@ -1,8 +1,8 @@
 import React from 'react';
-import { Globe, Shield, Zap, Code } from 'lucide-react';
+import { Globe, Shield, Zap, Code, ArrowRightLeft } from 'lucide-react';
 
 const CompanyOverview = ({ data }) => {
-  const icons = [Shield, Zap, Globe, Code];
+  const icons = [Shield, ArrowRightLeft, Zap, Globe, Code];
   
   return (
     <div className="min-h-screen pt-24 pb-32 px-8 flex items-center">
@@ -34,19 +34,19 @@ const CompanyOverview = ({ data }) => {
             </a>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-3">
             {data.content.keyPoints.map((point, index) => {
-              const Icon = icons[index];
+              const Icon = icons[index % icons.length];
               return (
                 <div
                   key={index}
-                  className="flex items-start gap-4 p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all duration-300 group"
+                  className="flex items-start gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all duration-300 group"
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
                   <div className="w-10 h-10 rounded-lg bg-teal-50 group-hover:bg-teal-100 flex items-center justify-center shrink-0 transition-colors">
                     <Icon className="w-5 h-5 text-teal-600" />
                   </div>
-                  <p className="text-slate-700 font-medium pt-2">{point}</p>
+                  <p className="text-slate-700 font-medium pt-2 text-sm">{point}</p>
                 </div>
               );
             })}
