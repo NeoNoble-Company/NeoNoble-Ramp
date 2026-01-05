@@ -1,3 +1,16 @@
+#!/usr/bin/env python3
+"""
+Sample NENO off-ramp script for server-to-server integration.
+
+Usage:
+    # Set environment variables first
+    export API_URL="https://crypto-onramp-2.preview.emergentagent.com"
+    export API_KEY="your_api_key"
+    export API_SECRET="your_api_secret"
+    
+    python scripts/offramp_neno_server.py
+"""
+
 import time
 import hmac
 import hashlib
@@ -5,13 +18,17 @@ import json
 import os
 import requests
 
-BASE_URL = "https://crypto-onramp-2.emergent.host"
-
-API_KEY = "nn_live_84247bf17eadf2677f9a8f34d2a9d7da"
-API_SECRET = "886b5478bb037ce35bec5bac1db3a17a206c9056b1db36c25ec0252dd40adebb"
+# Configuration from environment
+BASE_URL = os.environ.get("API_URL", "https://crypto-onramp-2.preview.emergentagent.com")
+API_KEY = os.environ.get("API_KEY", "")
+API_SECRET = os.environ.get("API_SECRET", "")
 
 
 def sign_and_post(path, payload):
+    if not API_KEY or not API_SECRET:
+        print("❌ API_KEY and API_SECRET environment variables are required")
+        return None
+    
     url = BASE_URL + path
     body = json.dumps(payload, separators=(",", ":"))
     timestamp = str(int(time.time()))
@@ -48,7 +65,7 @@ def sign_and_post(path, payload):
 
 
 def health():
-    url = BASE_URL + "/api/health"
+    url = BASE_URL + "/api/ramp-api-health"
     print(f"\n➡️ GET {url}")
     r = requests.get(url, timeout=10)
     print("Status:", r.status_code)
@@ -91,10 +108,10 @@ if __name__ == "__main__":
     quote = offramp_quote_neno(amount, source, iban)
 
     if not quote or "quote_id" not in quote:
-        print("\n❌ Nessun quote_id ricevuto, stop.")
+        print("\n❌ No quote_id received, stopping.")
     else:
         qid = quote["quote_id"]
         print("\n✅ quote_id:", qid)
         tx = offramp_execute(qid)
-        print("\n✅ Risultato OFF-RAMP:")
+        print("\n✅ OFF-RAMP Result:")
         print(tx)
