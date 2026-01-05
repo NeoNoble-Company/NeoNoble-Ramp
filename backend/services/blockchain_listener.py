@@ -190,8 +190,9 @@ class BlockchainListener:
         transfers = []
         
         try:
-            contract = self._get_contract()
             web3 = self._get_web3()
+            if web3 is None:
+                return transfers
             
             # Use get_logs instead of create_filter (more reliable with various RPC providers)
             # Transfer event topic: keccak256("Transfer(address,address,uint256)")
