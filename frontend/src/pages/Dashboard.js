@@ -311,7 +311,9 @@ export default function Dashboard() {
                     <div className="border-t border-white/10 pt-3 flex justify-between">
                       <span className="text-gray-300 font-medium">You {activeTab === 'onramp' ? 'Receive' : 'Get'}</span>
                       <span className="text-white text-lg font-bold">
-                        {activeTab === 'onramp' ? `${quote.crypto_amount} ${quote.crypto_currency}` : `€${quote.total_fiat}`}
+                        {activeTab === 'onramp' 
+                          ? `${quote.crypto_amount} ${quote.crypto_currency}` 
+                          : `€${(quote.net_payout || quote.total_fiat || (quote.fiat_amount - quote.fee_amount))?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500">Price source: {quote.price_source}</p>
