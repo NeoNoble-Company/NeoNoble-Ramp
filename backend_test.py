@@ -452,7 +452,7 @@ class NeoNobleAPITester:
         self.log_test_result(
             "User UI - Execute PoR Quote", 
             success and status == 200 and execute_valid,
-            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}, Expected: >=2"
         )
         
         if not execute_valid:
