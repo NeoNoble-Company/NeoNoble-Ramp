@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { slides } from '../../data/mockData';
+import { slides as mockSlides } from '../../data/mockData';
 import SlideHeader from './SlideHeader';
 import SlideNavigation from './SlideNavigation';
+import apiService from '../../services/api';
 
 // Import all slide components
 import CompanyOverview from './slides/CompanyOverview';
@@ -31,6 +32,27 @@ const slideComponents = [
 const PitchDeck = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [slides, setSlides] = useState(mockSlides);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch slides from backend on mount
+  useEffect(() => {
+    const fetchSlides = async () => {
+      try {
+        const data = await apiService.getSlides();
+        if (data && data.length > 0) {
+          setSlides(data);
+        }
+      } catch (error) {
+        console.log('Using mock data - backend not available:', error.message);
+        // Keep using mock data if backend fails
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSlides();
+  }, []);
 
   const navigateToSlide = useCallback((index) => {
     if (index < 0 || index >= slides.length || isTransitioning) return;
@@ -41,7 +63,7 @@ const PitchDeck = () => {
     setTimeout(() => {
       setIsTransitioning(false);
     }, 400);
-  }, [isTransitioning]);
+  }, [isTransitioning, slides.length]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -63,10 +85,21 @@ const PitchDeck = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentSlide, navigateToSlide]);
+  }, [currentSlide, navigateToSlide, slides.length]);
 
   const CurrentSlideComponent = slideComponents[currentSlide];
   const currentSlideData = slides[currentSlide];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading presentation...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
