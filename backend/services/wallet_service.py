@@ -73,8 +73,20 @@ class WalletService:
         await self.addresses_collection.create_index("derivation_index", unique=True)
         await self.addresses_collection.create_index("status")
         
+        # Check if mnemonic is configured
+        mnemonic = self._get_mnemonic()
+        if mnemonic:
+            self._enabled = True
+            logger.info("Wallet service initialized with HD wallet enabled")
+        else:
+            self._enabled = False
+            logger.warning("Wallet service initialized but HD wallet DISABLED (no mnemonic)")
+        
         self._initialized = True
-        logger.info("Wallet service initialized")
+    
+    def is_enabled(self) -> bool:
+        """Check if wallet service is enabled (has valid mnemonic)."""
+        return self._enabled
     
     async def _get_next_derivation_index(self) -> int:
         """Get the next available derivation index."""
