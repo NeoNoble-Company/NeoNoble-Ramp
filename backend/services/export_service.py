@@ -66,7 +66,7 @@ def _add_slide_content(slide, slide_data: Dict[str, Any], prs):
     num_box = slide.shapes.add_textbox(Inches(12), Inches(0.2), Inches(1), Inches(0.4))
     num_tf = num_box.text_frame
     num_p = num_tf.paragraphs[0]
-    num_p.text = f"{slide_data['id']} / 10"
+    num_p.text = f"{slide_data['id']} / 11"
     num_p.font.size = Pt(12)
     num_p.font.color.rgb = WHITE
     num_p.alignment = PP_ALIGN.RIGHT
