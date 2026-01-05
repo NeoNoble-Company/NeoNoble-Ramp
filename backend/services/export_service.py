@@ -148,6 +148,50 @@ def _add_slide_content(slide, slide_data: Dict[str, Any], prs):
             x = Inches(0.75 + i * 4.1)
             _add_phase_box(slide, phase, x, Inches(y_pos))
     
+    # Handle workflow diagrams
+    if 'workflows' in content:
+        workflows = content['workflows']
+        _add_text_block(slide, "On-Ramp Flow: Fiat → Crypto", Inches(0.75), Inches(y_pos), Inches(5.5), Pt(12), TEAL_DARK, bold=True)
+        _add_text_block(slide, "Off-Ramp Flow: Crypto → Fiat", Inches(6.75), Inches(y_pos), Inches(5.5), Pt(12), RGBColor(0x1D, 0x4E, 0xD8), bold=True)
+        y_pos += 0.4
+        
+        if 'onRamp' in workflows:
+            for i, step in enumerate(workflows['onRamp'].get('steps', [])[:5]):
+                step_text = f"{i+1}. {step['phase']}: {step['description']}"
+                _add_bullet_point(slide, step_text, Inches(0.75), Inches(y_pos + i * 0.35), Inches(5.5))
+        
+        if 'offRamp' in workflows:
+            for i, step in enumerate(workflows['offRamp'].get('steps', [])[:5]):
+                step_text = f"{i+1}. {step['phase']}: {step['description']}"
+                _add_bullet_point(slide, step_text, Inches(6.75), Inches(y_pos + i * 0.35), Inches(5.5))
+    
+    # Handle boundaries
+    if 'boundaries' in content:
+        boundaries = content['boundaries']
+        y_bound = 5.0
+        _add_text_block(slide, boundaries.get('title', 'Risk & Custody Boundaries'), Inches(0.75), Inches(y_bound), Inches(11), Pt(12), SLATE_DARK, bold=True)
+        y_bound += 0.35
+        _add_text_block(slide, "NeoNoble: " + ", ".join(boundaries.get('neonoble', [])[:3]), Inches(0.75), Inches(y_bound), Inches(11), Pt(10), TEAL_PRIMARY)
+        y_bound += 0.3
+        _add_text_block(slide, "Provider: " + ", ".join(boundaries.get('provider', [])[:3]), Inches(0.75), Inches(y_bound), Inches(11), Pt(10), RGBColor(0x1D, 0x4E, 0xD8))
+    
+    # Handle revenue streams
+    if 'revenueStreams' in content:
+        y_rev = y_pos
+        _add_text_block(slide, "Revenue Streams:", Inches(0.75), Inches(y_rev), Inches(11), Pt(12), SLATE_DARK, bold=True)
+        y_rev += 0.35
+        for i, stream in enumerate(content['revenueStreams'][:4]):
+            _add_bullet_point(slide, f"{stream['stream']}: {stream['description']}", Inches(0.75), Inches(y_rev + i * 0.35), Inches(11))
+    
+    # Handle dualFlow
+    if 'dualFlow' in content:
+        dualFlow = content['dualFlow']
+        y_dual = y_pos + 0.8
+        if 'onRamp' in dualFlow:
+            _add_text_block(slide, f"On-Ramp: {dualFlow['onRamp'].get('flow', '')}", Inches(0.75), Inches(y_dual), Inches(5.5), Pt(11), TEAL_PRIMARY)
+        if 'offRamp' in dualFlow:
+            _add_text_block(slide, f"Off-Ramp: {dualFlow['offRamp'].get('flow', '')}", Inches(6.75), Inches(y_dual), Inches(5.5), Pt(11), RGBColor(0x1D, 0x4E, 0xD8))
+    
     if 'callToAction' in content:
         _add_text_block(slide, content.get('callToAction', ''), Inches(0.75), Inches(y_pos), Inches(11), Pt(14), SLATE_MEDIUM)
     
