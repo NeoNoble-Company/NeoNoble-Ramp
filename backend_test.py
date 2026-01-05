@@ -34,6 +34,10 @@ class NeoNobleAPITester:
         self.api_secret = None
         self.test_results = {}
         
+        # Test data for PoR Engine validation
+        self.user_quote_id = None
+        self.dev_quote_id = None
+        
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
         return self
@@ -42,8 +46,22 @@ class NeoNobleAPITester:
         if self.session:
             await self.session.close()
     
+    def generate_hmac_signature(self, timestamp: str, body: str) -> str:
+        """Generate HMAC-SHA256 signature for API authentication"""
+        if not self.api_secret:
+            return ""
+        
+        message = timestamp + body
+        signature = hmac.new(
+            self.api_secret.encode('utf-8'),
+            message.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        return signature
+    
     async def make_request(self, method: str, endpoint: str, data: Dict = None, 
-                          headers: Dict = None, auth_token: str = None) -> tuple:
+                          headers: Dict = None, auth_token: str = None, 
+                          use_hmac: bool = False) -> tuple:
         """Make HTTP request and return (success, response_data, status_code)"""
         url = f"{BACKEND_URL}{endpoint}"
         
@@ -52,6 +70,18 @@ class NeoNobleAPITester:
             request_headers.update(headers)
         if auth_token:
             request_headers["Authorization"] = f"Bearer {auth_token}"
+        
+        # HMAC authentication for developer API
+        if use_hmac and self.api_key and self.api_secret:
+            timestamp = str(int(time.time()))
+            body = json.dumps(data) if data else ""
+            signature = self.generate_hmac_signature(timestamp, body)
+            
+            request_headers.update({
+                "X-API-KEY": self.api_key,
+                "X-TIMESTAMP": timestamp,
+                "X-SIGNATURE": signature
+            })
             
         try:
             async with self.session.request(
