@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 # Import pitch deck routes
 from routes.pitch_deck import router as pitch_deck_router
 
+# Import off-ramp routes and PoR engine
+from routes.offramp import router as offramp_router, developer_router, api_key_router, set_por_engine
+from services.por_engine import PoREngine
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -22,8 +26,16 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# Initialize PoR Engine
+por_engine = PoREngine(db)
+set_por_engine(por_engine)
+
 # Create the main app without a prefix
-app = FastAPI()
+app = FastAPI(
+    title="NeoNoble Ramp API",
+    description="Fiat-to-Crypto & Crypto-to-Fiat Routing Platform with NENO Token PoR Engine",
+    version="1.0.0"
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
