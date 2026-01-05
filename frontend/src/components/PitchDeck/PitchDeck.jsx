@@ -11,6 +11,7 @@ import TargetUsers from './slides/TargetUsers';
 import MarketGeography from './slides/MarketGeography';
 import ComplianceModel from './slides/ComplianceModel';
 import TechnicalArchitecture from './slides/TechnicalArchitecture';
+import WorkflowDiagrams from './slides/WorkflowDiagrams';
 import PartnershipModel from './slides/PartnershipModel';
 import RevenueStrategy from './slides/RevenueStrategy';
 import Roadmap from './slides/Roadmap';
@@ -23,6 +24,7 @@ const slideComponents = [
   MarketGeography,
   ComplianceModel,
   TechnicalArchitecture,
+  WorkflowDiagrams,
   PartnershipModel,
   RevenueStrategy,
   Roadmap,
