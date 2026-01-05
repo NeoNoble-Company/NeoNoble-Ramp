@@ -237,7 +237,7 @@ class PoREngineAPITester:
         if success and isinstance(data, dict):
             transaction_valid = (
                 data.get("quote_id") == self.quote_id and
-                data.get("state") == "completed" and
+                data.get("state") == "COMPLETED" and
                 data.get("compliance", {}).get("por_responsible") == True and
                 len(data.get("timeline", [])) >= 6  # Should have full lifecycle events
             )
