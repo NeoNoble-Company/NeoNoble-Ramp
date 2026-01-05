@@ -87,6 +87,11 @@ app.include_router(api_router)
 # Include pitch deck routes under /api prefix
 app.include_router(pitch_deck_router, prefix="/api")
 
+# Include off-ramp PoR routes under /api prefix
+app.include_router(offramp_router, prefix="/api")
+app.include_router(developer_router, prefix="/api")
+app.include_router(api_key_router, prefix="/api")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
