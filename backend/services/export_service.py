@@ -2,7 +2,7 @@
 
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.dml.color import RgbColor
+from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 from reportlab.lib.pagesizes import letter, landscape
@@ -16,11 +16,11 @@ from typing import List, Dict, Any
 
 
 # NeoNoble brand colors
-TEAL_PRIMARY = RgbColor(0x14, 0xB8, 0xA6)  # teal-500
-TEAL_DARK = RgbColor(0x0F, 0x76, 0x6E)     # teal-700
-SLATE_DARK = RgbColor(0x1E, 0x29, 0x3B)    # slate-800
-SLATE_MEDIUM = RgbColor(0x47, 0x55, 0x69)  # slate-600
-WHITE = RgbColor(0xFF, 0xFF, 0xFF)
+TEAL_PRIMARY = RGBColor(0x14, 0xB8, 0xA6)  # teal-500
+TEAL_DARK = RGBColor(0x0F, 0x76, 0x6E)     # teal-700
+SLATE_DARK = RGBColor(0x1E, 0x29, 0x3B)    # slate-800
+SLATE_MEDIUM = RGBColor(0x47, 0x55, 0x69)  # slate-600
+WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
 
 def create_pptx(slides: List[Dict[str, Any]], company_info: Dict[str, Any]) -> bytes:
