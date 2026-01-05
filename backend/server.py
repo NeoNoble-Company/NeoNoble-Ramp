@@ -62,6 +62,8 @@ from services.pricing_service import pricing_service
 from services.wallet_service import WalletService
 from services.blockchain_listener import BlockchainListener
 from services.stripe_payout_service import StripePayoutService
+from services.por_engine import InternalPoRProvider
+from services.settlement_service import SettlementService
 
 # Import routes
 from routes.auth import router as auth_router, set_auth_service
@@ -69,6 +71,7 @@ from routes.dev_portal import router as dev_router, set_api_key_service
 from routes.ramp_api import router as ramp_api_router, set_services as set_ramp_api_services
 from routes.user_ramp import router as user_ramp_router, set_ramp_service
 from routes.webhooks import router as webhooks_router, set_payout_service
+from routes.por_api import router as por_router, set_por_engine
 
 # Initialize services
 auth_service = AuthService(db)
@@ -77,6 +80,8 @@ ramp_service = RampService(db)
 wallet_service = WalletService(db)
 blockchain_listener = BlockchainListener(db)
 payout_service = StripePayoutService(db)
+por_engine = InternalPoRProvider(db)
+settlement_service = SettlementService(db)
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)
