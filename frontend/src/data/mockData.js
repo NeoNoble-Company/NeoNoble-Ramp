@@ -101,12 +101,12 @@ export const slides = [
         }
       ],
       useCases: [
-        "On-Ramp: Fiat → major digital assets (BTC, ETH, USDC, etc.)",
-        "Off-Ramp: Crypto → EUR IBAN (SEPA payouts)",
+        "On-Ramp: Fiat → NENO (€10,000/unit) or major digital assets",
+        "Off-Ramp: NENO/Crypto → EUR IBAN (SEPA payouts)",
+        "NENO Token: Fixed-value conversion at €10,000 per unit",
         "Business settlements: Automated crypto-to-fiat treasury management",
         "Embedded partner integrations for B2B platforms",
-        "Developer-focused routing and automation workflows",
-        "Revenue-share partnership model implementation"
+        "Developer-focused routing and automation workflows"
       ]
     }
   },
@@ -136,35 +136,42 @@ export const slides = [
     subtitle: "Regulatory Architecture",
     content: {
       model: "Provider-of-Record Partnership",
-      description: "All regulated financial operations are handled by our licensed Provider-of-Record partners. NeoNoble does not hold funds, process payments, custody assets, or conduct settlement.",
+      description: "All regulated financial operations are handled by our licensed Provider-of-Record partners. NeoNoble does not hold funds, process payments, custody assets, or conduct settlement. NENO token pricing is platform-defined at the application layer.",
       partnerResponsibilities: [
         "KYC/KYB verification and identity management",
         "AML monitoring and transaction screening",
         "Banking relationships and fiat settlement",
         "Liquidity provision and order execution",
-        "Asset custody and wallet management",
+        "Asset custody and wallet management (including NENO on BSC)",
         "Regulatory reporting and compliance obligations",
         "Risk management and fraud prevention",
-        "Fiat payout processing (Off-Ramp)"
+        "Fiat payout processing (Off-Ramp / NENO redemption)"
       ],
       neonobleRole: [
         "User experience and interface design",
+        "NENO token pricing orchestration (€10,000 fixed value)",
         "Routing logic and optimization",
         "API development and integration support",
-        "Partner coordination and onboarding",
         "Technical infrastructure and uptime"
       ],
       complianceSplit: {
         onRamp: {
           kyc: "Provider handles user identity verification",
           aml: "Provider monitors incoming fiat transactions",
-          settlement: "Provider executes crypto delivery"
+          settlement: "Provider executes NENO/crypto delivery",
+          pricing: "NeoNoble defines NENO fixed value (€10,000/unit)"
         },
         offRamp: {
           kyb: "Provider handles business verification for payouts",
           aml: "Provider screens outgoing fiat transactions",
-          payout: "Provider executes SEPA transfers to user IBAN"
+          payout: "Provider executes SEPA transfers for NENO redemption",
+          pricing: "NeoNoble defines NENO redemption value (€10,000/unit)"
         }
+      },
+      nenoCompliance: {
+        title: "NENO Token Compliance Boundaries",
+        platformLayer: "Price anchoring & value abstraction (NeoNoble)",
+        regulatedLayer: "Fiat rails, custody & AML (Provider-of-Record)"
       }
     }
   },
