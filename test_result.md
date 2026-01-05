@@ -392,3 +392,40 @@ agent_communication:
       
       The PoR Engine is fully operational and ready for production use. All API endpoints
       are working correctly with proper state management and instant settlement.
+  - agent: "main"
+    message: |
+      USER VERIFICATION REQUESTED - COMPREHENSIVE PoR ENGINE VALIDATION
+      
+      Please perform comprehensive testing of the PoR Engine via BOTH:
+      
+      1. USER UI FLOW TESTING (JWT Authentication):
+         a. Register a new user and login to get JWT token
+         b. Create off-ramp quote for NENO (€10,000 fixed price per token)
+         c. Accept the quote - verify transition to DEPOSIT_PENDING
+         d. Process the deposit via PoR Engine
+         e. Validate full lifecycle: QUOTE_CREATED → DEPOSIT_PENDING → DEPOSIT_DETECTED → DEPOSIT_CONFIRMED → SETTLEMENT_PENDING → SETTLEMENT_PROCESSING → SETTLEMENT_COMPLETED → PAYOUT_INITIATED → PAYOUT_COMPLETED → COMPLETED
+         f. Review UX messaging, status visibility, timeline events
+         
+      2. DEVELOPER API FLOW TESTING (HMAC Authentication):
+         a. Register a developer and login
+         b. Generate API key + secret pair
+         c. Use HMAC authentication to:
+            - Create off-ramp quote via /api/ramp-api-offramp-quote
+            - Execute off-ramp via /api/ramp-api-offramp
+            - Process deposit via /api/ramp-api-deposit-process
+            - Get transaction details via /api/ramp-api-transaction/{quote_id}
+            - Get timeline via /api/ramp-api-transaction/{quote_id}/timeline
+         d. Verify Developer API mirrors User UI lifecycle (schemas, states, compliance metadata)
+      
+      3. CONSISTENCY VALIDATION:
+         - Confirm state transitions are identical in both flows
+         - Verify compliance metadata is populated correctly
+         - Confirm fee calculation (1.5%)
+         - Verify NENO fixed price (€10,000)
+         - Confirm instant settlement mode
+      
+      ENDPOINTS TO TEST:
+      User API (JWT): /api/ramp/offramp/quote, /api/ramp/offramp/execute, /api/ramp/offramp/deposit/process, /api/ramp/offramp/transaction/{quote_id}, /api/ramp/offramp/transaction/{quote_id}/timeline
+      Dev API (HMAC): /api/ramp-api-offramp-quote, /api/ramp-api-offramp, /api/ramp-api-deposit-process, /api/ramp-api-transaction/{quote_id}, /api/ramp-api-transaction/{quote_id}/timeline
+      
+      Also test frontend UI flows via Playwright screenshots if possible.
