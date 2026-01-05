@@ -80,26 +80,34 @@ class BlockchainListener:
         self._callbacks: List[Callable] = []
         self._last_block: int = 0
         self._token_decimals: int = 18  # Default, will be fetched
+        self._enabled = False
     
-    def _get_web3(self) -> Web3:
+    def _get_web3(self) -> Optional[Web3]:
         """Get or create Web3 instance."""
         if self._web3 is not None:
             return self._web3
         
         rpc_url = os.environ.get('BSC_RPC_URL')
         if not rpc_url:
-            raise ValueError(
-                "BSC_RPC_URL environment variable is not set. "
-                "Please provide a valid BSC RPC endpoint."
-            )
+            logger.warning("BSC_RPC_URL not configured - blockchain monitoring disabled")
+            return None
         
-        self._web3 = Web3(Web3.HTTPProvider(rpc_url))
-        
-        if not self._web3.is_connected():
-            raise ConnectionError(f"Failed to connect to BSC RPC: {rpc_url}")
-        
-        logger.info(f"Connected to BSC RPC")
-        return self._web3
+        try:
+            self._web3 = Web3(Web3.HTTPProvider(rpc_url))
+            
+            if not self._web3.is_connected():
+                logger.error(f"Failed to connect to BSC RPC: {rpc_url}")
+                return None
+            
+            logger.info(f"Connected to BSC RPC")
+            return self._web3
+        except Exception as e:
+            logger.error(f"Error connecting to BSC RPC: {e}")
+            return None
+    
+    def is_enabled(self) -> bool:
+        """Check if blockchain listener is enabled."""
+        return self._enabled
     
     def _get_contract(self):
         """Get NENO token contract instance."""
