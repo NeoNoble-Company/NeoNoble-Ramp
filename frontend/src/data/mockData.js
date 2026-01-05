@@ -4,7 +4,17 @@ export const companyInfo = {
   name: "NeoNoble Ramp & NeoExchange",
   website: "https://crypto-onramp-2.emergent.host",
   tagline: "Fiat-to-Crypto & Crypto-to-Fiat Routing Platform",
-  description: "A regulated-partner-powered bidirectional fiat-crypto routing platform"
+  description: "A regulated-partner-powered bidirectional fiat-crypto routing platform with NENO Token support"
+};
+
+// NENO Token Configuration
+export const nenoToken = {
+  name: "NeoNoble Token",
+  symbol: "NENO",
+  chain: "BSC (Binance Smart Chain)",
+  fixedValue: "€10,000",
+  valueModel: "Fixed-Value Conversion Framework",
+  description: "Platform-defined fixed-value token for streamlined on/off-ramp operations"
 };
 
 export const slides = [
@@ -18,9 +28,9 @@ export const slides = [
       keyPoints: [
         "UX, routing, and integration layer — not a financial intermediary",
         "Bidirectional flow: On-Ramp (fiat → crypto) & Off-Ramp (crypto → fiat)",
+        "NENO Token: Fixed-value model at €10,000/unit on BSC",
         "Partner-centric architecture with regulated Provider-of-Record model",
-        "European-focused compliance alignment (EU + EEA)",
-        "Developer-first routing and automation capabilities"
+        "European-focused compliance alignment (EU + EEA)"
       ],
       website: "https://crypto-onramp-2.emergent.host"
     }
@@ -33,16 +43,16 @@ export const slides = [
       vision: "To provide seamless, compliant crypto access through intelligent bidirectional routing and best-in-class UX — while ensuring all regulated operations (KYC, KYB, AML, custody, settlement) remain with licensed partners.",
       valueProps: [
         {
-          title: "Bidirectional Flow",
-          description: "Complete on-ramp and off-ramp coverage for full crypto lifecycle support"
+          title: "NENO Fixed-Value Model",
+          description: "Platform-defined €10,000/unit token enabling predictable on/off-ramp conversions"
         },
         {
           title: "Separation of Concerns",
-          description: "Clear distinction between UX layer and regulated financial/payout rails"
+          description: "Clear distinction between UX/token abstraction and regulated financial rails"
         },
         {
           title: "Routing Intelligence",
-          description: "Smart order routing to optimize for speed, cost, and availability across providers"
+          description: "Smart order routing with integrated pricing orchestration layer"
         },
         {
           title: "Compliance-First Design",
@@ -52,14 +62,22 @@ export const slides = [
       dualFlow: {
         onRamp: {
           title: "On-Ramp",
-          flow: "Fiat (EUR) → Provider-of-Record → Digital Assets",
-          benefits: ["Bank transfer (SEPA)", "Card payments", "Instant settlement"]
+          flow: "Fiat (EUR) → Provider-of-Record → Digital Assets / NENO",
+          benefits: ["Bank transfer (SEPA)", "Card payments", "NENO at €10,000/unit"]
         },
         offRamp: {
           title: "Off-Ramp",
-          flow: "Digital Assets → Provider-of-Record → Fiat (EUR IBAN)",
-          benefits: ["SEPA payouts", "Business settlements", "Automated withdrawals"]
+          flow: "Digital Assets / NENO → Provider-of-Record → Fiat (EUR IBAN)",
+          benefits: ["SEPA payouts", "NENO redemption at €10,000/unit", "Business settlements"]
         }
+      },
+      nenoModel: {
+        token: "NeoNoble Token (NENO)",
+        chain: "BSC (Binance Smart Chain)",
+        fixedValue: "€10,000 per unit",
+        onRamp: "Fiat → NENO purchase at fixed €10,000/unit",
+        offRamp: "NENO → Fiat redemption at fixed €10,000/unit",
+        valueNote: "Platform-defined fixed value — not market-driven"
       }
     }
   },
