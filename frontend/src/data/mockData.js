@@ -186,12 +186,16 @@ export const slides = [
           components: ["Web Application", "Mobile-Responsive UI", "Partner Widgets"]
         },
         {
+          name: "Pricing & Value Layer",
+          components: ["NENO Price Anchoring (€10,000)", "Value Mapping Engine", "Token Abstraction"]
+        },
+        {
           name: "Routing Layer",
           components: ["Smart Order Router", "Rate Aggregation", "Provider Selection", "Flow Direction Handler"]
         },
         {
           name: "Integration Layer",
-          components: ["Partner APIs", "Webhook Events", "Status Tracking", "Payout Orchestration"]
+          components: ["Partner APIs", "BSC Integration", "Webhook Events", "Payout Orchestration"]
         },
         {
           name: "Provider Layer",
@@ -199,32 +203,20 @@ export const slides = [
         }
       ],
       features: [
-        "RESTful API with comprehensive documentation",
+        "NENO fixed-value pricing at €10,000/unit (platform-defined)",
+        "BSC chain integration for NENO token operations",
         "Real-time rate comparison and optimization",
         "Multi-provider failover and redundancy",
-        "Comprehensive logging and audit trails",
         "Bidirectional flow management (On-Ramp & Off-Ramp)"
       ],
-      flowDiagram: {
-        onRamp: {
-          title: "On-Ramp Flow",
-          steps: [
-            { step: 1, label: "User initiates buy", actor: "NeoNoble UX" },
-            { step: 2, label: "Route to optimal provider", actor: "Routing Layer" },
-            { step: 3, label: "KYC verification", actor: "Provider-of-Record" },
-            { step: 4, label: "Fiat collection (SEPA/Card)", actor: "Provider-of-Record" },
-            { step: 5, label: "Crypto delivery to wallet", actor: "Provider-of-Record" }
-          ]
-        },
-        offRamp: {
-          title: "Off-Ramp Flow",
-          steps: [
-            { step: 1, label: "User initiates sell/payout", actor: "NeoNoble UX" },
-            { step: 2, label: "Route to payout provider", actor: "Routing Layer" },
-            { step: 3, label: "KYC/KYB verification", actor: "Provider-of-Record" },
-            { step: 4, label: "Crypto collection & custody", actor: "Provider-of-Record" },
-            { step: 5, label: "Fiat payout to IBAN (SEPA)", actor: "Provider-of-Record" }
-          ]
+      nenoArchitecture: {
+        title: "NENO Token Technical Model",
+        chain: "BSC (Binance Smart Chain)",
+        pricing: "Fixed €10,000 per unit — platform-defined, not market-driven",
+        layers: {
+          uxLayer: "User interface & token value abstraction",
+          pricingLayer: "Price anchoring at application/orchestration layer",
+          providerLayer: "Fiat rails & settlement via Provider-of-Record"
         }
       }
     }
@@ -236,24 +228,24 @@ export const slides = [
     content: {
       workflows: {
         onRamp: {
-          title: "On-Ramp: Fiat → Crypto",
-          description: "User purchases digital assets using fiat currency",
+          title: "On-Ramp: Fiat → NENO/Crypto",
+          description: "User purchases NENO (€10,000/unit) or other digital assets",
           steps: [
-            { phase: "Initiation", description: "User selects asset and amount via NeoNoble UX", owner: "NeoNoble" },
-            { phase: "Routing", description: "Smart router selects optimal provider based on rate, speed, availability", owner: "NeoNoble" },
+            { phase: "Initiation", description: "User selects NENO or asset amount via NeoNoble UX", owner: "NeoNoble" },
+            { phase: "Pricing", description: "NENO priced at fixed €10,000/unit by platform", owner: "NeoNoble" },
             { phase: "Verification", description: "KYC identity verification performed", owner: "Provider-of-Record" },
             { phase: "Collection", description: "Fiat collected via SEPA transfer or card payment", owner: "Provider-of-Record" },
-            { phase: "Execution", description: "Crypto purchased and delivered to user wallet", owner: "Provider-of-Record" }
+            { phase: "Execution", description: "NENO (BSC) or crypto delivered to user wallet", owner: "Provider-of-Record" }
           ]
         },
         offRamp: {
-          title: "Off-Ramp: Crypto → Fiat",
-          description: "User converts digital assets to fiat payout",
+          title: "Off-Ramp: NENO/Crypto → Fiat",
+          description: "User redeems NENO (€10,000/unit) or converts crypto to fiat",
           steps: [
-            { phase: "Initiation", description: "User initiates sell/withdrawal via NeoNoble UX", owner: "NeoNoble" },
-            { phase: "Routing", description: "Smart router selects optimal payout provider", owner: "NeoNoble" },
+            { phase: "Initiation", description: "User initiates NENO redemption or sell via NeoNoble UX", owner: "NeoNoble" },
+            { phase: "Pricing", description: "NENO redemption at fixed €10,000/unit by platform", owner: "NeoNoble" },
             { phase: "Verification", description: "KYC/KYB verification for payout eligibility", owner: "Provider-of-Record" },
-            { phase: "Custody", description: "Crypto received and held in provider custody", owner: "Provider-of-Record" },
+            { phase: "Custody", description: "NENO/Crypto received in provider custody", owner: "Provider-of-Record" },
             { phase: "Settlement", description: "Fiat payout executed to user IBAN via SEPA", owner: "Provider-of-Record" }
           ]
         }
@@ -262,18 +254,28 @@ export const slides = [
         title: "Risk & Custody Boundary Model",
         neonoble: [
           "UX presentation and user journey",
+          "NENO price anchoring (€10,000 fixed value)",
+          "Token value abstraction layer",
           "Routing logic and provider selection",
-          "API orchestration and webhooks",
-          "Status tracking and notifications"
+          "API orchestration and webhooks"
         ],
         provider: [
           "Fiat custody and banking relationships",
-          "Crypto custody and wallet management",
+          "NENO/Crypto custody and wallet management (BSC)",
           "KYC/KYB identity verification",
           "AML transaction monitoring",
           "Settlement and payout execution",
           "Regulatory compliance and reporting"
         ]
+      },
+      nenoFlow: {
+        title: "NENO Token Operating Model",
+        token: "NeoNoble Token (NENO)",
+        chain: "BSC (Binance Smart Chain)",
+        fixedValue: "€10,000 per unit",
+        onRampFlow: "EUR → Provider-of-Record → NENO (BSC wallet)",
+        offRampFlow: "NENO (BSC) → Provider-of-Record → EUR (IBAN)",
+        valueNote: "Fixed value is platform-defined at application layer"
       }
     }
   },
