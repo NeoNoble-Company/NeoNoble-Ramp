@@ -1,20 +1,34 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+"""
+Developer Ramp API Routes - HMAC-protected endpoints for NeoNoble Ramp.
+
+Provides full off-ramp functionality powered by the PoR engine.
+Developers can access via API Keys with HMAC authentication.
+
+Authentication:
+- X-API-KEY: Your API key
+- X-TIMESTAMP: Unix timestamp in seconds  
+- X-SIGNATURE: HMAC-SHA256(timestamp + bodyJson, apiSecret)
+"""
+
+from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 from typing import Optional
 import logging
 
 from models.quote import QuoteResponse, RampResponse
 from services.ramp_service import RampService
+from services.por_engine import InternalPoRProvider
 from services.pricing_service import pricing_service, SUPPORTED_CRYPTOS, NENO_PRICE_EUR
-from middleware.auth import HMACAuthMiddleware, get_optional_user
+from middleware.auth import HMACAuthMiddleware
 from services.api_key_service import PlatformApiKeyService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Ramp API"])
+router = APIRouter(tags=["Developer Ramp API"])
 
 # Services will be set by main app
 ramp_service: RampService = None
+por_engine: InternalPoRProvider = None
 hmac_middleware: HMACAuthMiddleware = None
 
 
@@ -24,6 +38,15 @@ def set_services(ramp: RampService, api_key_service: PlatformApiKeyService):
     hmac_middleware = HMACAuthMiddleware(api_key_service)
 
 
+def set_por_engine(engine: InternalPoRProvider):
+    global por_engine
+    por_engine = engine
+
+
+# ========================
+# Request Models
+# ========================
+
 class OnrampQuoteRequest(BaseModel):
     fiat_amount: float = Field(..., gt=0, description="Amount in EUR to convert")
     crypto_currency: str = Field(..., description="Target cryptocurrency (BTC, ETH, NENO, etc.)")
@@ -32,6 +55,7 @@ class OnrampQuoteRequest(BaseModel):
 class OfframpQuoteRequest(BaseModel):
     crypto_amount: float = Field(..., gt=0, description="Amount of crypto to convert")
     crypto_currency: str = Field(..., description="Source cryptocurrency (BTC, ETH, NENO, etc.)")
+    bank_account: Optional[str] = Field(None, description="IBAN for payout (optional at quote)")
 
 
 class OnrampExecuteRequest(BaseModel):
@@ -44,13 +68,67 @@ class OfframpExecuteRequest(BaseModel):
     bank_account: str = Field(..., description="Bank account IBAN to receive fiat")
 
 
+class DepositProcessRequest(BaseModel):
+    quote_id: str = Field(..., description="Quote ID")
+    tx_hash: str = Field(..., description="Blockchain transaction hash")
+    amount: float = Field(..., description="Amount received")
+
+
+# ========================
+# Helper Functions
+# ========================
+
+def por_quote_to_response(quote) -> dict:
+    """Convert PoR quote to API response."""
+    return {
+        "quote_id": quote.quote_id,
+        "provider": quote.provider.value,
+        "crypto_amount": quote.crypto_amount,
+        "crypto_currency": quote.crypto_currency,
+        "fiat_amount": quote.fiat_amount,
+        "fiat_currency": quote.fiat_currency,
+        "exchange_rate": quote.exchange_rate,
+        "fee_amount": quote.fee_amount,
+        "fee_percentage": quote.fee_percentage,
+        "net_payout": quote.net_payout,
+        "deposit_address": quote.deposit_address,
+        "expires_at": quote.expires_at,
+        "created_at": quote.created_at,
+        "state": quote.state.value,
+        "compliance": {
+            "kyc_status": quote.compliance.kyc_status.value,
+            "kyc_provider": quote.compliance.kyc_provider,
+            "aml_status": quote.compliance.aml_status.value,
+            "aml_provider": quote.compliance.aml_provider,
+            "por_responsible": quote.compliance.por_responsible
+        },
+        "timeline": [
+            {
+                "timestamp": e.timestamp,
+                "state": e.state.value,
+                "message": e.message,
+                "details": e.details,
+                "provider": e.provider
+            }
+            for e in quote.timeline
+        ],
+        "metadata": quote.metadata
+    }
+
+
+# ========================
+# Public Endpoints (No Auth Required)
+# ========================
+
 @router.get("/ramp-api-health")
 async def ramp_health():
     """Health check for the Ramp API."""
+    por_status = "available" if por_engine and por_engine.is_available() else "unavailable"
     return {
         "status": "healthy",
         "service": "NeoNoble Ramp API",
         "version": "2.0.0",
+        "por_engine": por_status,
         "supported_cryptos": SUPPORTED_CRYPTOS,
         "neno_price_eur": NENO_PRICE_EUR
     }
@@ -78,22 +156,39 @@ async def get_prices():
         raise HTTPException(status_code=500, detail="Failed to fetch prices")
 
 
+@router.get("/ramp-api-por-status")
+async def get_por_status():
+    """Get PoR engine status (public endpoint)."""
+    if not por_engine:
+        return {"available": False, "error": "PoR engine not initialized"}
+    
+    config = por_engine.get_config()
+    liquidity = await por_engine.get_liquidity_status()
+    
+    return {
+        "available": por_engine.is_available(),
+        "provider": config.name,
+        "settlement_mode": config.settlement_mode.value,
+        "fee_percentage": config.fee_percentage,
+        "supported_cryptos": config.supported_cryptos,
+        "neno_price_eur": NENO_PRICE_EUR,
+        "liquidity_unlimited": liquidity.get("unlimited_mode", True)
+    }
+
+
+# ========================
+# Legacy On-Ramp Endpoints (HMAC Protected)
+# ========================
+
 @router.post("/ramp-api-onramp-quote", response_model=QuoteResponse)
 async def create_onramp_quote(request: OnrampQuoteRequest, http_request: Request):
     """
     Get a quote for onramp (Fiat -> Crypto).
     
     **HMAC Authentication Required**
-    
-    Headers:
-    - X-API-KEY: Your API key
-    - X-TIMESTAMP: Unix timestamp in seconds
-    - X-SIGNATURE: HMAC-SHA256(timestamp + bodyJson, apiSecret)
     """
-    # Authenticate with HMAC
     await hmac_middleware.authenticate(http_request)
     
-    # Validate crypto currency
     if request.crypto_currency.upper() not in SUPPORTED_CRYPTOS:
         raise HTTPException(
             status_code=400,
@@ -108,9 +203,6 @@ async def create_onramp_quote(request: OnrampQuoteRequest, http_request: Request
         return quote
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to create onramp quote: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create quote")
 
 
 @router.post("/ramp-api-onramp", response_model=RampResponse)
@@ -119,8 +211,6 @@ async def execute_onramp(request: OnrampExecuteRequest, http_request: Request):
     Execute an onramp transaction (Fiat -> Crypto).
     
     **HMAC Authentication Required**
-    
-    Use a quote_id from the onramp-quote endpoint.
     """
     auth_info = await hmac_middleware.authenticate(http_request)
     
@@ -136,14 +226,28 @@ async def execute_onramp(request: OnrampExecuteRequest, http_request: Request):
     return result
 
 
-@router.post("/ramp-api-offramp-quote", response_model=QuoteResponse)
-async def create_offramp_quote(request: OfframpQuoteRequest, http_request: Request):
+# ========================
+# PoR-Powered Off-Ramp Endpoints (HMAC Protected)
+# ========================
+
+@router.post("/ramp-api-offramp-quote")
+async def create_offramp_quote_por(request: OfframpQuoteRequest, http_request: Request):
     """
-    Get a quote for offramp (Crypto -> Fiat).
+    Get a quote for offramp (Crypto -> Fiat) via PoR engine.
     
     **HMAC Authentication Required**
+    
+    Returns enterprise-grade quote with:
+    - Deposit address for crypto
+    - NENO fixed at €10,000
+    - 1.5% fee
+    - Full compliance info
+    - Transaction timeline
     """
-    await hmac_middleware.authenticate(http_request)
+    auth_info = await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
     
     if request.crypto_currency.upper() not in SUPPORTED_CRYPTOS:
         raise HTTPException(
@@ -151,35 +255,167 @@ async def create_offramp_quote(request: OfframpQuoteRequest, http_request: Reque
             detail=f"Unsupported cryptocurrency. Supported: {SUPPORTED_CRYPTOS}"
         )
     
-    try:
-        quote = await ramp_service.create_offramp_quote(
-            crypto_amount=request.crypto_amount,
-            crypto_currency=request.crypto_currency.upper()
-        )
-        return quote
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to create offramp quote: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create quote")
-
-
-@router.post("/ramp-api-offramp", response_model=RampResponse)
-async def execute_offramp(request: OfframpExecuteRequest, http_request: Request):
-    """
-    Execute an offramp transaction (Crypto -> Fiat).
-    
-    **HMAC Authentication Required**
-    """
-    auth_info = await hmac_middleware.authenticate(http_request)
-    
-    result, error = await ramp_service.execute_offramp(
-        quote_id=request.quote_id,
-        bank_account=request.bank_account,
-        api_key_id=auth_info["api_key_id"]
+    quote, error = await por_engine.create_quote(
+        crypto_amount=request.crypto_amount,
+        crypto_currency=request.crypto_currency.upper(),
+        fiat_currency="EUR",
+        user_id=None,  # API key based
+        bank_account=request.bank_account
     )
     
     if error:
         raise HTTPException(status_code=400, detail=error)
     
-    return result
+    # Add API key info to metadata
+    quote.metadata["api_key_id"] = auth_info["api_key_id"]
+    
+    return por_quote_to_response(quote)
+
+
+@router.post("/ramp-api-offramp")
+async def execute_offramp_por(request: OfframpExecuteRequest, http_request: Request):
+    """
+    Execute an offramp transaction via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Accepts the quote and transitions to DEPOSIT_PENDING.
+    User must then send crypto to the deposit address.
+    """
+    auth_info = await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    quote, error = await por_engine.accept_quote(
+        quote_id=request.quote_id,
+        bank_account=request.bank_account
+    )
+    
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    
+    response = por_quote_to_response(quote)
+    response["message"] = f"Please send {quote.crypto_amount} {quote.crypto_currency} to {quote.deposit_address}"
+    response["api_key_id"] = auth_info["api_key_id"]
+    
+    return response
+
+
+@router.post("/ramp-api-deposit-process")
+async def process_deposit_por(request: DepositProcessRequest, http_request: Request):
+    """
+    Process a confirmed crypto deposit via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    In instant settlement mode, this completes the entire
+    off-ramp flow automatically.
+    """
+    auth_info = await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    quote, error = await por_engine.process_deposit(
+        quote_id=request.quote_id,
+        tx_hash=request.tx_hash,
+        amount=request.amount
+    )
+    
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    
+    return por_quote_to_response(quote)
+
+
+@router.get("/ramp-api-transaction/{quote_id}")
+async def get_transaction_por(quote_id: str, http_request: Request):
+    """
+    Get transaction details by quote ID via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Returns full transaction data including:
+    - Current state
+    - Compliance info (KYC/AML)
+    - Timeline of all events
+    - Settlement details
+    """
+    await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    quote = await por_engine.get_transaction(quote_id)
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    return por_quote_to_response(quote)
+
+
+@router.get("/ramp-api-transaction/{quote_id}/timeline")
+async def get_transaction_timeline_por(quote_id: str, http_request: Request):
+    """
+    Get transaction timeline via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Returns detailed event log with all state transitions.
+    """
+    await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    timeline = await por_engine.get_timeline(quote_id)
+    
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    return {
+        "quote_id": quote_id,
+        "event_count": len(timeline),
+        "events": [
+            {
+                "timestamp": e.timestamp,
+                "state": e.state.value,
+                "message": e.message,
+                "details": e.details,
+                "provider": e.provider
+            }
+            for e in timeline
+        ]
+    }
+
+
+@router.get("/ramp-api-transactions")
+async def list_transactions_por(
+    http_request: Request,
+    state: Optional[str] = Query(None, description="Filter by state"),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """
+    List transactions via PoR engine.
+    
+    **HMAC Authentication Required**
+    """
+    await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    from services.provider_interface import TransactionState
+    
+    state_filter = TransactionState(state) if state else None
+    
+    transactions = await por_engine.list_transactions(
+        state=state_filter,
+        limit=limit
+    )
+    
+    return {
+        "count": len(transactions),
+        "transactions": [por_quote_to_response(q) for q in transactions]
+    }
