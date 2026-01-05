@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-NeoNoble Ramp Backend API Test Suite
-Tests the Stripe SEPA payout integration and core API functionality.
+NeoNoble Ramp Backend API Test Suite - Comprehensive PoR Engine Validation
+Tests both User UI Flow (JWT) and Developer API Flow (HMAC) for PoR Engine.
 """
 
 import asyncio
@@ -11,6 +11,9 @@ import logging
 from typing import Dict, Any, Optional
 import sys
 import os
+import time
+import hmac
+import hashlib
 
 # Configure logging
 logging.basicConfig(
