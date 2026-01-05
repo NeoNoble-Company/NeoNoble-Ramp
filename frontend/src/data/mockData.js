@@ -254,8 +254,11 @@ export const slides = [
         "Geographic expansion opportunities"
       ],
       contact: {
-        website: "https://crypto-onramp-2.emergent.host",
-        email: "partnerships@neonoble.com"
+        platforms: [
+          { name: "NeoNoble Ramp", description: "Crypto-onramp platform", website: "https://crypto-onramp-2.emergent.host" },
+          { name: "NeoExchange", description: "Exchange & fintech infrastructure", website: "https://neoexchange.io" }
+        ],
+        email: "massimoadmin@neonoble.it"
       },
       closing: "Thank you for your consideration. We look forward to exploring how NeoNoble can complement your regulated services and expand access to compliant crypto solutions across Europe."
     }
