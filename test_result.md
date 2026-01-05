@@ -272,6 +272,67 @@ backend:
           - Key Verifications: NENO fixed price €10,000, Fee 1.5%, KYC/AML handled by PoR, Instant settlement, No credentials required, Liquidity always available
           - Backend logs confirm: "PoR Engine initialized", "PoR quote created", "PoR settlement completed"
 
+  - task: "User UI PoR Engine Flow (JWT Authentication)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/user_ramp.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE VALIDATION COMPLETE: User UI PoR Engine Flow
+          - User Registration & Login: JWT tokens generated correctly
+          - Create PoR Quote: 1.0 NENO → €10,000, quote_id starts with "por_", deposit address generated
+          - Execute Quote: State transitions to DEPOSIT_PENDING, proper messaging with deposit instructions
+          - Process Deposit: Instant settlement to COMPLETED state, all 11 state transitions executed
+          - Transaction Details: Full compliance metadata, settlement_id and payout_reference present
+          - Transaction Timeline: Complete event history with 11 state transitions logged
+          - All endpoints working: /api/ramp/offramp/quote, /api/ramp/offramp/execute, /api/ramp/offramp/deposit/process, /api/ramp/offramp/transaction/{quote_id}, /api/ramp/offramp/transaction/{quote_id}/timeline
+
+  - task: "Developer API PoR Engine Flow (HMAC Authentication)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/ramp_api.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE VALIDATION COMPLETE: Developer API PoR Engine Flow
+          - Developer Registration & Login: JWT tokens for developer accounts
+          - API Key Management: API key/secret pairs generated, HMAC signatures working
+          - Create PoR Quote (HMAC): 2.0 NENO → €20,000, proper HMAC authentication
+          - Execute Quote (HMAC): State transitions via HMAC-secured endpoints
+          - Process Deposit (HMAC): Instant settlement via developer API
+          - Transaction Details (HMAC): Full transaction data via HMAC endpoints
+          - Transaction Timeline (HMAC): Complete event history via HMAC endpoints
+          - All endpoints working: /api/ramp-api-offramp-quote, /api/ramp-api-offramp, /api/ramp-api-deposit-process, /api/ramp-api-transaction/{quote_id}, /api/ramp-api-transaction/{quote_id}/timeline
+
+  - task: "PoR Engine Consistency Validation"
+    implemented: true
+    working: true
+    file: "/app/backend/services/por_engine.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ CONSISTENCY VALIDATION COMPLETE: User UI vs Developer API
+          - State Machine: Both flows follow identical 11-state transition sequence
+          - Compliance Metadata: por_responsible=true in both flows
+          - Fee Calculation: 1.5% fee applied consistently
+          - NENO Price: Fixed €10,000 rate in both flows
+          - Settlement Mode: Instant settlement in both flows
+          - Response Schemas: Perfect alignment between User UI and Developer API endpoints
+          - Timeline Format: Identical event structure and timestamps
+
 frontend:
   - task: "Landing Page"
     implemented: true
