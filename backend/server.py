@@ -107,6 +107,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("NeoNoble Ramp API starting...")
+    logger.info("PoR Engine initialized and operational")
+    logger.info(f"NENO Price: €{por_engine.NENO_PRICE_EUR:,.0f} per unit (fixed)")
+    logger.info(f"PoR Fee: {por_engine.POR_FEE_PERCENTAGE}%")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
