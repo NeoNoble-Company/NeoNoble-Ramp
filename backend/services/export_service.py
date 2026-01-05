@@ -440,6 +440,69 @@ def create_pdf(slides: List[Dict[str, Any]], company_info: Dict[str, Any]) -> by
                 for item in phase['items']:
                     story.append(Paragraph(f"• {item}", styles['BulletPoint']))
         
+        # Handle workflow diagrams
+        if 'workflows' in content:
+            workflows = content['workflows']
+            if 'onRamp' in workflows:
+                story.append(Spacer(1, 10))
+                story.append(Paragraph(f"<b>{workflows['onRamp'].get('title', 'On-Ramp Flow')}</b>", styles['SectionHeader']))
+                story.append(Paragraph(workflows['onRamp'].get('description', ''), styles['SlideBody']))
+                for step in workflows['onRamp'].get('steps', []):
+                    story.append(Paragraph(f"• {step['phase']}: {step['description']} ({step['owner']})", styles['BulletPoint']))
+            
+            if 'offRamp' in workflows:
+                story.append(Spacer(1, 10))
+                story.append(Paragraph(f"<b>{workflows['offRamp'].get('title', 'Off-Ramp Flow')}</b>", styles['SectionHeader']))
+                story.append(Paragraph(workflows['offRamp'].get('description', ''), styles['SlideBody']))
+                for step in workflows['offRamp'].get('steps', []):
+                    story.append(Paragraph(f"• {step['phase']}: {step['description']} ({step['owner']})", styles['BulletPoint']))
+        
+        # Handle boundaries
+        if 'boundaries' in content:
+            boundaries = content['boundaries']
+            story.append(Spacer(1, 10))
+            story.append(Paragraph(f"<b>{boundaries.get('title', 'Risk & Custody Boundaries')}</b>", styles['SectionHeader']))
+            story.append(Paragraph("NeoNoble (UX Layer):", styles['SlideBody']))
+            for item in boundaries.get('neonoble', []):
+                story.append(Paragraph(f"• {item}", styles['BulletPoint']))
+            story.append(Paragraph("Provider-of-Record (Regulated):", styles['SlideBody']))
+            for item in boundaries.get('provider', []):
+                story.append(Paragraph(f"• {item}", styles['BulletPoint']))
+        
+        # Handle revenue streams
+        if 'revenueStreams' in content:
+            story.append(Spacer(1, 10))
+            story.append(Paragraph("Revenue Streams:", styles['SectionHeader']))
+            for stream in content['revenueStreams']:
+                story.append(Paragraph(f"• <b>{stream['stream']}</b>: {stream['description']}", styles['BulletPoint']))
+        
+        # Handle dualFlow
+        if 'dualFlow' in content:
+            dualFlow = content['dualFlow']
+            story.append(Spacer(1, 10))
+            if 'onRamp' in dualFlow:
+                story.append(Paragraph(f"<b>On-Ramp:</b> {dualFlow['onRamp'].get('flow', '')}", styles['SlideBody']))
+                benefits = ', '.join(dualFlow['onRamp'].get('benefits', []))
+                story.append(Paragraph(f"Benefits: {benefits}", styles['BulletPoint']))
+            if 'offRamp' in dualFlow:
+                story.append(Paragraph(f"<b>Off-Ramp:</b> {dualFlow['offRamp'].get('flow', '')}", styles['SlideBody']))
+                benefits = ', '.join(dualFlow['offRamp'].get('benefits', []))
+                story.append(Paragraph(f"Benefits: {benefits}", styles['BulletPoint']))
+        
+        # Handle compliance split
+        if 'complianceSplit' in content:
+            split = content['complianceSplit']
+            story.append(Spacer(1, 10))
+            story.append(Paragraph("Compliance by Direction:", styles['SectionHeader']))
+            if 'onRamp' in split:
+                story.append(Paragraph("<b>On-Ramp Compliance:</b>", styles['SlideBody']))
+                for key, val in split['onRamp'].items():
+                    story.append(Paragraph(f"• {key.upper()}: {val}", styles['BulletPoint']))
+            if 'offRamp' in split:
+                story.append(Paragraph("<b>Off-Ramp Compliance:</b>", styles['SlideBody']))
+                for key, val in split['offRamp'].items():
+                    story.append(Paragraph(f"• {key.upper()}: {val}", styles['BulletPoint']))
+        
         if 'callToAction' in content:
             story.append(Paragraph(content['callToAction'], styles['SlideBody']))
         
