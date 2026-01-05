@@ -446,7 +446,7 @@ class NeoNobleAPITester:
             execute_valid = (
                 state == "DEPOSIT_PENDING" and
                 "deposit address" in message.lower() and
-                len(timeline) >= 2  # QUOTE_ACCEPTED and DEPOSIT_PENDING events
+                len(timeline) >= 2  # At least QUOTE_ACCEPTED and DEPOSIT_PENDING events
             )
         
         self.log_test_result(
