@@ -572,7 +572,9 @@ class PostgreSQLMigrationTester:
         # Step 5: Process deposit via HMAC
         logger.info("Step 5: Process Deposit via HMAC")
         deposit_data = {
-            "quote_id": self.pg_dev_quote_id
+            "quote_id": self.pg_dev_quote_id,
+            "tx_hash": "0xpg_dev_test_hash_002",
+            "amount": 1.0
         }
         
         success, data, status = await self.make_request(
