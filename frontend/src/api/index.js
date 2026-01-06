@@ -46,24 +46,50 @@ export const rampApi = {
     const response = await api.get('/ramp/prices');
     return response.data;
   },
-  createOnrampQuote: async (fiatAmount, cryptoCurrency) => {
-    const response = await api.post('/ramp/onramp/quote', {
+  
+  // ========================
+  // PoR-Powered On-Ramp (Fiat → Crypto)
+  // ========================
+  createOnrampQuote: async (fiatAmount, cryptoCurrency, walletAddress = null) => {
+    const response = await api.post('/ramp/onramp/por/quote', {
       fiat_amount: fiatAmount,
       crypto_currency: cryptoCurrency,
+      wallet_address: walletAddress,
     });
     return response.data;
   },
   executeOnramp: async (quoteId, walletAddress) => {
-    const response = await api.post('/ramp/onramp/execute', {
+    const response = await api.post('/ramp/onramp/por/execute', {
       quote_id: quoteId,
       wallet_address: walletAddress,
     });
     return response.data;
   },
-  createOfframpQuote: async (cryptoAmount, cryptoCurrency) => {
+  processOnrampPayment: async (quoteId, paymentRef, amountPaid) => {
+    const response = await api.post('/ramp/onramp/por/payment/process', {
+      quote_id: quoteId,
+      payment_ref: paymentRef,
+      amount_paid: amountPaid,
+    });
+    return response.data;
+  },
+  getOnrampTransaction: async (quoteId) => {
+    const response = await api.get(`/ramp/onramp/por/transaction/${quoteId}`);
+    return response.data;
+  },
+  getOnrampTimeline: async (quoteId) => {
+    const response = await api.get(`/ramp/onramp/por/transaction/${quoteId}/timeline`);
+    return response.data;
+  },
+  
+  // ========================
+  // PoR-Powered Off-Ramp (Crypto → Fiat)
+  // ========================
+  createOfframpQuote: async (cryptoAmount, cryptoCurrency, bankAccount = null) => {
     const response = await api.post('/ramp/offramp/quote', {
       crypto_amount: cryptoAmount,
       crypto_currency: cryptoCurrency,
+      bank_account: bankAccount,
     });
     return response.data;
   },
@@ -74,9 +100,39 @@ export const rampApi = {
     });
     return response.data;
   },
+  processOfframpDeposit: async (quoteId, txHash, amount) => {
+    const response = await api.post('/ramp/offramp/deposit/process', {
+      quote_id: quoteId,
+      tx_hash: txHash,
+      amount: amount,
+    });
+    return response.data;
+  },
+  getOfframpTransaction: async (quoteId) => {
+    const response = await api.get(`/ramp/offramp/transaction/${quoteId}`);
+    return response.data;
+  },
+  getOfframpTimeline: async (quoteId) => {
+    const response = await api.get(`/ramp/offramp/transaction/${quoteId}/timeline`);
+    return response.data;
+  },
+  
+  // ========================
+  // General
+  // ========================
   getTransactions: async () => {
     const response = await api.get('/ramp/transactions');
     return response.data;
+  },
+  getTransaction: async (quoteId) => {
+    // Try on-ramp first, then off-ramp
+    try {
+      const response = await api.get(`/ramp/onramp/por/transaction/${quoteId}`);
+      return response.data;
+    } catch (e) {
+      const response = await api.get(`/ramp/offramp/transaction/${quoteId}`);
+      return response.data;
+    }
   },
 };
 
