@@ -575,7 +575,7 @@ async def get_onramp_transaction_por(quote_id: str, http_request: Request):
     return por_quote_to_response(quote)
 
 
-@router.get("/ramp-api-onramp-transaction/{quote_id}/timeline")
+@router.get("/ramp-api-onramp-transaction-por/{quote_id}/timeline")
 async def get_onramp_timeline_por(quote_id: str, http_request: Request):
     """
     Get on-ramp transaction timeline via PoR engine.
