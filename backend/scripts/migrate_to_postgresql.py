@@ -202,7 +202,7 @@ class DatabaseMigrator:
                         por_responsible=compliance.get("por_responsible", True),
                         expires_at=datetime.fromisoformat(doc.get("expires_at").replace('Z', '+00:00')) if doc.get("expires_at") else datetime.now(timezone.utc),
                         created_at=datetime.fromisoformat(doc.get("created_at").replace('Z', '+00:00')) if doc.get("created_at") else datetime.now(timezone.utc),
-                        metadata=doc.get("metadata", {})
+                        extra_data=doc.get("metadata", {})
                     )
                     
                     if not self.dry_run:
