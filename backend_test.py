@@ -803,14 +803,14 @@ class NeoNobleAPITester:
         
         # Step 4: Get On-Ramp Transaction via Dev API
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.dev_quote_id}", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction/{self.dev_onramp_quote_id}", use_hmac=True
         )
         
         details_valid = False
         if success and isinstance(data, dict):
             compliance = data.get("compliance", {})
             details_valid = (
-                data.get("quote_id") == self.dev_quote_id and
+                data.get("quote_id") == self.dev_onramp_quote_id and
                 data.get("state") == "COMPLETED" and
                 data.get("direction") == "onramp" and
                 compliance.get("por_responsible") == True
@@ -819,12 +819,12 @@ class NeoNobleAPITester:
         self.log_test_result(
             "Dev API - Get ON-RAMP Transaction Details (HMAC)", 
             success and status == 200 and details_valid,
-            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.dev_quote_id if isinstance(data, dict) else False}"
+            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.dev_onramp_quote_id if isinstance(data, dict) else False}"
         )
         
         # Step 5: Get On-Ramp Timeline via Dev API
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.dev_quote_id}/timeline", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction/{self.dev_onramp_quote_id}/timeline", use_hmac=True
         )
         
         timeline_valid = False
