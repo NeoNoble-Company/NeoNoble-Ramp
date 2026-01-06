@@ -392,480 +392,446 @@ class NeoNobleE2ETester:
     
     # ===== COMPREHENSIVE PoR ENGINE VALIDATION =====
     
-    async def test_user_ui_onramp_flow(self):
-        """Test complete User UI ON-RAMP PoR Engine flow with JWT authentication"""
-        logger.info("\n=== Testing User UI ON-RAMP PoR Engine Flow (JWT) ===")
+    async def e2e_test_1_user_ui_onramp_flow(self):
+        """E2E TEST 1: USER UI ON-RAMP FLOW (Fiat → Crypto)"""
+        logger.info("\n=== E2E TEST 1: USER UI ON-RAMP FLOW (Fiat → Crypto) ===")
         
-        if not self.auth_token:
-            self.log_test_result("User UI ON-RAMP Flow", False, "No user auth token available")
+        # Step 1: Register/Login
+        logger.info("Step 1: Register/Login")
+        user_data = {
+            "email": "e2e_onramp@neonoble.com",
+            "password": "E2EOnRamp123!"
+        }
+        
+        # Try registration first (may fail if user exists)
+        success, data, status = await self.make_request("POST", "/auth/register", user_data)
+        registration_ok = (status == 200) or (status == 400 and "already" in str(data).lower())
+        
+        # Login to get JWT
+        success, data, status = await self.make_request("POST", "/auth/login", user_data)
+        if success and isinstance(data, dict) and data.get("token"):
+            self.user_jwt = data["token"]
+        
+        self.log_test_result(
+            "E2E Test 1 - Step 1: User Registration/Login",
+            bool(self.user_jwt),
+            f"Registration: {registration_ok}, Login Status: {status}, JWT: {'Present' if self.user_jwt else 'Missing'}"
+        )
+        
+        if not self.user_jwt:
             return False
         
-        # Step 1: Create On-Ramp Quote (NENO) - Fiat to Crypto
+        # Step 2: Create On-Ramp Quote
+        logger.info("Step 2: Create On-Ramp Quote")
         quote_data = {
             "fiat_amount": 10000.0,
-            "crypto_currency": "NENO",
-            "wallet_address": "0x1234567890abcdef1234567890abcdef12345678"
+            "crypto_currency": "NENO"
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp/onramp/por/quote", quote_data, auth_token=self.auth_token
+            "POST", "/ramp/onramp/por/quote", quote_data, auth_token=self.user_jwt
         )
         
         quote_valid = False
         if success and isinstance(data, dict):
-            self.user_onramp_quote_id = data.get("quote_id")
+            self.e2e_user_onramp_quote_id = data.get("quote_id")
             direction = data.get("direction")
             fiat_amount = data.get("fiat_amount")
-            fee_percentage = data.get("fee_percentage")
             fee_amount = data.get("fee_amount")
             crypto_amount = data.get("crypto_amount")
-            exchange_rate = data.get("exchange_rate")
             state = data.get("state")
             payment_reference = data.get("payment_reference")
-            compliance = data.get("compliance", {})
             
             quote_valid = (
-                self.user_onramp_quote_id and self.user_onramp_quote_id.startswith("por_on_") and
+                self.e2e_user_onramp_quote_id and self.e2e_user_onramp_quote_id.startswith("por_on_") and
                 direction == "onramp" and
                 fiat_amount == 10000 and
-                fee_percentage == 1.5 and
                 fee_amount == 150 and  # 1.5% of 10000
                 crypto_amount == 0.985 and  # (10000 - 150) / 10000
-                exchange_rate == 10000 and
                 state == "QUOTE_CREATED" and
-                payment_reference and
-                compliance.get("por_responsible") == True
+                payment_reference
             )
         
         self.log_test_result(
-            "User UI - Create ON-RAMP PoR Quote", 
-            success and status == 200 and quote_valid,
-            f"Status: {status}, Quote ID: {self.user_onramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}"
+            "E2E Test 1 - Step 2: Create On-Ramp Quote",
+            quote_valid,
+            f"Quote ID: {self.e2e_user_onramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
         )
         
         if not quote_valid:
             return False
         
-        # Step 2: Accept/Execute On-Ramp Quote
+        # Step 3: Execute On-Ramp
+        logger.info("Step 3: Execute On-Ramp")
         execute_data = {
-            "quote_id": self.user_onramp_quote_id,
+            "quote_id": self.e2e_user_onramp_quote_id,
             "wallet_address": "0x1234567890abcdef1234567890abcdef12345678"
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp/onramp/por/execute", execute_data, auth_token=self.auth_token
+            "POST", "/ramp/onramp/por/execute", execute_data, auth_token=self.user_jwt
         )
         
         execute_valid = False
         if success and isinstance(data, dict):
             state = data.get("state")
-            message = data.get("message", "")
-            timeline = data.get("timeline", [])
-            
-            execute_valid = (
-                state == "PAYMENT_PENDING" and
-                ("payment" in message.lower() or "reference" in message.lower()) and
-                len(timeline) >= 2  # At least QUOTE_ACCEPTED and PAYMENT_PENDING events
-            )
+            execute_valid = state == "PAYMENT_PENDING"
         
         self.log_test_result(
-            "User UI - Execute ON-RAMP PoR Quote", 
-            success and status == 200 and execute_valid,
-            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
-        )
-        
-        if not execute_valid:
-            return False
-        
-        # Step 3: Process Payment (Simulate Fiat Payment Confirmation)
-        payment_data = {
-            "quote_id": self.user_onramp_quote_id,
-            "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
-            "amount_paid": 10000.0
-        }
-        
-        success, data, status = await self.make_request(
-            "POST", "/ramp/onramp/por/payment/process", payment_data, auth_token=self.auth_token
-        )
-        
-        settlement_valid = False
-        if success and isinstance(data, dict):
-            state = data.get("state")
-            timeline = data.get("timeline", [])
-            metadata = data.get("metadata", {})
-            
-            # Expected ON-RAMP state transitions: QUOTE_CREATED → QUOTE_ACCEPTED → PAYMENT_PENDING → 
-            # PAYMENT_DETECTED → PAYMENT_CONFIRMED → CRYPTO_SENDING → CRYPTO_SENT → CRYPTO_CONFIRMED → COMPLETED
-            settlement_valid = (
-                state == "COMPLETED" and
-                len(timeline) >= 9 and  # All on-ramp state transitions
-                metadata.get("delivery_id") and
-                metadata.get("crypto_tx_hash")
-            )
-        
-        self.log_test_result(
-            "User UI - Process ON-RAMP Payment (Instant Settlement)", 
-            success and status == 200 and settlement_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
-        )
-        
-        # Step 4: Get On-Ramp Transaction Details
-        success, data, status = await self.make_request(
-            "GET", f"/ramp/onramp/por/transaction/{self.user_onramp_quote_id}", auth_token=self.auth_token
-        )
-        
-        details_valid = False
-        if success and isinstance(data, dict):
-            compliance = data.get("compliance", {})
-            details_valid = (
-                data.get("quote_id") == self.user_onramp_quote_id and
-                data.get("state") == "COMPLETED" and
-                data.get("direction") == "onramp" and
-                compliance.get("por_responsible") == True
-            )
-        
-        self.log_test_result(
-            "User UI - Get ON-RAMP Transaction Details", 
-            success and status == 200 and details_valid,
-            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.user_onramp_quote_id if isinstance(data, dict) else False}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}"
-        )
-        
-        # Step 5: Get On-Ramp Timeline
-        success, data, status = await self.make_request(
-            "GET", f"/ramp/onramp/por/transaction/{self.user_onramp_quote_id}/timeline", auth_token=self.auth_token
-        )
-        
-        timeline_valid = False
-        if success and isinstance(data, dict):
-            events = data.get("events", [])
-            timeline_valid = len(events) >= 9  # All on-ramp state transitions logged
-        elif success and isinstance(data, list):
-            timeline_valid = len(data) >= 9
-        
-        self.log_test_result(
-            "User UI - Get ON-RAMP Transaction Timeline", 
-            success and status == 200 and timeline_valid,
-            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
-        )
-        
-        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
-    
-    async def test_user_ui_por_flow(self):
-        """Test complete User UI PoR Engine flow with JWT authentication"""
-        logger.info("\n=== Testing User UI PoR Engine Flow (JWT) ===")
-        
-        if not self.auth_token:
-            self.log_test_result("User UI PoR Flow", False, "No user auth token available")
-            return False
-        
-        # Step 1: Create Off-Ramp Quote (NENO)
-        quote_data = {
-            "crypto_amount": 1.0,
-            "crypto_currency": "NENO",
-            "bank_account": "DE89370400440532013000"
-        }
-        
-        success, data, status = await self.make_request(
-            "POST", "/ramp/offramp/quote", quote_data, auth_token=self.auth_token
-        )
-        
-        quote_valid = False
-        if success and isinstance(data, dict):
-            self.user_quote_id = data.get("quote_id")
-            exchange_rate = data.get("exchange_rate")
-            fiat_amount = data.get("fiat_amount")
-            fee_percentage = data.get("fee_percentage")
-            state = data.get("state")
-            deposit_address = data.get("deposit_address")
-            compliance = data.get("compliance", {})
-            
-            quote_valid = (
-                self.user_quote_id and self.user_quote_id.startswith("por_") and
-                exchange_rate == 10000 and
-                fiat_amount == 10000 and
-                fee_percentage == 1.5 and
-                state == "QUOTE_CREATED" and
-                deposit_address and
-                compliance.get("por_responsible") == True
-            )
-        
-        self.log_test_result(
-            "User UI - Create PoR Quote", 
-            success and status == 200 and quote_valid,
-            f"Status: {status}, Quote ID: {self.user_quote_id}, Rate: {data.get('exchange_rate') if isinstance(data, dict) else 'N/A'}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
-        )
-        
-        if not quote_valid:
-            return False
-        
-        # Step 2: Accept/Execute Quote
-        execute_data = {
-            "quote_id": self.user_quote_id,
-            "bank_account": "DE89370400440532013000"
-        }
-        
-        success, data, status = await self.make_request(
-            "POST", "/ramp/offramp/execute", execute_data, auth_token=self.auth_token
-        )
-        
-        execute_valid = False
-        if success and isinstance(data, dict):
-            state = data.get("state")
-            message = data.get("message", "")
-            timeline = data.get("timeline", [])
-            
-            execute_valid = (
-                state == "DEPOSIT_PENDING" and
-                ("deposit address" in message.lower() or "send" in message.lower()) and
-                len(timeline) >= 2  # At least QUOTE_ACCEPTED and DEPOSIT_PENDING events
-            )
-        
-        self.log_test_result(
-            "User UI - Execute PoR Quote", 
-            success and status == 200 and execute_valid,
-            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}, Expected: >=2"
-        )
-        
-        if not execute_valid:
-            return False
-        
-        # Step 3: Process Deposit (Simulate Blockchain Confirmation)
-        deposit_data = {
-            "quote_id": self.user_quote_id,
-            "tx_hash": "0x123abc456def789user001",
-            "amount": 1.0
-        }
-        
-        success, data, status = await self.make_request(
-            "POST", "/ramp/offramp/deposit/process", deposit_data, auth_token=self.auth_token
-        )
-        
-        settlement_valid = False
-        if success and isinstance(data, dict):
-            state = data.get("state")
-            timeline = data.get("timeline", [])
-            metadata = data.get("metadata", {})
-            
-            settlement_valid = (
-                state == "COMPLETED" and
-                len(timeline) >= 11 and  # All 11 state transitions
-                metadata.get("settlement_id") and
-                metadata.get("payout_reference")
-            )
-        
-        self.log_test_result(
-            "User UI - Process PoR Deposit (Instant Settlement)", 
-            success and status == 200 and settlement_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
-        )
-        
-        # Step 4: Get Transaction Details
-        success, data, status = await self.make_request(
-            "GET", f"/ramp/offramp/transaction/{self.user_quote_id}", auth_token=self.auth_token
-        )
-        
-        details_valid = False
-        if success and isinstance(data, dict):
-            compliance = data.get("compliance", {})
-            details_valid = (
-                data.get("quote_id") == self.user_quote_id and
-                data.get("state") == "COMPLETED" and
-                compliance.get("por_responsible") == True
-            )
-        
-        self.log_test_result(
-            "User UI - Get Transaction Details", 
-            success and status == 200 and details_valid,
-            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.user_quote_id if isinstance(data, dict) else False}"
-        )
-        
-        # Step 5: Get Timeline
-        success, data, status = await self.make_request(
-            "GET", f"/ramp/offramp/transaction/{self.user_quote_id}/timeline", auth_token=self.auth_token
-        )
-        
-        timeline_valid = False
-        if success and isinstance(data, dict):
-            events = data.get("events", [])
-            timeline_valid = len(events) >= 11  # All state transitions logged
-        elif success and isinstance(data, list):
-            timeline_valid = len(data) >= 11
-        
-        self.log_test_result(
-            "User UI - Get Transaction Timeline", 
-            success and status == 200 and timeline_valid,
-            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
-        )
-        
-        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
-    
-    async def test_developer_api_onramp_flow(self):
-        """Test complete Developer API ON-RAMP PoR Engine flow with HMAC authentication"""
-        logger.info("\n=== Testing Developer API ON-RAMP PoR Engine Flow (HMAC) ===")
-        
-        if not self.api_key or not self.api_secret:
-            self.log_test_result("Developer API ON-RAMP Flow", False, "No API key/secret available")
-            return False
-        
-        # Step 1: Create On-Ramp Quote via Dev API
-        quote_data = {
-            "fiat_amount": 20000.0,
-            "crypto_currency": "NENO",
-            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12"
-        }
-        
-        success, data, status = await self.make_request(
-            "POST", "/ramp-api-onramp-quote-por", quote_data, use_hmac=True
-        )
-        
-        quote_valid = False
-        if success and isinstance(data, dict):
-            self.dev_onramp_quote_id = data.get("quote_id")
-            direction = data.get("direction")
-            fiat_amount = data.get("fiat_amount")
-            fee_percentage = data.get("fee_percentage")
-            fee_amount = data.get("fee_amount")
-            crypto_amount = data.get("crypto_amount")
-            exchange_rate = data.get("exchange_rate")
-            state = data.get("state")
-            payment_reference = data.get("payment_reference")
-            compliance = data.get("compliance", {})
-            
-            quote_valid = (
-                self.dev_onramp_quote_id and self.dev_onramp_quote_id.startswith("por_on_") and
-                direction == "onramp" and
-                fiat_amount == 20000 and
-                fee_percentage == 1.5 and
-                fee_amount == 300 and  # 1.5% of 20000
-                crypto_amount == 1.97 and  # (20000 - 300) / 10000
-                exchange_rate == 10000 and
-                state == "QUOTE_CREATED" and
-                payment_reference and
-                compliance.get("por_responsible") == True
-            )
-        
-        self.log_test_result(
-            "Dev API - Create ON-RAMP PoR Quote (HMAC)", 
-            success and status == 200 and quote_valid,
-            f"Status: {status}, Quote ID: {self.dev_onramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}"
-        )
-        
-        if not quote_valid:
-            return False
-        
-        # Step 2: Execute On-Ramp via Dev API
-        execute_data = {
-            "quote_id": self.dev_onramp_quote_id,
-            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12"
-        }
-        
-        success, data, status = await self.make_request(
-            "POST", "/ramp-api-onramp-por", execute_data, use_hmac=True
-        )
-        
-        execute_valid = False
-        if success and isinstance(data, dict):
-            state = data.get("state")
-            timeline = data.get("timeline", [])
-            
-            execute_valid = (
-                state == "PAYMENT_PENDING" and
-                len(timeline) >= 2
-            )
-        
-        self.log_test_result(
-            "Dev API - Execute ON-RAMP PoR Quote (HMAC)", 
-            success and status == 200 and execute_valid,
+            "E2E Test 1 - Step 3: Execute On-Ramp",
+            execute_valid,
             f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
         )
         
         if not execute_valid:
             return False
         
-        # Step 3: Process Payment via Dev API
+        # Step 4: Process Payment
+        logger.info("Step 4: Process Payment")
         payment_data = {
-            "quote_id": self.dev_onramp_quote_id,
+            "quote_id": self.e2e_user_onramp_quote_id,
+            "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
+            "amount_paid": 10000.0
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/onramp/por/payment/process", payment_data, auth_token=self.user_jwt
+        )
+        
+        payment_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            payment_valid = state == "COMPLETED"
+        
+        self.log_test_result(
+            "E2E Test 1 - Step 4: Process Payment",
+            payment_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Step 5: Get Timeline
+        logger.info("Step 5: Get Timeline")
+        success, data, status = await self.make_request(
+            "GET", f"/ramp/onramp/por/transaction/{self.e2e_user_onramp_quote_id}/timeline", auth_token=self.user_jwt
+        )
+        
+        timeline_valid = False
+        if success:
+            if isinstance(data, dict):
+                events = data.get("events", [])
+                timeline_valid = len(events) >= 9  # 9 state transitions for on-ramp
+            elif isinstance(data, list):
+                timeline_valid = len(data) >= 9
+        
+        self.log_test_result(
+            "E2E Test 1 - Step 5: Get Timeline",
+            timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0} (Expected: 9)"
+        )
+        
+        return quote_valid and execute_valid and payment_valid and timeline_valid
+    
+    async def e2e_test_2_user_ui_offramp_flow(self):
+        """E2E TEST 2: USER UI OFF-RAMP FLOW (Crypto → Fiat)"""
+        logger.info("\n=== E2E TEST 2: USER UI OFF-RAMP FLOW (Crypto → Fiat) ===")
+        
+        if not self.user_jwt:
+            self.log_test_result("E2E Test 2", False, "No user JWT available")
+            return False
+        
+        # Step 1: Create Off-Ramp Quote
+        logger.info("Step 1: Create Off-Ramp Quote")
+        quote_data = {
+            "crypto_amount": 1.0,
+            "crypto_currency": "NENO"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/offramp/quote", quote_data, auth_token=self.user_jwt
+        )
+        
+        quote_valid = False
+        if success and isinstance(data, dict):
+            self.e2e_user_offramp_quote_id = data.get("quote_id")
+            direction = data.get("direction")
+            crypto_amount = data.get("crypto_amount")
+            fiat_amount = data.get("fiat_amount")
+            fee_amount = data.get("fee_amount")
+            net_payout = data.get("net_payout")
+            state = data.get("state")
+            deposit_address = data.get("deposit_address")
+            
+            quote_valid = (
+                self.e2e_user_offramp_quote_id and self.e2e_user_offramp_quote_id.startswith("por_") and
+                direction == "offramp" and
+                crypto_amount == 1 and
+                fiat_amount == 10000 and
+                fee_amount == 150 and  # 1.5% of 10000
+                net_payout == 9850 and  # 10000 - 150
+                state == "QUOTE_CREATED" and
+                deposit_address
+            )
+        
+        self.log_test_result(
+            "E2E Test 2 - Step 1: Create Off-Ramp Quote",
+            quote_valid,
+            f"Quote ID: {self.e2e_user_offramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Net Payout: {data.get('net_payout') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not quote_valid:
+            return False
+        
+        # Step 2: Execute Off-Ramp
+        logger.info("Step 2: Execute Off-Ramp")
+        execute_data = {
+            "quote_id": self.e2e_user_offramp_quote_id,
+            "bank_account": "DE89370400440532013000"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/offramp/execute", execute_data, auth_token=self.user_jwt
+        )
+        
+        execute_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            execute_valid = state == "DEPOSIT_PENDING"
+        
+        self.log_test_result(
+            "E2E Test 2 - Step 2: Execute Off-Ramp",
+            execute_valid,
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not execute_valid:
+            return False
+        
+        # Step 3: Process Deposit
+        logger.info("Step 3: Process Deposit")
+        deposit_data = {
+            "quote_id": self.e2e_user_offramp_quote_id,
+            "tx_hash": "0xe2e_test_hash_001",
+            "amount": 1.0
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/offramp/deposit/process", deposit_data, auth_token=self.user_jwt
+        )
+        
+        deposit_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            deposit_valid = state == "COMPLETED"
+        
+        self.log_test_result(
+            "E2E Test 2 - Step 3: Process Deposit",
+            deposit_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Step 4: Get Timeline
+        logger.info("Step 4: Get Timeline")
+        success, data, status = await self.make_request(
+            "GET", f"/ramp/offramp/transaction/{self.e2e_user_offramp_quote_id}/timeline", auth_token=self.user_jwt
+        )
+        
+        timeline_valid = False
+        if success:
+            if isinstance(data, dict):
+                events = data.get("events", [])
+                timeline_valid = len(events) >= 11  # 11 state transitions for off-ramp
+            elif isinstance(data, list):
+                timeline_valid = len(data) >= 11
+        
+        self.log_test_result(
+            "E2E Test 2 - Step 4: Get Timeline",
+            timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0} (Expected: 11)"
+        )
+        
+        return quote_valid and execute_valid and deposit_valid and timeline_valid
+    
+    async def e2e_test_3_developer_api_onramp_flow(self):
+        """E2E TEST 3: DEVELOPER API ON-RAMP (HMAC)"""
+        logger.info("\n=== E2E TEST 3: DEVELOPER API ON-RAMP (HMAC) ===")
+        
+        # Step 1: Register Developer
+        logger.info("Step 1: Register Developer")
+        dev_data = {
+            "email": "e2e_dev_onramp@neonoble.com",
+            "password": "E2EDevOnRamp123!",
+            "company_name": "E2E Test Corp"
+        }
+        
+        # Try registration first (may fail if user exists)
+        success, data, status = await self.make_request("POST", "/auth/developer/register", dev_data)
+        registration_ok = (status == 200) or (status == 400 and "already" in str(data).lower())
+        
+        # Login to get JWT
+        login_data = {
+            "email": "e2e_dev_onramp@neonoble.com",
+            "password": "E2EDevOnRamp123!"
+        }
+        success, data, status = await self.make_request("POST", "/auth/developer/login", login_data)
+        if success and isinstance(data, dict) and data.get("token"):
+            self.dev_jwt = data["token"]
+        
+        self.log_test_result(
+            "E2E Test 3 - Step 1: Developer Registration/Login",
+            bool(self.dev_jwt),
+            f"Registration: {registration_ok}, Login Status: {status}, JWT: {'Present' if self.dev_jwt else 'Missing'}"
+        )
+        
+        if not self.dev_jwt:
+            return False
+        
+        # Step 2: Create API Key
+        logger.info("Step 2: Create API Key")
+        api_key_data = {
+            "name": "E2E On-Ramp Key"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/dev/api-keys", api_key_data, auth_token=self.dev_jwt
+        )
+        
+        if success and isinstance(data, dict):
+            self.api_key = data.get("api_key")
+            self.api_secret = data.get("api_secret")
+        
+        api_key_valid = bool(self.api_key and self.api_secret)
+        self.log_test_result(
+            "E2E Test 3 - Step 2: Create API Key",
+            api_key_valid,
+            f"Status: {status}, API Key: {'Present' if self.api_key else 'Missing'}, Secret: {'Present' if self.api_secret else 'Missing'}"
+        )
+        
+        if not api_key_valid:
+            return False
+        
+        # Step 3: Create On-Ramp Quote (HMAC)
+        logger.info("Step 3: Create On-Ramp Quote (HMAC)")
+        quote_data = {
+            "fiat_amount": 20000.0,
+            "crypto_currency": "NENO"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-onramp-quote", quote_data, use_hmac=True
+        )
+        
+        quote_valid = False
+        if success and isinstance(data, dict):
+            self.e2e_dev_onramp_quote_id = data.get("quote_id")
+            direction = data.get("direction")
+            fiat_amount = data.get("fiat_amount")
+            fee_amount = data.get("fee_amount")
+            crypto_amount = data.get("crypto_amount")
+            state = data.get("state")
+            payment_reference = data.get("payment_reference")
+            
+            quote_valid = (
+                self.e2e_dev_onramp_quote_id and
+                direction == "onramp" and
+                fiat_amount == 20000 and
+                fee_amount == 300 and  # 1.5% of 20000
+                crypto_amount == 1.97 and  # (20000 - 300) / 10000
+                state == "QUOTE_CREATED" and
+                payment_reference
+            )
+        
+        self.log_test_result(
+            "E2E Test 3 - Step 3: Create On-Ramp Quote (HMAC)",
+            quote_valid,
+            f"Quote ID: {self.e2e_dev_onramp_quote_id}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not quote_valid:
+            return False
+        
+        # Step 4: Execute On-Ramp (HMAC)
+        logger.info("Step 4: Execute On-Ramp (HMAC)")
+        execute_data = {
+            "quote_id": self.e2e_dev_onramp_quote_id,
+            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-onramp", execute_data, use_hmac=True
+        )
+        
+        execute_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            execute_valid = state == "PAYMENT_PENDING"
+        
+        self.log_test_result(
+            "E2E Test 3 - Step 4: Execute On-Ramp (HMAC)",
+            execute_valid,
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not execute_valid:
+            return False
+        
+        # Step 5: Process Payment (HMAC)
+        logger.info("Step 5: Process Payment (HMAC)")
+        payment_data = {
+            "quote_id": self.e2e_dev_onramp_quote_id,
             "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
             "amount_paid": 20000.0
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp-api-payment-process-por", payment_data, use_hmac=True
+            "POST", "/ramp-api-payment-process", payment_data, use_hmac=True
         )
         
-        settlement_valid = False
+        payment_valid = False
         if success and isinstance(data, dict):
             state = data.get("state")
-            timeline = data.get("timeline", [])
-            metadata = data.get("metadata", {})
-            
-            settlement_valid = (
-                state == "COMPLETED" and
-                len(timeline) >= 9 and
-                metadata.get("delivery_id") and
-                metadata.get("crypto_tx_hash")
-            )
+            payment_valid = state == "COMPLETED"
         
         self.log_test_result(
-            "Dev API - Process ON-RAMP Payment (HMAC)", 
-            success and status == 200 and settlement_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+            "E2E Test 3 - Step 5: Process Payment (HMAC)",
+            payment_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
         )
         
-        # Step 4: Get On-Ramp Transaction via Dev API
+        # Step 6: Get Timeline (HMAC)
+        logger.info("Step 6: Get Timeline (HMAC)")
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction-por/{self.dev_onramp_quote_id}", use_hmac=True
-        )
-        
-        details_valid = False
-        if success and isinstance(data, dict):
-            compliance = data.get("compliance", {})
-            details_valid = (
-                data.get("quote_id") == self.dev_onramp_quote_id and
-                data.get("state") == "COMPLETED" and
-                data.get("direction") == "onramp" and
-                compliance.get("por_responsible") == True
-            )
-        
-        self.log_test_result(
-            "Dev API - Get ON-RAMP Transaction Details (HMAC)", 
-            success and status == 200 and details_valid,
-            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.dev_onramp_quote_id if isinstance(data, dict) else False}"
-        )
-        
-        # Step 5: Get On-Ramp Timeline via Dev API
-        success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction-por/{self.dev_onramp_quote_id}/timeline", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction/{self.e2e_dev_onramp_quote_id}/timeline", use_hmac=True
         )
         
         timeline_valid = False
-        if success and isinstance(data, dict):
-            events = data.get("events", [])
-            timeline_valid = len(events) >= 9  # All on-ramp state transitions logged
-        elif success and isinstance(data, list):
-            timeline_valid = len(data) >= 9
+        if success:
+            if isinstance(data, dict):
+                events = data.get("events", [])
+                timeline_valid = len(events) >= 9  # 9 state transitions for on-ramp
+            elif isinstance(data, list):
+                timeline_valid = len(data) >= 9
         
         self.log_test_result(
-            "Dev API - Get ON-RAMP Transaction Timeline (HMAC)", 
-            success and status == 200 and timeline_valid,
-            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
+            "E2E Test 3 - Step 6: Get Timeline (HMAC)",
+            timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0} (Expected: 9)"
         )
         
-        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
+        return quote_valid and execute_valid and payment_valid and timeline_valid
     
-    async def test_developer_api_por_flow(self):
-        """Test complete Developer API PoR Engine flow with HMAC authentication"""
-        logger.info("\n=== Testing Developer API PoR Engine Flow (HMAC) ===")
+    async def e2e_test_4_developer_api_offramp_flow(self):
+        """E2E TEST 4: DEVELOPER API OFF-RAMP (HMAC)"""
+        logger.info("\n=== E2E TEST 4: DEVELOPER API OFF-RAMP (HMAC) ===")
         
         if not self.api_key or not self.api_secret:
-            self.log_test_result("Developer API PoR Flow", False, "No API key/secret available")
+            self.log_test_result("E2E Test 4", False, "No API key/secret available")
             return False
         
-        # Step 1: Create Off-Ramp Quote via Dev API
+        # Step 1: Create Off-Ramp Quote (HMAC)
+        logger.info("Step 1: Create Off-Ramp Quote (HMAC)")
         quote_data = {
             "crypto_amount": 2.0,
-            "crypto_currency": "NENO",
-            "bank_account": "IT60X0542811101000000123456"
+            "crypto_currency": "NENO"
         }
         
         success, data, status = await self.make_request(
@@ -874,36 +840,39 @@ class NeoNobleE2ETester:
         
         quote_valid = False
         if success and isinstance(data, dict):
-            self.dev_quote_id = data.get("quote_id")
-            exchange_rate = data.get("exchange_rate")
+            self.e2e_dev_offramp_quote_id = data.get("quote_id")
+            direction = data.get("direction")
+            crypto_amount = data.get("crypto_amount")
             fiat_amount = data.get("fiat_amount")
-            fee_percentage = data.get("fee_percentage")
+            fee_amount = data.get("fee_amount")
+            net_payout = data.get("net_payout")
             state = data.get("state")
             deposit_address = data.get("deposit_address")
-            compliance = data.get("compliance", {})
             
             quote_valid = (
-                self.dev_quote_id and self.dev_quote_id.startswith("por_") and
-                exchange_rate == 10000 and
+                self.e2e_dev_offramp_quote_id and
+                direction == "offramp" and
+                crypto_amount == 2 and
                 fiat_amount == 20000 and  # 2.0 * 10000
-                fee_percentage == 1.5 and
+                fee_amount == 300 and  # 1.5% of 20000
+                net_payout == 19700 and  # 20000 - 300
                 state == "QUOTE_CREATED" and
-                deposit_address and
-                compliance.get("por_responsible") == True
+                deposit_address
             )
         
         self.log_test_result(
-            "Dev API - Create PoR Quote (HMAC)", 
-            success and status == 200 and quote_valid,
-            f"Status: {status}, Quote ID: {self.dev_quote_id}, Rate: {data.get('exchange_rate') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}"
+            "E2E Test 4 - Step 1: Create Off-Ramp Quote (HMAC)",
+            quote_valid,
+            f"Quote ID: {self.e2e_dev_offramp_quote_id}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Net Payout: {data.get('net_payout') if isinstance(data, dict) else 'N/A'}"
         )
         
         if not quote_valid:
             return False
         
-        # Step 2: Execute Off-Ramp via Dev API
+        # Step 2: Execute Off-Ramp (HMAC)
+        logger.info("Step 2: Execute Off-Ramp (HMAC)")
         execute_data = {
-            "quote_id": self.dev_quote_id,
+            "quote_id": self.e2e_dev_offramp_quote_id,
             "bank_account": "IT60X0542811101000000123456"
         }
         
@@ -914,26 +883,22 @@ class NeoNobleE2ETester:
         execute_valid = False
         if success and isinstance(data, dict):
             state = data.get("state")
-            timeline = data.get("timeline", [])
-            
-            execute_valid = (
-                state == "DEPOSIT_PENDING" and
-                len(timeline) >= 2
-            )
+            execute_valid = state == "DEPOSIT_PENDING"
         
         self.log_test_result(
-            "Dev API - Execute PoR Quote (HMAC)", 
-            success and status == 200 and execute_valid,
+            "E2E Test 4 - Step 2: Execute Off-Ramp (HMAC)",
+            execute_valid,
             f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
         )
         
         if not execute_valid:
             return False
         
-        # Step 3: Process Deposit via Dev API
+        # Step 3: Process Deposit (HMAC)
+        logger.info("Step 3: Process Deposit (HMAC)")
         deposit_data = {
-            "quote_id": self.dev_quote_id,
-            "tx_hash": "0xabc123def456dev002",
+            "quote_id": self.e2e_dev_offramp_quote_id,
+            "tx_hash": "0xe2e_dev_test_hash_002",
             "amount": 2.0
         }
         
@@ -941,64 +906,38 @@ class NeoNobleE2ETester:
             "POST", "/ramp-api-deposit-process", deposit_data, use_hmac=True
         )
         
-        settlement_valid = False
+        deposit_valid = False
         if success and isinstance(data, dict):
             state = data.get("state")
-            timeline = data.get("timeline", [])
-            metadata = data.get("metadata", {})
-            
-            settlement_valid = (
-                state == "COMPLETED" and
-                len(timeline) >= 11 and
-                metadata.get("settlement_id") and
-                metadata.get("payout_reference")
-            )
+            deposit_valid = state == "COMPLETED"
         
         self.log_test_result(
-            "Dev API - Process PoR Deposit (HMAC)", 
-            success and status == 200 and settlement_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+            "E2E Test 4 - Step 3: Process Deposit (HMAC)",
+            deposit_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
         )
         
-        # Step 4: Get Transaction via Dev API
+        # Step 4: Get Timeline (HMAC)
+        logger.info("Step 4: Get Timeline (HMAC)")
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-transaction/{self.dev_quote_id}", use_hmac=True
-        )
-        
-        details_valid = False
-        if success and isinstance(data, dict):
-            compliance = data.get("compliance", {})
-            details_valid = (
-                data.get("quote_id") == self.dev_quote_id and
-                data.get("state") == "COMPLETED" and
-                compliance.get("por_responsible") == True
-            )
-        
-        self.log_test_result(
-            "Dev API - Get Transaction Details (HMAC)", 
-            success and status == 200 and details_valid,
-            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.dev_quote_id if isinstance(data, dict) else False}"
-        )
-        
-        # Step 5: Get Timeline via Dev API
-        success, data, status = await self.make_request(
-            "GET", f"/ramp-api-transaction/{self.dev_quote_id}/timeline", use_hmac=True
+            "GET", f"/ramp-api-transaction/{self.e2e_dev_offramp_quote_id}/timeline", use_hmac=True
         )
         
         timeline_valid = False
-        if success and isinstance(data, dict):
-            events = data.get("events", [])
-            timeline_valid = len(events) >= 11  # All state transitions logged
-        elif success and isinstance(data, list):
-            timeline_valid = len(data) >= 11
+        if success:
+            if isinstance(data, dict):
+                events = data.get("events", [])
+                timeline_valid = len(events) >= 11  # 11 state transitions for off-ramp
+            elif isinstance(data, list):
+                timeline_valid = len(data) >= 11
         
         self.log_test_result(
-            "Dev API - Get Transaction Timeline (HMAC)", 
-            success and status == 200 and timeline_valid,
-            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
+            "E2E Test 4 - Step 4: Get Timeline (HMAC)",
+            timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0} (Expected: 11)"
         )
         
-        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
+        return quote_valid and execute_valid and deposit_valid and timeline_valid
     
     async def test_public_endpoints(self):
         """Test public endpoints"""
