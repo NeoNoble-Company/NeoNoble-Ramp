@@ -773,7 +773,7 @@ class NeoNobleAPITester:
         
         # Step 3: Process Payment via Dev API
         payment_data = {
-            "quote_id": self.dev_quote_id,
+            "quote_id": self.dev_onramp_quote_id,
             "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
             "amount_paid": 20000.0
         }
