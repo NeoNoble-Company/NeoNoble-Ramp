@@ -455,7 +455,7 @@ backend:
           with identical state management, instant settlement, and comprehensive compliance handling.
           
           Environment Validated:
-          - Backend URL: https://por-platform-1.preview.emergentagent.com/api ✓
+          - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
           - NENO Token: Fixed price €10,000 per token ✓
           - Fee: 1.5% ✓
           - Settlement: Instant mode ✓
@@ -672,7 +672,7 @@ frontend:
           • Clear success/error messages ✅
           
           Environment Validated:
-          - Frontend URL: https://por-platform-1.preview.emergentagent.com ✓
+          - Frontend URL: https://ramp-platform-1.preview.emergentagent.com ✓
           - NENO Token: Fixed price €10,000 per token ✓
           - Fee: 1.5% ✓
           - Settlement: Instant mode ✓
@@ -939,7 +939,7 @@ agent_communication:
       comprehensive compliance handling.
       
       Environment Validated:
-      - Backend URL: https://por-platform-1.preview.emergentagent.com/api ✓
+      - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
       - NENO Token: Fixed price €10,000 per token ✓
       - Fee: 1.5% ✓
       - Settlement: Instant mode ✓
@@ -1059,7 +1059,7 @@ agent_communication:
       • Audit logging: ⚠️  Service exists but endpoint not exposed (minor config issue)
       
       Environment Validated:
-      - Backend URL: https://por-platform-1.preview.emergentagent.com/api ✓
+      - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
       - NENO Token: Fixed price €10,000 per token ✓
       - Fee: 1.5% ✓
       - Settlement: Instant mode ✓

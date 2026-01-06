@@ -7,7 +7,7 @@ Performs comprehensive end-to-end testing of BOTH On-Ramp and Off-Ramp flows
 to validate lifecycle parity between User UI and Developer API.
 
 Test Environment:
-- Backend URL: https://por-platform-1.preview.emergentagent.com/api
+- Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
 - Settlement: Instant mode
@@ -32,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://por-platform-1.preview.emergentagent.com/api"
+BACKEND_URL = "https://ramp-platform-1.preview.emergentagent.com/api"
 
 class NeoNobleE2ETester:
     def __init__(self):
