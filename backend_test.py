@@ -717,7 +717,7 @@ class NeoNobleE2ETester:
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp-api-onramp-quote", quote_data, use_hmac=True
+            "POST", "/ramp-api-onramp-quote-por", quote_data, use_hmac=True
         )
         
         quote_valid = False
