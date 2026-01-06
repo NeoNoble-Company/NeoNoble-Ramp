@@ -157,7 +157,7 @@ class DatabaseMigrator:
                         password_hash=doc.get("password_hash"),
                         role=doc.get("role", "user"),
                         company_name=doc.get("company_name"),
-                        created_at=doc.get("created_at", datetime.now(timezone.utc))
+                        created_at=self._parse_datetime(doc.get("created_at"))
                     )
                     
                     if not self.dry_run:
