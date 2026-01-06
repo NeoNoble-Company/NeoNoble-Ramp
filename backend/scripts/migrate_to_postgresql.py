@@ -189,7 +189,8 @@ class DatabaseMigrator:
                         api_key=doc.get("api_key"),
                         encrypted_api_secret=doc.get("encrypted_api_secret"),
                         status=doc.get("status", "active"),
-                        created_at=doc.get("created_at", datetime.now(timezone.utc))
+                        created_at=self._parse_datetime(doc.get("created_at")),
+                        last_used_at=self._parse_datetime(doc.get("last_used_at"), default_now=False)
                     )
                     
                     if not self.dry_run:
