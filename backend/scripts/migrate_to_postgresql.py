@@ -101,6 +101,19 @@ class DatabaseMigrator:
         if self.pg_engine:
             await self.pg_engine.dispose()
     
+    def _parse_datetime(self, value) -> Optional[datetime]:
+        """Parse datetime from various formats."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                return datetime.now(timezone.utc)
+        return datetime.now(timezone.utc)
+    
     async def migrate_users(self):
         """Migrate users collection."""
         logger.info("Migrating users...")
