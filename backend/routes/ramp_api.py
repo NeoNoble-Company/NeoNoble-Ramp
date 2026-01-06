@@ -444,3 +444,167 @@ async def list_transactions_por(
         "count": len(transactions),
         "transactions": [por_quote_to_response(q) for q in transactions]
     }
+
+
+# ========================
+# PoR-Powered On-Ramp Endpoints (HMAC Protected)
+# ========================
+
+@router.post("/ramp-api-onramp-quote")
+async def create_onramp_quote_por(request: PoROnrampQuoteRequest, http_request: Request):
+    """
+    Get a quote for on-ramp (Fiat -> Crypto) via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Returns enterprise-grade quote with:
+    - Payment reference for fiat transfer
+    - NENO fixed at €10,000
+    - 1.5% fee
+    - Full compliance info
+    - Transaction timeline
+    """
+    auth_info = await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    if request.crypto_currency.upper() not in SUPPORTED_CRYPTOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported cryptocurrency. Supported: {SUPPORTED_CRYPTOS}"
+        )
+    
+    quote, error = await por_engine.create_onramp_quote(
+        fiat_amount=request.fiat_amount,
+        crypto_currency=request.crypto_currency.upper(),
+        fiat_currency="EUR",
+        user_id=None,  # API key based
+        wallet_address=request.wallet_address
+    )
+    
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    
+    # Add API key info to metadata
+    quote.metadata["api_key_id"] = auth_info["api_key_id"]
+    
+    return por_quote_to_response(quote)
+
+
+@router.post("/ramp-api-onramp")
+async def execute_onramp_por(request: PoROnrampExecuteRequest, http_request: Request):
+    """
+    Execute an on-ramp transaction via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Accepts the quote and transitions to PAYMENT_PENDING.
+    User must then send fiat payment using the payment reference.
+    """
+    auth_info = await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    quote, error = await por_engine.accept_onramp_quote(
+        quote_id=request.quote_id,
+        wallet_address=request.wallet_address
+    )
+    
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    
+    response = por_quote_to_response(quote)
+    response["message"] = f"Please send €{quote.payment_amount} using reference: {quote.payment_reference}"
+    response["api_key_id"] = auth_info["api_key_id"]
+    
+    return response
+
+
+@router.post("/ramp-api-payment-process")
+async def process_payment_por(request: PoRPaymentProcessRequest, http_request: Request):
+    """
+    Process a confirmed fiat payment via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    In instant settlement mode, this completes the entire
+    on-ramp flow automatically, delivering crypto to the wallet.
+    """
+    auth_info = await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    quote, error = await por_engine.process_onramp_payment(
+        quote_id=request.quote_id,
+        payment_ref=request.payment_ref,
+        amount_paid=request.amount_paid
+    )
+    
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    
+    return por_quote_to_response(quote)
+
+
+@router.get("/ramp-api-onramp-transaction/{quote_id}")
+async def get_onramp_transaction_por(quote_id: str, http_request: Request):
+    """
+    Get on-ramp transaction details by quote ID via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Returns full transaction data including:
+    - Current state
+    - Compliance info (KYC/AML)
+    - Timeline of all events
+    - Crypto delivery details
+    """
+    await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    quote = await por_engine.get_transaction(quote_id)
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    return por_quote_to_response(quote)
+
+
+@router.get("/ramp-api-onramp-transaction/{quote_id}/timeline")
+async def get_onramp_timeline_por(quote_id: str, http_request: Request):
+    """
+    Get on-ramp transaction timeline via PoR engine.
+    
+    **HMAC Authentication Required**
+    
+    Returns detailed event log with all state transitions.
+    """
+    await hmac_middleware.authenticate(http_request)
+    
+    if not por_engine:
+        raise HTTPException(status_code=503, detail="PoR engine not available")
+    
+    timeline = await por_engine.get_timeline(quote_id)
+    
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    return {
+        "quote_id": quote_id,
+        "event_count": len(timeline),
+        "events": [
+            {
+                "timestamp": e.timestamp,
+                "state": e.state.value,
+                "message": e.message,
+                "details": e.details,
+                "provider": e.provider
+            }
+            for e in timeline
+        ]
+    }
