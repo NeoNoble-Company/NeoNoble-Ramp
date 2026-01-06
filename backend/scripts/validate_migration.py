@@ -167,7 +167,6 @@ class MigrationValidator:
             
             mismatches = []
             for user in mongo_users:
-                user_id = user.get("id", str(user.get("_id")))
                 email = user.get("email")
                 
                 async with self.pg_session_factory() as session:
