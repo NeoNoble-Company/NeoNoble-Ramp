@@ -323,8 +323,8 @@ api_router.include_router(por_router)
 api_router.include_router(webhook_mgmt_router)
 
 # Set HMAC middleware for webhook routes
-from middleware.hmac_auth import HMACMiddleware
-hmac_middleware = HMACMiddleware(api_key_service)
+from middleware.auth import HMACAuthMiddleware
+hmac_middleware = HMACAuthMiddleware(api_key_service)
 set_webhook_hmac(hmac_middleware)
 
 # Include the main router
