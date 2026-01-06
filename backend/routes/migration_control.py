@@ -158,27 +158,29 @@ async def switch_to_postgresql():
 
 
 @router.post("/complete")
-async def complete_migration():
+async def complete_migration(force: bool = Query(False, description="Force completion without validation check")):
     """
     Complete migration - PostgreSQL only mode.
     
     Disables MongoDB writes entirely.
     
     CAUTION: This should only be done after thorough validation.
+    Use force=true only if validation has been confirmed externally.
     """
     manager = get_dual_db_manager()
     
-    if manager.state.phase != MigrationPhase.CUTOVER:
+    # Allow completion from validation or cutover phase
+    if manager.state.phase not in [MigrationPhase.CUTOVER, MigrationPhase.VALIDATION]:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot complete migration from phase: {manager.state.phase.value}"
         )
     
-    # Require recent successful validation
-    if not manager.state.validation_passed:
+    # Require recent successful validation (unless forced)
+    if not force and not manager.state.validation_passed:
         raise HTTPException(
             status_code=400,
-            detail="Final validation required before completion"
+            detail="Final validation required before completion. Use force=true to override if validation confirmed externally."
         )
     
     await manager.complete_migration()
@@ -187,7 +189,8 @@ async def complete_migration():
         "message": "Migration completed - PostgreSQL only mode",
         "phase": manager.state.phase.value,
         "mode": manager.state.mode.value,
-        "completed_at": manager.state.completed_at.isoformat()
+        "completed_at": manager.state.completed_at.isoformat(),
+        "forced": force
     }
 
 
