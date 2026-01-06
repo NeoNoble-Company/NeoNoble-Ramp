@@ -269,6 +269,7 @@ class InternalPoRProvider(BaseProvider):
             quote = ProviderQuote(
                 quote_id=quote_id,
                 provider=ProviderType.INTERNAL_POR,
+                direction="offramp",  # Explicitly set direction
                 crypto_amount=crypto_amount,
                 crypto_currency=crypto_currency,
                 fiat_amount=float(fiat_amount),
@@ -288,12 +289,16 @@ class InternalPoRProvider(BaseProvider):
                     "bank_account": bank_account,
                     "por_engine": POR_ENGINE_NAME,
                     "por_version": POR_ENGINE_VERSION,
-                    "settlement_mode": self._settlement_mode.value
+                    "settlement_mode": self._settlement_mode.value,
+                    "direction": "offramp"
                 }
             )
             
             # Store in database
             await self._store_transaction(quote)
+            
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, None)
             
             logger.info(
                 f"PoR quote created: {quote_id} | "
