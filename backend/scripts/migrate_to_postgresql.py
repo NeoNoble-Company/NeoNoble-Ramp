@@ -251,7 +251,7 @@ class DatabaseMigrator:
                         payout_reference=doc.get("payout_reference"),
                         payout_method=doc.get("payout_method", "internal_por"),
                         created_at=doc.get("created_at", datetime.now(timezone.utc)),
-                        metadata=doc.get("metadata", {})
+                        extra_data=doc.get("metadata", {})
                     )
                     
                     if not self.dry_run:
