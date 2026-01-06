@@ -1337,6 +1337,9 @@ class InternalPoRProvider(BaseProvider):
             
             await self._store_transaction(quote)
             
+            # Broadcast final webhook event
+            await self._broadcast_state_change(quote, "CRYPTO_CONFIRMED" if self._settlement_mode == SettlementMode.INSTANT else "CRYPTO_SENT")
+            
             logger.info(
                 f"PoR on-ramp delivery completed: {delivery_id} | "
                 f"{quote.crypto_amount:.8f} {quote.crypto_currency} → {wallet_address[:10]}..."
