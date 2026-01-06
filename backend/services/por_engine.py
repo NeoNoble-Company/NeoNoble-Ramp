@@ -1115,6 +1115,9 @@ class InternalPoRProvider(BaseProvider):
             # Store update
             await self._store_transaction(quote)
             
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, "QUOTE_CREATED")
+            
             logger.info(f"PoR on-ramp quote accepted: {quote_id} → PAYMENT_PENDING")
             
             return quote, None
