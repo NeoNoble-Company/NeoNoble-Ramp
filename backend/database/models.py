@@ -124,8 +124,8 @@ class Transaction(Base):
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
-    # Metadata (JSON)
-    metadata = Column(JSONB, default=dict)
+    # Extra data (JSON) - renamed from metadata to avoid SQLAlchemy conflict
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     user = relationship("User", back_populates="transactions")
