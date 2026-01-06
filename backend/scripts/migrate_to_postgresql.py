@@ -101,18 +101,47 @@ class DatabaseMigrator:
         if self.pg_engine:
             await self.pg_engine.dispose()
     
-    def _parse_datetime(self, value) -> Optional[datetime]:
-        """Parse datetime from various formats."""
+    def _parse_datetime(self, value, default_now: bool = True) -> Optional[datetime]:
+        """
+        Parse datetime from various MongoDB formats to timezone-aware Python datetime.
+        
+        Handles:
+        - None values
+        - Python datetime objects (makes timezone-aware if naive)
+        - ISO 8601 strings with 'Z' suffix (e.g., '2026-01-06T17:21:05.187Z')
+        - ISO 8601 strings with timezone offset
+        - Fallback to current UTC time if parsing fails
+        
+        Args:
+            value: The datetime value to parse (None, datetime, or string)
+            default_now: If True, return current UTC time on parse failure; if False, return None
+            
+        Returns:
+            Timezone-aware datetime object (UTC normalized) or None
+        """
         if value is None:
-            return None
+            return datetime.now(timezone.utc) if default_now else None
+            
         if isinstance(value, datetime):
+            # Ensure timezone awareness - normalize to UTC
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
             return value
+            
         if isinstance(value, str):
             try:
-                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+                # Handle ISO 8601 with 'Z' (Zulu time) suffix
+                if value.endswith('Z'):
+                    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+                # Handle ISO 8601 with explicit timezone
+                return datetime.fromisoformat(value)
             except ValueError:
-                return datetime.now(timezone.utc)
-        return datetime.now(timezone.utc)
+                logger.warning(f"Failed to parse datetime string: {value}")
+                return datetime.now(timezone.utc) if default_now else None
+                
+        # For any other type, log and use default
+        logger.warning(f"Unexpected datetime type: {type(value)} - {value}")
+        return datetime.now(timezone.utc) if default_now else None
     
     async def migrate_users(self):
         """Migrate users collection."""
