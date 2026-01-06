@@ -379,6 +379,164 @@ class NeoNobleAPITester:
     
     # ===== COMPREHENSIVE PoR ENGINE VALIDATION =====
     
+    async def test_user_ui_onramp_flow(self):
+        """Test complete User UI ON-RAMP PoR Engine flow with JWT authentication"""
+        logger.info("\n=== Testing User UI ON-RAMP PoR Engine Flow (JWT) ===")
+        
+        if not self.auth_token:
+            self.log_test_result("User UI ON-RAMP Flow", False, "No user auth token available")
+            return False
+        
+        # Step 1: Create On-Ramp Quote (NENO) - Fiat to Crypto
+        quote_data = {
+            "fiat_amount": 10000.0,
+            "crypto_currency": "NENO",
+            "wallet_address": "0x1234567890abcdef1234567890abcdef12345678"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/onramp/por/quote", quote_data, auth_token=self.auth_token
+        )
+        
+        quote_valid = False
+        if success and isinstance(data, dict):
+            self.user_quote_id = data.get("quote_id")
+            direction = data.get("direction")
+            fiat_amount = data.get("fiat_amount")
+            fee_percentage = data.get("fee_percentage")
+            fee_amount = data.get("fee_amount")
+            crypto_amount = data.get("crypto_amount")
+            exchange_rate = data.get("exchange_rate")
+            state = data.get("state")
+            payment_reference = data.get("payment_reference")
+            compliance = data.get("compliance", {})
+            
+            quote_valid = (
+                self.user_quote_id and self.user_quote_id.startswith("por_on_") and
+                direction == "onramp" and
+                fiat_amount == 10000 and
+                fee_percentage == 1.5 and
+                fee_amount == 150 and  # 1.5% of 10000
+                crypto_amount == 0.985 and  # (10000 - 150) / 10000
+                exchange_rate == 10000 and
+                state == "QUOTE_CREATED" and
+                payment_reference and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "User UI - Create ON-RAMP PoR Quote", 
+            success and status == 200 and quote_valid,
+            f"Status: {status}, Quote ID: {self.user_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not quote_valid:
+            return False
+        
+        # Step 2: Accept/Execute On-Ramp Quote
+        execute_data = {
+            "quote_id": self.user_quote_id,
+            "wallet_address": "0x1234567890abcdef1234567890abcdef12345678"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/onramp/por/execute", execute_data, auth_token=self.auth_token
+        )
+        
+        execute_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            message = data.get("message", "")
+            timeline = data.get("timeline", [])
+            
+            execute_valid = (
+                state == "PAYMENT_PENDING" and
+                ("payment" in message.lower() or "reference" in message.lower()) and
+                len(timeline) >= 2  # At least QUOTE_ACCEPTED and PAYMENT_PENDING events
+            )
+        
+        self.log_test_result(
+            "User UI - Execute ON-RAMP PoR Quote", 
+            success and status == 200 and execute_valid,
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        if not execute_valid:
+            return False
+        
+        # Step 3: Process Payment (Simulate Fiat Payment Confirmation)
+        payment_data = {
+            "quote_id": self.user_quote_id,
+            "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
+            "amount_paid": 10000.0
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp/onramp/por/payment/process", payment_data, auth_token=self.auth_token
+        )
+        
+        settlement_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            timeline = data.get("timeline", [])
+            metadata = data.get("metadata", {})
+            
+            # Expected ON-RAMP state transitions: QUOTE_CREATED → QUOTE_ACCEPTED → PAYMENT_PENDING → 
+            # PAYMENT_DETECTED → PAYMENT_CONFIRMED → CRYPTO_SENDING → CRYPTO_SENT → CRYPTO_CONFIRMED → COMPLETED
+            settlement_valid = (
+                state == "COMPLETED" and
+                len(timeline) >= 9 and  # All on-ramp state transitions
+                metadata.get("delivery_id") and
+                metadata.get("crypto_tx_hash")
+            )
+        
+        self.log_test_result(
+            "User UI - Process ON-RAMP Payment (Instant Settlement)", 
+            success and status == 200 and settlement_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        # Step 4: Get On-Ramp Transaction Details
+        success, data, status = await self.make_request(
+            "GET", f"/ramp/onramp/por/transaction/{self.user_quote_id}", auth_token=self.auth_token
+        )
+        
+        details_valid = False
+        if success and isinstance(data, dict):
+            compliance = data.get("compliance", {})
+            details_valid = (
+                data.get("quote_id") == self.user_quote_id and
+                data.get("state") == "COMPLETED" and
+                data.get("direction") == "onramp" and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "User UI - Get ON-RAMP Transaction Details", 
+            success and status == 200 and details_valid,
+            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.user_quote_id if isinstance(data, dict) else False}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Step 5: Get On-Ramp Timeline
+        success, data, status = await self.make_request(
+            "GET", f"/ramp/onramp/por/transaction/{self.user_quote_id}/timeline", auth_token=self.auth_token
+        )
+        
+        timeline_valid = False
+        if success and isinstance(data, dict):
+            events = data.get("events", [])
+            timeline_valid = len(events) >= 9  # All on-ramp state transitions logged
+        elif success and isinstance(data, list):
+            timeline_valid = len(data) >= 9
+        
+        self.log_test_result(
+            "User UI - Get ON-RAMP Transaction Timeline", 
+            success and status == 200 and timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
+        )
+        
+        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
+    
     async def test_user_ui_por_flow(self):
         """Test complete User UI PoR Engine flow with JWT authentication"""
         logger.info("\n=== Testing User UI PoR Engine Flow (JWT) ===")
