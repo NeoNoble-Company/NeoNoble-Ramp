@@ -298,7 +298,8 @@ class DatabaseMigrator:
                         status=doc.get("status"),
                         payout_reference=doc.get("payout_reference"),
                         payout_method=doc.get("payout_method", "internal_por"),
-                        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+                        created_at=self._parse_datetime(doc.get("created_at")),
+                        completed_at=self._parse_datetime(doc.get("completed_at"), default_now=False),
                         extra_data=doc.get("metadata", {})
                     )
                     
