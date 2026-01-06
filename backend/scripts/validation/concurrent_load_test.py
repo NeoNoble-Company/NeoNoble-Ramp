@@ -70,7 +70,7 @@ class ConcurrentLoadTest:
             return None
     
     async def run_offramp_flow(self, session: aiohttp.ClientSession, token: str, flow_id: int) -> Dict:
-        """Run a complete off-ramp flow."""
+        """Run a complete off-ramp flow using PoR auto-processing."""
         flow_result = {
             "flow_id": flow_id,
             "type": "offramp",
@@ -115,10 +115,10 @@ class ConcurrentLoadTest:
                     flow_result["success"] = False
                     return flow_result
             
-            # Process deposit
+            # Process deposit using PoR auto-process endpoint (no tx_hash needed)
             start = time.time()
             async with session.post(
-                f"{API_URL}/api/ramp/offramp/deposit/process",
+                f"{API_URL}/api/por/offramp/process",
                 json={"quote_id": quote_id},
                 headers=headers
             ) as resp:
