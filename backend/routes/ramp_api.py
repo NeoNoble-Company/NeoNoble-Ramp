@@ -492,7 +492,7 @@ async def create_onramp_quote_por(request: PoROnrampQuoteRequest, http_request: 
     return por_quote_to_response(quote)
 
 
-@router.post("/ramp-api-onramp")
+@router.post("/ramp-api-onramp-por")
 async def execute_onramp_por(request: PoROnrampExecuteRequest, http_request: Request):
     """
     Execute an on-ramp transaction via PoR engine.
