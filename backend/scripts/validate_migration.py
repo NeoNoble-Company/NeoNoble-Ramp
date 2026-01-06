@@ -464,7 +464,7 @@ class MigrationValidator:
         print("MIGRATION VALIDATION REPORT")
         print("=" * 60)
         print(f"Timestamp: {self.results['timestamp']}")
-        print(f"\nSummary:")
+        print("\nSummary:")
         print(f"  Total Checks: {self.results['summary']['total']}")
         print(f"  Passed: {self.results['summary']['passed']}")
         print(f"  Failed: {self.results['summary']['failed']}")
