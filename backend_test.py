@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 """
-NeoNoble Ramp Backend API Test Suite - Comprehensive PoR Engine Validation
-Tests both User UI Flow (JWT) and Developer API Flow (HMAC) for PoR Engine.
+NeoNoble Ramp Backend API Test Suite - COMPREHENSIVE E2E VALIDATION
+ON-RAMP + OFF-RAMP PoR ENGINE
+
+Performs comprehensive end-to-end testing of BOTH On-Ramp and Off-Ramp flows 
+to validate lifecycle parity between User UI and Developer API.
+
+Test Environment:
+- Backend URL: https://por-platform-1.preview.emergentagent.com/api
+- NENO Token: Fixed price €10,000 per token
+- Fee: 1.5%
+- Settlement: Instant mode
 """
 
 import asyncio
