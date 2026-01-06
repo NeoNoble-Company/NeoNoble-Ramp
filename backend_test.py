@@ -429,7 +429,7 @@ class NeoNobleAPITester:
         self.log_test_result(
             "User UI - Create ON-RAMP PoR Quote", 
             success and status == 200 and quote_valid,
-            f"Status: {status}, Quote ID: {self.user_onramp_quote_id, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}"
+            f"Status: {status}, Quote ID: {self.user_onramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}"
         )
         
         if not quote_valid:
