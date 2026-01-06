@@ -128,7 +128,7 @@ class AuditLogger:
             logger.info(log_message)
         
         # Log to MongoDB if enabled
-        if self._log_to_db and self.audit_collection:
+        if self._log_to_db and self.audit_collection is not None:
             try:
                 doc = {
                     "timestamp": datetime.now(timezone.utc),
