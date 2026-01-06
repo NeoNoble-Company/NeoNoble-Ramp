@@ -74,15 +74,36 @@ class DepositProcessRequest(BaseModel):
     amount: float = Field(..., description="Amount received")
 
 
+class PoROnrampQuoteRequest(BaseModel):
+    """PoR-powered on-ramp quote request."""
+    fiat_amount: float = Field(..., gt=0, description="Amount in EUR to spend")
+    crypto_currency: str = Field(default="NENO", description="Cryptocurrency to receive")
+    wallet_address: Optional[str] = Field(None, description="Wallet address for crypto delivery")
+
+
+class PoROnrampExecuteRequest(BaseModel):
+    """PoR-powered on-ramp execute request."""
+    quote_id: str = Field(..., description="Quote ID to execute")
+    wallet_address: str = Field(..., description="Wallet address to receive crypto")
+
+
+class PoRPaymentProcessRequest(BaseModel):
+    """PoR on-ramp payment processing request."""
+    quote_id: str = Field(..., description="Quote ID")
+    payment_ref: str = Field(..., description="Payment reference")
+    amount_paid: float = Field(..., description="Amount paid in EUR")
+
+
 # ========================
 # Helper Functions
 # ========================
 
 def por_quote_to_response(quote) -> dict:
     """Convert PoR quote to API response."""
-    return {
+    response = {
         "quote_id": quote.quote_id,
         "provider": quote.provider.value,
+        "direction": getattr(quote, 'direction', 'offramp'),
         "crypto_amount": quote.crypto_amount,
         "crypto_currency": quote.crypto_currency,
         "fiat_amount": quote.fiat_amount,
@@ -92,6 +113,9 @@ def por_quote_to_response(quote) -> dict:
         "fee_percentage": quote.fee_percentage,
         "net_payout": quote.net_payout,
         "deposit_address": quote.deposit_address,
+        "wallet_address": getattr(quote, 'wallet_address', None),
+        "payment_reference": getattr(quote, 'payment_reference', None),
+        "payment_amount": getattr(quote, 'payment_amount', None),
         "expires_at": quote.expires_at,
         "created_at": quote.created_at,
         "state": quote.state.value,
@@ -114,6 +138,7 @@ def por_quote_to_response(quote) -> dict:
         ],
         "metadata": quote.metadata
     }
+    return response
 
 
 # ========================
