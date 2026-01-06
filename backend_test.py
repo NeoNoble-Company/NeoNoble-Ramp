@@ -660,11 +660,11 @@ class NeoNobleE2ETester:
         dev_data = {
             "email": "e2e_dev_onramp@neonoble.com",
             "password": "E2EDevOnRamp123!",
-            "company_name": "E2E Test Corp"
+            "role": "DEVELOPER"
         }
         
         # Try registration first (may fail if user exists)
-        success, data, status = await self.make_request("POST", "/auth/developer/register", dev_data)
+        success, data, status = await self.make_request("POST", "/auth/register", dev_data)
         registration_ok = (status == 200) or (status == 400 and "already" in str(data).lower())
         
         # Login to get JWT
@@ -672,7 +672,7 @@ class NeoNobleE2ETester:
             "email": "e2e_dev_onramp@neonoble.com",
             "password": "E2EDevOnRamp123!"
         }
-        success, data, status = await self.make_request("POST", "/auth/developer/login", login_data)
+        success, data, status = await self.make_request("POST", "/auth/login", login_data)
         if success and isinstance(data, dict) and data.get("token"):
             self.dev_jwt = data["token"]
         
