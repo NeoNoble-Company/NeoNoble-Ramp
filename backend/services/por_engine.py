@@ -73,6 +73,8 @@ class InternalPoRProvider(BaseProvider):
     - Full transaction lifecycle management
     - Enterprise-grade state transitions
     - PoR-level KYC/AML responsibility
+    - Real-time webhook event broadcasting
+    - Comprehensive audit logging
     """
     
     def __init__(self, db: AsyncIOMotorDatabase):
@@ -100,6 +102,10 @@ class InternalPoRProvider(BaseProvider):
         
         # Wallet service reference (optional)
         self._wallet_service = None
+        
+        # Audit and webhook services
+        self._audit_logger: Optional[AuditLogger] = None
+        self._webhook_service: Optional[WebhookService] = None
     
     def set_wallet_service(self, wallet_service):
         """Set wallet service for deposit address generation."""
