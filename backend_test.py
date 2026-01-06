@@ -468,7 +468,7 @@ class NeoNobleAPITester:
         
         # Step 3: Process Payment (Simulate Fiat Payment Confirmation)
         payment_data = {
-            "quote_id": self.user_quote_id,
+            "quote_id": self.user_onramp_quote_id,
             "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
             "amount_paid": 10000.0
         }
