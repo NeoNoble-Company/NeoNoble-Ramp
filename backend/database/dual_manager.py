@@ -509,30 +509,32 @@ class DualDatabaseManager:
         }
         
         try:
+            if self._mongo_db is None:
+                raise RuntimeError("MongoDB not initialized")
+            
             # Check for state mismatches in active transactions
             active_states = ["QUOTE_CREATED", "DEPOSIT_PENDING", "PAYMENT_PENDING"]
             
-            async with self.get_mongodb() as mongo_db:
-                for state in active_states:
-                    mongo_count = await mongo_db.por_transactions.count_documents({"state": state})
+            for state in active_states:
+                mongo_count = await self._mongo_db.por_transactions.count_documents({"state": state})
+                
+                async with self.get_postgresql_session() as session:
+                    from sqlalchemy import text
+                    result = await session.execute(
+                        text("SELECT COUNT(*) FROM transactions WHERE state = :state"),
+                        {"state": state}
+                    )
+                    pg_count = result.scalar()
+                
+                check["details"][state] = {
+                    "mongodb": mongo_count,
+                    "postgresql": pg_count,
+                    "match": mongo_count == pg_count
+                }
+                
+                if mongo_count != pg_count:
+                    check["passed"] = False
                     
-                    async with self.get_postgresql_session() as session:
-                        from sqlalchemy import text
-                        result = await session.execute(
-                            text("SELECT COUNT(*) FROM transactions WHERE state = :state"),
-                            {"state": state}
-                        )
-                        pg_count = result.scalar()
-                    
-                    check["details"][state] = {
-                        "mongodb": mongo_count,
-                        "postgresql": pg_count,
-                        "match": mongo_count == pg_count
-                    }
-                    
-                    if mongo_count != pg_count:
-                        check["passed"] = False
-                        
         except Exception as e:
             check["passed"] = False
             check["error"] = str(e)
