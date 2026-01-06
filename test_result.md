@@ -333,6 +333,72 @@ backend:
           - Response Schemas: Perfect alignment between User UI and Developer API endpoints
           - Timeline Format: Identical event structure and timestamps
 
+  - task: "PoR Engine On-Ramp User UI Flow (JWT Authentication)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/user_ramp.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE ON-RAMP VALIDATION COMPLETE: User UI PoR Engine Flow
+          - User Registration & Login: JWT tokens generated correctly
+          - Create On-Ramp Quote: €10,000 → 0.985 NENO, quote_id starts with "por_on_", direction = "onramp"
+          - Fee Calculation: 1.5% fee = €150, crypto_amount = 0.985 NENO (€9,850 / €10,000)
+          - Execute Quote: State transitions to PAYMENT_PENDING, proper messaging with payment reference
+          - Process Payment: Instant settlement to COMPLETED state, all 9 on-ramp state transitions executed
+          - Transaction Details: Full compliance metadata, delivery_id and crypto_tx_hash present
+          - Transaction Timeline: Complete event history with 9 state transitions logged
+          - All endpoints working: /api/ramp/onramp/por/quote, /api/ramp/onramp/por/execute, /api/ramp/onramp/por/payment/process, /api/ramp/onramp/por/transaction/{quote_id}, /api/ramp/onramp/por/transaction/{quote_id}/timeline
+
+  - task: "PoR Engine On-Ramp Developer API Flow (HMAC Authentication)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/ramp_api.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE ON-RAMP VALIDATION COMPLETE: Developer API PoR Engine Flow
+          - Developer Registration & Login: JWT tokens for developer accounts
+          - API Key Management: API key/secret pairs generated, HMAC signatures working
+          - Create On-Ramp Quote (HMAC): €20,000 → 1.97 NENO, proper HMAC authentication
+          - Fee Calculation: 1.5% fee = €300, crypto_amount = 1.97 NENO (€19,700 / €10,000)
+          - Execute Quote (HMAC): State transitions via HMAC-secured endpoints
+          - Process Payment (HMAC): Instant settlement via developer API
+          - Transaction Details (HMAC): Full transaction data via HMAC endpoints
+          - Transaction Timeline (HMAC): Complete event history via HMAC endpoints
+          - All endpoints working: /api/ramp-api-onramp-quote-por, /api/ramp-api-onramp-por, /api/ramp-api-payment-process-por, /api/ramp-api-onramp-transaction-por/{quote_id}, /api/ramp-api-onramp-transaction-por/{quote_id}/timeline
+          - FIXED: Endpoint path conflicts resolved - PoR endpoints now use unique paths
+
+  - task: "PoR Engine On-Ramp Consistency Validation"
+    implemented: true
+    working: true
+    file: "/app/backend/services/por_engine.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ON-RAMP CONSISTENCY VALIDATION COMPLETE: User UI vs Developer API
+          - State Machine: Both flows follow identical 9-state transition sequence for on-ramp
+          - Direction: Both flows correctly set direction = "onramp"
+          - Compliance Metadata: por_responsible=true in both flows
+          - Fee Calculation: 1.5% fee applied consistently (€150 for €10k, €300 for €20k)
+          - NENO Price: Fixed €10,000 rate in both flows
+          - Settlement Mode: Instant settlement in both flows
+          - Response Schemas: Perfect alignment between User UI and Developer API endpoints
+          - Timeline Format: Identical event structure and timestamps
+          - Expected On-Ramp State Transitions: QUOTE_CREATED → QUOTE_ACCEPTED → PAYMENT_PENDING → PAYMENT_DETECTED → PAYMENT_CONFIRMED → CRYPTO_SENDING → CRYPTO_SENT → CRYPTO_CONFIRMED → COMPLETED
+
 frontend:
   - task: "Landing Page"
     implemented: true
