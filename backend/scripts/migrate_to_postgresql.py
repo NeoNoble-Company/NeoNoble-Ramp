@@ -295,15 +295,31 @@ class DatabaseMigrator:
             cursor = self.mongo_db.por_settlements.find({})
             async for doc in cursor:
                 try:
+                    # Handle field name differences between MongoDB and PostgreSQL models
+                    # MongoDB uses amount_eur, model uses amount
+                    amount = doc.get("amount") or doc.get("amount_eur")
+                    if amount is None:
+                        logger.warning(f"Settlement {doc.get('settlement_id')} has no amount - skipping")
+                        self.stats["settlements"]["skipped"] += 1
+                        continue
+                    
+                    # Get transaction_id from quote_id lookup if not directly available
+                    transaction_id = doc.get("transaction_id")
+                    if not transaction_id and doc.get("quote_id"):
+                        # Try to find transaction by quote_id
+                        tx = await self.mongo_db.por_transactions.find_one({"quote_id": doc.get("quote_id")})
+                        if tx:
+                            transaction_id = tx.get("id", str(tx.get("_id")))
+                    
                     settlement = Settlement(
                         id=doc.get("id", str(doc.get("_id"))),
                         settlement_id=doc.get("settlement_id"),
-                        transaction_id=doc.get("transaction_id"),
-                        amount=doc.get("amount"),
+                        transaction_id=transaction_id,
+                        amount=amount,
                         currency=doc.get("currency", "EUR"),
                         status=doc.get("status"),
                         payout_reference=doc.get("payout_reference"),
-                        payout_method=doc.get("payout_method", "internal_por"),
+                        payout_method=doc.get("payout_method") or doc.get("settlement_mode", "internal_por"),
                         created_at=self._parse_datetime(doc.get("created_at")),
                         completed_at=self._parse_datetime(doc.get("completed_at"), default_now=False),
                         extra_data=doc.get("metadata", {})
