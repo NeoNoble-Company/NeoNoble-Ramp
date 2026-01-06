@@ -37,6 +37,8 @@ class NeoNobleAPITester:
         # Test data for PoR Engine validation
         self.user_quote_id = None
         self.dev_quote_id = None
+        self.user_onramp_quote_id = None
+        self.dev_onramp_quote_id = None
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
