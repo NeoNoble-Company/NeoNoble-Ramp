@@ -179,7 +179,7 @@ class Settlement(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
-    metadata = Column(JSONB, default=dict)
+    extra_data = Column(JSONB, default=dict)
     
     # Relationships
     transaction = relationship("Transaction", back_populates="settlement")
