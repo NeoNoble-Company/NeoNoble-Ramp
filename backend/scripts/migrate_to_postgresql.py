@@ -335,7 +335,7 @@ class DatabaseMigrator:
                         enabled=doc.get("enabled", True),
                         max_retries=doc.get("max_retries", 5),
                         retry_delays=doc.get("retry_delays", [30, 60, 300, 900, 3600]),
-                        created_at=doc.get("created_at", datetime.now(timezone.utc))
+                        created_at=self._parse_datetime(doc.get("created_at"))
                     )
                     
                     if not self.dry_run:
