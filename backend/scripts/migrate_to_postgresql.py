@@ -370,7 +370,7 @@ class DatabaseMigrator:
                         crypto_currency=doc.get("crypto_currency"),
                         fiat_amount=doc.get("fiat_amount"),
                         extra_details=doc.get("details", {}),
-                        created_at=doc.get("timestamp", datetime.now(timezone.utc))
+                        created_at=self._parse_datetime(doc.get("timestamp"))
                     )
                     
                     if not self.dry_run:
