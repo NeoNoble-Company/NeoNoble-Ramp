@@ -76,6 +76,7 @@ from routes.webhooks import router as webhooks_router, set_payout_service
 from routes.por_api import router as por_router, set_por_engine
 from routes.webhook_routes import router as webhook_mgmt_router, set_hmac_middleware as set_webhook_hmac
 from routes.monitoring import router as monitoring_router, set_monitoring_services
+from routes.migration_control import router as migration_router
 
 # Initialize services
 auth_service = AuthService(db)
