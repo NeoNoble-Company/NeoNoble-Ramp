@@ -450,7 +450,7 @@ async def list_transactions_por(
 # PoR-Powered On-Ramp Endpoints (HMAC Protected)
 # ========================
 
-@router.post("/ramp-api-onramp-quote")
+@router.post("/ramp-api-onramp-quote-por")
 async def create_onramp_quote_por(request: PoROnrampQuoteRequest, http_request: Request):
     """
     Get a quote for on-ramp (Fiat -> Crypto) via PoR engine.
