@@ -322,6 +322,10 @@ api_router.include_router(user_ramp_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(por_router)
 api_router.include_router(webhook_mgmt_router)
+api_router.include_router(monitoring_router)
+
+# Set monitoring services
+set_monitoring_services(audit_logger, por_engine, settlement_service)
 
 # Set HMAC middleware for webhook routes
 from middleware.auth import HMACAuthMiddleware
