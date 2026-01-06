@@ -67,6 +67,10 @@ from services.settlement_service import SettlementService
 from services.audit_logger import AuditLogger, set_audit_logger
 from services.webhook_service import WebhookService, set_webhook_service
 
+# Import database modules for PostgreSQL migration
+from database.dual_manager import get_dual_db_manager
+from database.config import get_pg_session_factory, init_pg_engine
+
 # Import routes
 from routes.auth import router as auth_router, set_auth_service
 from routes.dev_portal import router as dev_router, set_api_key_service
