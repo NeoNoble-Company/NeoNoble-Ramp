@@ -662,6 +662,7 @@ class InternalPoRProvider(BaseProvider):
         """Update transaction state."""
         quote = await self.get_transaction(quote_id)
         if quote:
+            previous_state = quote.state.value
             quote.state = state
             quote.timeline.append(TimelineEvent(
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -670,6 +671,112 @@ class InternalPoRProvider(BaseProvider):
                 provider="internal_por"
             ))
             await self._store_transaction(quote)
+            
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, previous_state)
+    
+    async def _broadcast_state_change(
+        self,
+        quote: ProviderQuote,
+        previous_state: Optional[str] = None
+    ):
+        """Broadcast state change via webhook and audit log."""
+        direction = quote.direction
+        state = quote.state.value
+        
+        # Get services
+        webhook_svc = self._webhook_service or get_webhook_service()
+        audit_logger = self._audit_logger or get_audit_logger()
+        
+        # Prepare event data
+        event_data = {
+            "crypto_amount": quote.crypto_amount,
+            "crypto_currency": quote.crypto_currency,
+            "fiat_amount": quote.fiat_amount,
+            "fiat_currency": quote.fiat_currency,
+            "exchange_rate": quote.exchange_rate,
+            "fee_amount": quote.fee_amount,
+            "fee_percentage": quote.fee_percentage,
+            "net_payout": quote.net_payout,
+            "compliance": {
+                "kyc_status": quote.compliance.kyc_status.value,
+                "aml_status": quote.compliance.aml_status.value,
+                "por_responsible": quote.compliance.por_responsible
+            },
+            "metadata": {
+                "provider": quote.provider.value,
+                "settlement_mode": quote.metadata.get("settlement_mode"),
+                "user_id": quote.metadata.get("user_id"),
+                "api_key_id": quote.metadata.get("api_key_id")
+            }
+        }
+        
+        # Add direction-specific fields
+        if direction == "onramp":
+            event_data["payment_reference"] = quote.payment_reference
+            event_data["payment_amount"] = quote.payment_amount
+            event_data["wallet_address"] = quote.wallet_address
+        else:
+            event_data["deposit_address"] = quote.deposit_address
+            event_data["bank_account_masked"] = (
+                quote.metadata.get("bank_account", "")[:8] + "..." 
+                if quote.metadata.get("bank_account") else None
+            )
+        
+        # Broadcast webhook
+        if webhook_svc:
+            event_type = get_webhook_event_type(direction, state)
+            if event_type:
+                try:
+                    await webhook_svc.broadcast_event(
+                        event_type=event_type,
+                        quote_id=quote.quote_id,
+                        direction=direction,
+                        state=state,
+                        data=event_data,
+                        previous_state=previous_state
+                    )
+                except Exception as e:
+                    logger.error(f"Webhook broadcast failed: {e}")
+        
+        # Audit log
+        if audit_logger:
+            try:
+                audit_event = self._get_audit_event_type(direction, state)
+                if audit_event:
+                    await audit_logger.log_transaction_event(
+                        event_type=audit_event,
+                        quote_id=quote.quote_id,
+                        state=state,
+                        crypto_amount=quote.crypto_amount,
+                        crypto_currency=quote.crypto_currency,
+                        fiat_amount=quote.fiat_amount,
+                        details={
+                            "direction": direction,
+                            "previous_state": previous_state,
+                            "settlement_mode": quote.metadata.get("settlement_mode")
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Audit log failed: {e}")
+    
+    def _get_audit_event_type(self, direction: str, state: str) -> Optional[AuditEventType]:
+        """Map state to audit event type."""
+        audit_map = {
+            "QUOTE_CREATED": AuditEventType.QUOTE_CREATED,
+            "QUOTE_ACCEPTED": AuditEventType.QUOTE_ACCEPTED,
+            "QUOTE_EXPIRED": AuditEventType.QUOTE_EXPIRED,
+            "DEPOSIT_PENDING": AuditEventType.DEPOSIT_PENDING,
+            "DEPOSIT_DETECTED": AuditEventType.DEPOSIT_DETECTED,
+            "DEPOSIT_CONFIRMED": AuditEventType.DEPOSIT_CONFIRMED,
+            "DEPOSIT_FAILED": AuditEventType.DEPOSIT_FAILED,
+            "SETTLEMENT_PENDING": AuditEventType.SETTLEMENT_INITIATED,
+            "SETTLEMENT_PROCESSING": AuditEventType.SETTLEMENT_PROCESSING,
+            "SETTLEMENT_COMPLETED": AuditEventType.SETTLEMENT_COMPLETED,
+            "PAYOUT_INITIATED": AuditEventType.PAYOUT_INITIATED,
+            "PAYOUT_COMPLETED": AuditEventType.PAYOUT_COMPLETED,
+        }
+        return audit_map.get(state)
     
     def _quote_to_doc(self, quote: ProviderQuote) -> Dict:
         """Convert quote to MongoDB document."""
