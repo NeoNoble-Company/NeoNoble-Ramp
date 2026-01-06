@@ -377,10 +377,10 @@ backend:
           - All endpoints working: /api/ramp-api-onramp-quote-por, /api/ramp-api-onramp-por, /api/ramp-api-payment-process-por, /api/ramp-api-onramp-transaction-por/{quote_id}, /api/ramp-api-onramp-transaction-por/{quote_id}/timeline
           - FIXED: Endpoint path conflicts resolved - PoR endpoints now use unique paths
 
-  - task: "PoR Engine On-Ramp Consistency Validation"
+  - task: "Comprehensive E2E On-Ramp + Off-Ramp Validation"
     implemented: true
     working: true
-    file: "/app/backend/services/por_engine.py"
+    file: "/app/backend_test.py"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
@@ -388,16 +388,77 @@ backend:
       - working: true
         agent: "testing"
         comment: |
-          ✅ ON-RAMP CONSISTENCY VALIDATION COMPLETE: User UI vs Developer API
-          - State Machine: Both flows follow identical 9-state transition sequence for on-ramp
-          - Direction: Both flows correctly set direction = "onramp"
-          - Compliance Metadata: por_responsible=true in both flows
-          - Fee Calculation: 1.5% fee applied consistently (€150 for €10k, €300 for €20k)
-          - NENO Price: Fixed €10,000 rate in both flows
-          - Settlement Mode: Instant settlement in both flows
-          - Response Schemas: Perfect alignment between User UI and Developer API endpoints
-          - Timeline Format: Identical event structure and timestamps
-          - Expected On-Ramp State Transitions: QUOTE_CREATED → QUOTE_ACCEPTED → PAYMENT_PENDING → PAYMENT_DETECTED → PAYMENT_CONFIRMED → CRYPTO_SENDING → CRYPTO_SENT → CRYPTO_CONFIRMED → COMPLETED
+          ✅ COMPREHENSIVE E2E VALIDATION COMPLETE - ALL FLOWS WORKING
+          
+          Successfully completed comprehensive end-to-end testing of BOTH On-Ramp and Off-Ramp flows 
+          to validate lifecycle parity between User UI and Developer API as requested:
+          
+          🔥 E2E TEST 1: USER UI ON-RAMP FLOW (Fiat → Crypto) - FULLY VALIDATED:
+          • User Registration & Login: ✅ JWT tokens generated correctly
+          • Create On-Ramp Quote: ✅ €10,000 → 0.985 NENO, quote_id starts with "por_on_", direction = "onramp"
+          • Fee Calculation: ✅ 1.5% fee = €150, crypto_amount = 0.985 NENO (€9,850 / €10,000)
+          • Execute Quote: ✅ State transitions to PAYMENT_PENDING, payment reference generated
+          • Process Payment: ✅ Instant settlement to COMPLETED state, all 9 on-ramp state transitions executed
+          • Transaction Timeline: ✅ Complete event history with 9 state transitions logged
+          
+          🚀 E2E TEST 2: USER UI OFF-RAMP FLOW (Crypto → Fiat) - FULLY VALIDATED:
+          • Create Off-Ramp Quote: ✅ 1.0 NENO → €10,000, quote_id starts with "por_", direction = "offramp"
+          • Fee Calculation: ✅ 1.5% fee = €150, net_payout = €9,850
+          • Execute Quote: ✅ State transitions to DEPOSIT_PENDING, deposit address generated
+          • Process Deposit: ✅ Instant settlement to COMPLETED state, all 11 off-ramp state transitions executed
+          • Transaction Timeline: ✅ Complete event history with 11 state transitions logged
+          
+          🎯 E2E TEST 3: DEVELOPER API ON-RAMP (HMAC) - FULLY VALIDATED:
+          • Developer Registration & Login: ✅ JWT tokens for developer accounts
+          • API Key Management: ✅ API key/secret pairs generated, HMAC signatures working
+          • Create On-Ramp Quote (HMAC): ✅ €20,000 → 1.97 NENO, proper HMAC authentication
+          • Fee Calculation: ✅ 1.5% fee = €300, crypto_amount = 1.97 NENO (€19,700 / €10,000)
+          • Execute Quote (HMAC): ✅ State transitions via HMAC-secured endpoints
+          • Process Payment (HMAC): ✅ Instant settlement via developer API
+          • Transaction Timeline (HMAC): ✅ Complete event history via HMAC endpoints
+          
+          🌐 E2E TEST 4: DEVELOPER API OFF-RAMP (HMAC) - FULLY VALIDATED:
+          • Create Off-Ramp Quote (HMAC): ✅ 2.0 NENO → €20,000, proper HMAC authentication
+          • Fee Calculation: ✅ 1.5% fee = €300, net_payout = €19,700
+          • Execute Quote (HMAC): ✅ State transitions via HMAC-secured endpoints
+          • Process Deposit (HMAC): ✅ Instant settlement via developer API
+          • Transaction Timeline (HMAC): ✅ Complete event history via HMAC endpoints
+          
+          🏆 VALIDATION CHECKLIST - ALL REQUIREMENTS MET:
+          ✅ Lifecycle Parity: User UI On-Ramp: 9 state transitions
+          ✅ Lifecycle Parity: User UI Off-Ramp: 11 state transitions  
+          ✅ Lifecycle Parity: Dev API On-Ramp: 9 state transitions
+          ✅ Lifecycle Parity: Dev API Off-Ramp: 11 state transitions
+          ✅ Response schemas match between UI and API
+          ✅ Pricing Validation: NENO = €10,000 fixed
+          ✅ Pricing Validation: Fee = 1.5% applied correctly
+          ✅ On-Ramp: Crypto = (Fiat - Fee) / Rate
+          ✅ Off-Ramp: Net Payout = Fiat - Fee
+          ✅ Compliance: por_responsible = true
+          ✅ Compliance: kyc_status = "not_required"
+          ✅ Compliance: aml_status = "cleared" after completion
+          ✅ UX Consistency: Payment reference generated for on-ramp
+          ✅ UX Consistency: Deposit address generated for off-ramp
+          ✅ Clear state labels in responses
+          ✅ Timeline events with timestamps
+          
+          📊 COMPREHENSIVE E2E TEST RESULTS: 30/30 tests passed (100% success rate)
+          
+          🎯 ENDPOINTS TESTED - ALL WORKING:
+          • User API (JWT): /api/ramp/onramp/por/quote, /api/ramp/onramp/por/execute, /api/ramp/onramp/por/payment/process, /api/ramp/onramp/por/transaction/{quote_id}/timeline
+          • User API (JWT): /api/ramp/offramp/quote, /api/ramp/offramp/execute, /api/ramp/offramp/deposit/process, /api/ramp/offramp/transaction/{quote_id}/timeline
+          • Dev API (HMAC): /api/ramp-api-onramp-quote-por, /api/ramp-api-onramp-por, /api/ramp-api-payment-process-por, /api/ramp-api-onramp-transaction-por/{quote_id}/timeline
+          • Dev API (HMAC): /api/ramp-api-offramp-quote, /api/ramp-api-offramp, /api/ramp-api-deposit-process, /api/ramp-api-transaction/{quote_id}/timeline
+          
+          🏆 LIFECYCLE PARITY CONFIRMED BETWEEN USER UI AND DEVELOPER API
+          The NeoNoble PoR Engine demonstrates perfect consistency across both user-facing and developer-facing APIs
+          with identical state management, instant settlement, and comprehensive compliance handling.
+          
+          Environment Validated:
+          - Backend URL: https://por-platform-1.preview.emergentagent.com/api ✓
+          - NENO Token: Fixed price €10,000 per token ✓
+          - Fee: 1.5% ✓
+          - Settlement: Instant mode ✓
 
 frontend:
   - task: "Landing Page"
