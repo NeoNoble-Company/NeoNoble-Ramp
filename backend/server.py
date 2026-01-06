@@ -221,6 +221,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Settlement service initialization failed: {e}")
     
+    # Initialize audit logger
+    try:
+        await audit_logger.initialize()
+        logger.info("Audit logger initialized")
+    except Exception as e:
+        logger.warning(f"Audit logger initialization failed: {e}")
+    
+    # Initialize webhook service
+    try:
+        await webhook_service.initialize()
+        logger.info("Webhook service initialized")
+    except Exception as e:
+        logger.warning(f"Webhook service initialization failed: {e}")
+    
     # Start blockchain monitoring if configured
     if os.environ.get('BSC_RPC_URL'):
         try:
