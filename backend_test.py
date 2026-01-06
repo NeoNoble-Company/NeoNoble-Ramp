@@ -437,7 +437,7 @@ class NeoNobleAPITester:
         
         # Step 2: Accept/Execute On-Ramp Quote
         execute_data = {
-            "quote_id": self.user_quote_id,
+            "quote_id": self.user_onramp_quote_id,
             "wallet_address": "0x1234567890abcdef1234567890abcdef12345678"
         }
         
