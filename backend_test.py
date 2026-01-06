@@ -1206,17 +1206,17 @@ class NeoNobleE2ETester:
         return self.test_results
 
 async def main():
-    """Main test runner"""
-    async with NeoNobleAPITester() as tester:
-        results = await tester.run_all_tests()
+    """Main test runner for comprehensive E2E validation"""
+    async with NeoNobleE2ETester() as tester:
+        results = await tester.run_comprehensive_e2e_tests()
         
         # Return exit code based on results
         failed_tests = [name for name, result in results.items() if not result["success"]]
         if failed_tests:
-            logger.error(f"\n❌ {len(failed_tests)} tests failed")
+            logger.error(f"\n❌ {len(failed_tests)} E2E tests failed")
             return 1
         else:
-            logger.info(f"\n✅ All tests passed!")
+            logger.info(f"\n✅ All E2E tests passed!")
             return 0
 
 if __name__ == "__main__":
