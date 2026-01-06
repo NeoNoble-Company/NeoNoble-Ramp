@@ -693,7 +693,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Frontend E2E On-Ramp + Off-Ramp UX Consistency Validation"
+    - "Off-Ramp Backend Consolidation Testing"
+    - "Webhook Service Validation"
+    - "Audit Logging Validation"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
