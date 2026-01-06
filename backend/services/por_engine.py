@@ -1039,6 +1039,9 @@ class InternalPoRProvider(BaseProvider):
             # Store in database
             await self._store_transaction(quote)
             
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, None)
+            
             logger.info(
                 f"PoR on-ramp quote created: {quote_id} | "
                 f"€{fiat_amount} → {float(crypto_amount):.8f} {crypto_currency}"
