@@ -475,7 +475,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Frontend UI testing completed successfully"
+    - "PoR On-Ramp User UI Flow Testing"
+    - "PoR On-Ramp Developer API Flow Testing (HMAC)"
+    - "On-Ramp state transition consistency validation"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
