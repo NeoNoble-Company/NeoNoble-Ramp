@@ -419,28 +419,30 @@ class DualDatabaseManager:
         ]
         
         try:
-            async with self.get_mongodb() as mongo_db:
-                for mongo_col, pg_table in collections:
-                    mongo_count = await mongo_db[mongo_col].count_documents({})
+            if self._mongo_db is None:
+                raise RuntimeError("MongoDB not initialized")
+                
+            for mongo_col, pg_table in collections:
+                mongo_count = await self._mongo_db[mongo_col].count_documents({})
+                
+                # Get PG count
+                async with self.get_postgresql_session() as session:
+                    from sqlalchemy import text
+                    result = await session.execute(
+                        text(f"SELECT COUNT(*) FROM {pg_table}")
+                    )
+                    pg_count = result.scalar()
+                
+                match = mongo_count == pg_count
+                check["details"][mongo_col] = {
+                    "mongodb": mongo_count,
+                    "postgresql": pg_count,
+                    "match": match
+                }
+                
+                if not match:
+                    check["passed"] = False
                     
-                    # Get PG count
-                    async with self.get_postgresql_session() as session:
-                        from sqlalchemy import text
-                        result = await session.execute(
-                            text(f"SELECT COUNT(*) FROM {pg_table}")
-                        )
-                        pg_count = result.scalar()
-                    
-                    match = mongo_count == pg_count
-                    check["details"][mongo_col] = {
-                        "mongodb": mongo_count,
-                        "postgresql": pg_count,
-                        "match": match
-                    }
-                    
-                    if not match:
-                        check["passed"] = False
-                        
         except Exception as e:
             check["passed"] = False
             check["error"] = str(e)
