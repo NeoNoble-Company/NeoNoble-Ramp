@@ -803,7 +803,7 @@ class NeoNobleAPITester:
         
         # Step 4: Get On-Ramp Transaction via Dev API
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.dev_onramp_quote_id}", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction-por/{self.dev_onramp_quote_id}", use_hmac=True
         )
         
         details_valid = False
