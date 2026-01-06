@@ -602,9 +602,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Full E2E On-Ramp + Off-Ramp Validation"
-    - "UI/API Lifecycle Parity Testing"
-    - "UX Consistency Between Buy/Sell Flows"
+    - "Comprehensive E2E On-Ramp + Off-Ramp Validation"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
