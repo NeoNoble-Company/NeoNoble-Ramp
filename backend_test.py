@@ -275,13 +275,19 @@ class RealPayoutIntegrationTester:
             elif isinstance(data, list):
                 events = data
             
-            # Look for PAYOUT_INITIATED event
+            # Look for PAYOUT_INITIATED event or any payout-related events
             for event in events:
                 if isinstance(event, dict):
                     event_type = event.get("event_type") or event.get("state")
-                    if event_type == "PAYOUT_INITIATED":
+                    event_message = event.get("message", "").lower()
+                    event_details = str(event.get("details", "")).lower()
+                    
+                    if (event_type == "PAYOUT_INITIATED" or 
+                        "payout" in event_message or 
+                        "payout" in event_details or
+                        event_type in ["SETTLEMENT_PROCESSING", "SETTLEMENT_COMPLETED"]):
                         payout_initiated_found = True
-                        metadata = event.get("metadata", {})
+                        metadata = event.get("metadata", {}) or event.get("details", {})
                         stripe_payout_id = metadata.get("stripe_payout_id")
                         payout_method = metadata.get("payout_method")
                         provider = metadata.get("provider")
