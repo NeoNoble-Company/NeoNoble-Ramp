@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-NeoNoble Ramp Backend API Test Suite - POSTGRESQL MIGRATION VALIDATION
+NeoNoble Ramp Backend API Test Suite - REAL PAYOUT INTEGRATION E2E TESTING
 
-Performs comprehensive end-to-end testing to validate PostgreSQL migration:
-- System is running in dual_read_pg mode
-- All WRITES go to BOTH MongoDB and PostgreSQL
-- All READS come from PostgreSQL
+Performs comprehensive end-to-end testing of the real Stripe SEPA payout integration:
+- User authentication and off-ramp flow
+- Real Stripe payout integration with SEPA Credit Transfer
+- Payout timeline verification and audit trail
+- Error handling for insufficient funds scenarios
 
 Test Environment:
 - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
-- Settlement: Instant mode
-- Migration Mode: dual_read_pg
+- Stripe: LIVE mode with €0.00 balance (insufficient_funds expected)
+- Destination: IBAN IT22B0200822800000103317304 (Massimo Fornara)
 """
 
 import asyncio
