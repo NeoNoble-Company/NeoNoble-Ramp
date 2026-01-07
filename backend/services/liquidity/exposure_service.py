@@ -383,6 +383,77 @@ class ExposureService:
         }
         
         return reconstruction
+    
+    async def mark_covered(
+        self,
+        exposure_id: str,
+        coverage_amount: float,
+        settlement_id: Optional[str] = None,
+        ledger_entry_id: Optional[str] = None
+    ) -> Optional[Dict]:
+        """
+        Mark an exposure as covered (fully settled).
+        
+        Called when the payout is completed and the exposure is resolved.
+        """
+        now = datetime.now(timezone.utc)
+        
+        update = {
+            "status": ExposureStatus.FULLY_COVERED.value,
+            "covered_amount_eur": coverage_amount,
+            "coverage_percentage": 100.0,
+            "settled_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }
+        
+        if settlement_id:
+            update["settlement_id"] = settlement_id
+        if ledger_entry_id:
+            update["ledger_entry_id"] = ledger_entry_id
+        
+        result = await self.exposure_collection.find_one_and_update(
+            {"exposure_id": exposure_id},
+            {"$set": update},
+            return_document=True
+        )
+        
+        if result:
+            logger.info(f"Exposure {exposure_id} marked as FULLY_COVERED: €{coverage_amount:,.2f}")
+            return {k: v for k, v in result.items() if k != "_id"}
+        
+        return None
+    
+    async def update_status(
+        self,
+        exposure_id: str,
+        status: str,
+        metadata: Optional[Dict] = None
+    ) -> Optional[Dict]:
+        """
+        Update exposure status with optional metadata.
+        """
+        now = datetime.now(timezone.utc)
+        
+        update = {
+            "status": status,
+            "updated_at": now.isoformat()
+        }
+        
+        if metadata:
+            for key, value in metadata.items():
+                update[f"metadata.{key}"] = value
+        
+        result = await self.exposure_collection.find_one_and_update(
+            {"exposure_id": exposure_id},
+            {"$set": update},
+            return_document=True
+        )
+        
+        if result:
+            logger.info(f"Exposure {exposure_id} status updated to {status}")
+            return {k: v for k, v in result.items() if k != "_id"}
+        
+        return None
 
 
 # Global instance
