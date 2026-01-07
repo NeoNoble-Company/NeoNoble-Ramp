@@ -125,6 +125,11 @@ class InternalPoRProvider(BaseProvider):
         """Set webhook service for event broadcasting."""
         self._webhook_service = webhook_service
     
+    def set_real_payout_service(self, payout_service):
+        """Set real payout service for EUR payouts via Stripe."""
+        self._real_payout_service = payout_service
+        logger.info("Real payout service configured for PoR engine")
+    
     def set_settlement_mode(self, mode: SettlementMode):
         """Configure settlement mode."""
         self._settlement_mode = mode
