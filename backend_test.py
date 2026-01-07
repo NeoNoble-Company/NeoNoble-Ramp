@@ -9,7 +9,7 @@ Performs comprehensive end-to-end testing of the real Stripe SEPA payout integra
 - Error handling for insufficient funds scenarios
 
 Test Environment:
-- Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
+- Backend URL: https://hybrid-treasury.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
 - Stripe: LIVE mode with €0.00 balance (insufficient_funds expected)
@@ -33,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://ramp-platform-1.preview.emergentagent.com/api"
+BACKEND_URL = "https://hybrid-treasury.preview.emergentagent.com/api"
 
 class RealPayoutIntegrationTester:
     def __init__(self):

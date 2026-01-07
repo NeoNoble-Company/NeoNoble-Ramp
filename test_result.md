@@ -455,7 +455,7 @@ backend:
           with identical state management, instant settlement, and comprehensive compliance handling.
           
           Environment Validated:
-          - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
+          - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api ✓
           - NENO Token: Fixed price €10,000 per token ✓
           - Fee: 1.5% ✓
           - Settlement: Instant mode ✓
@@ -537,7 +537,7 @@ backend:
           • Developer API: /api/dev/api-keys, /api/ramp-api-offramp-quote, /api/ramp-api-offramp, /api/ramp-api-deposit-process, /api/ramp-api-transaction/{quote_id}/timeline
           
           Environment Validated:
-          - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
+          - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api ✓
           - Migration Mode: dual_read_pg ✓
           - NENO Token: Fixed price €10,000 per token ✓
           - Fee: 1.5% ✓
@@ -849,7 +849,7 @@ frontend:
           • Clear success/error messages ✅
           
           Environment Validated:
-          - Frontend URL: https://ramp-platform-1.preview.emergentagent.com ✓
+          - Frontend URL: https://hybrid-treasury.preview.emergentagent.com ✓
           - NENO Token: Fixed price €10,000 per token ✓
           - Fee: 1.5% ✓
           - Settlement: Instant mode ✓
@@ -939,7 +939,7 @@ agent_communication:
       • Transaction Details: /api/ramp/offramp/transaction/{quote_id}
       
       Environment Validated:
-      - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
+      - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api ✓
       - Stripe: LIVE mode with €0.00 balance ✓
       - NENO Token: Fixed price €10,000 per token ✓
       - Fee: 1.5% ✓
@@ -1173,7 +1173,7 @@ agent_communication:
       comprehensive compliance handling.
       
       Environment Validated:
-      - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
+      - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api ✓
       - NENO Token: Fixed price €10,000 per token ✓
       - Fee: 1.5% ✓
       - Settlement: Instant mode ✓
@@ -1293,7 +1293,7 @@ agent_communication:
       • Audit logging: ⚠️  Service exists but endpoint not exposed (minor config issue)
       
       Environment Validated:
-      - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
+      - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api ✓
       - NENO Token: Fixed price €10,000 per token ✓
       - Fee: 1.5% ✓
       - Settlement: Instant mode ✓
@@ -1343,7 +1343,7 @@ agent_communication:
          - Check /api/migration/status for write counts
          - Check /api/migration/metrics for consistency
          
-      Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
+      Backend URL: https://hybrid-treasury.preview.emergentagent.com/api
       
       IMPORTANT: All writes should go to both MongoDB and PostgreSQL.
       All reads should come from PostgreSQL.
@@ -1416,7 +1416,7 @@ agent_communication:
       • Developer API: /api/dev/api-keys, /api/ramp-api-offramp-quote, /api/ramp-api-offramp, /api/ramp-api-deposit-process, /api/ramp-api-transaction/{quote_id}/timeline
       
       Environment Validated:
-      - Backend URL: https://ramp-platform-1.preview.emergentagent.com/api ✓
+      - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api ✓
       - Migration Mode: dual_read_pg ✓
       - NENO Token: Fixed price €10,000 per token ✓
       - Fee: 1.5% ✓
@@ -1469,7 +1469,7 @@ agent_communication:
       6. DEVELOPER API (HMAC) FLOW:
          - Test same flow using HMAC authentication
          
-      Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
+      Backend URL: https://hybrid-treasury.preview.emergentagent.com/api
       
       IMPORTANT: Stripe is in LIVE mode. Real payouts will be created.
       The Stripe balance is €0.00, so payouts may fail with insufficient_funds.

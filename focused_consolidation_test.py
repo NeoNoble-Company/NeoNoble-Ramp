@@ -14,7 +14,7 @@ import hashlib
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-BACKEND_URL = "https://ramp-platform-1.preview.emergentagent.com/api"
+BACKEND_URL = "https://hybrid-treasury.preview.emergentagent.com/api"
 
 async def test_consolidation_key_features():
     """Test key consolidation features"""
