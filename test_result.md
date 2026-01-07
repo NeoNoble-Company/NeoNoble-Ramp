@@ -1320,3 +1320,49 @@ agent_communication:
       
       The PostgreSQL migration is fully operational and production-ready. All critical flows
       work correctly with dual-write to both databases and reads from PostgreSQL as expected.
+
+  - agent: "main"
+    message: |
+      REAL PAYOUT INTEGRATION TESTING REQUESTED
+      
+      The PoR engine has been upgraded to use real Stripe payouts for off-ramp transactions.
+      
+      Implementation Details:
+      - Primary: SEPA Credit Transfer to IBAN IT22B0200822800000103317304
+      - Beneficiary: Massimo Fornara
+      - Currency: EUR
+      - Mode: Standard (1-2 business days)
+      - Card Fallback: Disabled (can be enabled later)
+      
+      Please test the following flows:
+      
+      1. OFF-RAMP QUOTE CREATION:
+         - POST /api/ramp/offramp/quote {"crypto_amount": 0.1, "crypto_currency": "NENO"}
+         - Verify quote contains correct EUR calculation (€1,000 for 0.1 NENO)
+         
+      2. OFF-RAMP EXECUTION:
+         - POST /api/ramp/offramp/execute {"quote_id": "...", "bank_account": "IT60X..."}
+         - Verify state transitions to DEPOSIT_PENDING
+         
+      3. DEPOSIT PROCESSING (PoR auto-process):
+         - POST /api/por/offramp/process {"quote_id": "..."}
+         - This triggers the real payout flow
+         - Check for stripe_payout_id in timeline
+         
+      4. TIMELINE VERIFICATION:
+         - GET /api/ramp/offramp/transaction/{quote_id}/timeline
+         - Verify Stripe payout details in PAYOUT_INITIATED event
+         - Check for: stripe_payout_id, payout_method, estimated_arrival
+         
+      5. PAYOUT STATUS CHECK:
+         - GET /api/stripe/payout/{quote_id}
+         - Verify payout record exists with correct amount
+         
+      6. DEVELOPER API (HMAC) FLOW:
+         - Test same flow using HMAC authentication
+         
+      Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
+      
+      IMPORTANT: Stripe is in LIVE mode. Real payouts will be created.
+      The Stripe balance is €0.00, so payouts may fail with insufficient_funds.
+      This is expected - verify that the payout attempt is made and recorded correctly.
