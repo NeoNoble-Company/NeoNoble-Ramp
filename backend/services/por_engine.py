@@ -109,6 +109,9 @@ class InternalPoRProvider(BaseProvider):
         # Audit and webhook services
         self._audit_logger: Optional[AuditLogger] = None
         self._webhook_service: Optional[WebhookService] = None
+        
+        # Real payout service (optional - for real EUR payouts)
+        self._real_payout_service = None
     
     def set_wallet_service(self, wallet_service):
         """Set wallet service for deposit address generation."""
