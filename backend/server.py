@@ -224,6 +224,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Payout service initialization failed: {e}")
     
+    # Initialize real payout service (Stripe payouts for real EUR transfers)
+    try:
+        await real_payout_service.initialize()
+        logger.info("Real Payout Service initialized - Stripe EUR payouts enabled")
+    except Exception as e:
+        logger.warning(f"Real Payout Service initialization failed: {e}")
+    
     # Initialize PoR Engine (always available - no credentials required)
     try:
         await por_engine.initialize()
