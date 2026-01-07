@@ -1284,7 +1284,7 @@ class InternalPoRProvider(BaseProvider):
                     fee_amount=fee_eur,
                     fee_currency="EUR"
                 )
-                fee_ledger_id = fee_entry.entry_id
+                # Fee entry stored for audit trail
                 logger.info(f"[TREASURY] Fee collected: {fee_entry.entry_id} | €{fee_eur:,.2f}")
             except Exception as e:
                 logger.error(f"[TREASURY] Failed to record fee collection: {e}")
