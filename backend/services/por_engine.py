@@ -913,6 +913,142 @@ class InternalPoRProvider(BaseProvider):
         }
         return audit_map.get(state)
     
+    async def handle_payout_webhook(
+        self,
+        quote_id: str,
+        payout_status: str,
+        payout_id: str,
+        failure_code: str = None,
+        failure_message: str = None
+    ) -> Tuple[Optional[ProviderQuote], Optional[str]]:
+        """
+        Handle payout status update from Stripe webhook.
+        
+        Called by webhook handler when payout.paid, payout.failed, or payout.canceled
+        events are received.
+        
+        Args:
+            quote_id: The quote ID associated with the payout
+            payout_status: New status ('paid', 'failed', 'canceled')
+            payout_id: Stripe payout ID
+            failure_code: Failure code if status is 'failed'
+            failure_message: Failure message if status is 'failed'
+        """
+        try:
+            quote = await self.get_transaction(quote_id)
+            if not quote:
+                return None, f"Quote not found: {quote_id}"
+            
+            # Only process if in PAYOUT_INITIATED state
+            if quote.state != TransactionState.PAYOUT_INITIATED:
+                logger.warning(f"Quote {quote_id} not in PAYOUT_INITIATED state, current: {quote.state.value}")
+                return quote, None  # Return current state without error
+            
+            now = datetime.now(timezone.utc)
+            
+            if payout_status == 'paid':
+                # Payout succeeded
+                quote.timeline.append(TimelineEvent(
+                    timestamp=now.isoformat(),
+                    state=TransactionState.PAYOUT_COMPLETED,
+                    message="Real payout completed - funds transferred to bank account",
+                    details={
+                        "stripe_payout_id": payout_id,
+                        "provider": "stripe",
+                        "confirmation_timestamp": now.isoformat()
+                    },
+                    provider="stripe"
+                ))
+                quote.state = TransactionState.PAYOUT_COMPLETED
+                
+                quote.timeline.append(TimelineEvent(
+                    timestamp=now.isoformat(),
+                    state=TransactionState.COMPLETED,
+                    message="Off-ramp completed successfully - EUR funds delivered",
+                    details={
+                        "settlement_id": quote.metadata.get("settlement_id"),
+                        "payout_reference": quote.metadata.get("payout_reference"),
+                        "stripe_payout_id": payout_id,
+                        "net_payout_eur": quote.net_payout,
+                        "payout_method": quote.metadata.get("payout_method", "stripe"),
+                        "completed_at": now.isoformat()
+                    },
+                    provider="stripe"
+                ))
+                quote.state = TransactionState.COMPLETED
+                quote.metadata["completed_at"] = now.isoformat()
+                quote.metadata["payout_confirmed_at"] = now.isoformat()
+                
+                logger.info(f"✅ Payout CONFIRMED for quote {quote_id}: {payout_id}")
+                
+            elif payout_status == 'failed':
+                # Payout failed
+                quote.timeline.append(TimelineEvent(
+                    timestamp=now.isoformat(),
+                    state=TransactionState.PAYOUT_FAILED,
+                    message=f"Payout failed: {failure_message or failure_code or 'Unknown error'}",
+                    details={
+                        "stripe_payout_id": payout_id,
+                        "failure_code": failure_code,
+                        "failure_message": failure_message,
+                        "provider": "stripe"
+                    },
+                    provider="stripe"
+                ))
+                quote.state = TransactionState.PAYOUT_FAILED
+                quote.metadata["payout_failed_at"] = now.isoformat()
+                quote.metadata["payout_failure_reason"] = failure_message or failure_code
+                
+                logger.error(f"❌ Payout FAILED for quote {quote_id}: {failure_code} - {failure_message}")
+                
+                # If card fallback is enabled and this was SEPA, attempt card payout
+                if (self._real_payout_service and 
+                    quote.metadata.get("payout_method") == "sepa"):
+                    logger.info(f"Attempting card fallback for quote {quote_id}")
+                    # Card fallback will be handled separately
+                
+            elif payout_status == 'canceled':
+                # Payout canceled
+                quote.timeline.append(TimelineEvent(
+                    timestamp=now.isoformat(),
+                    state=TransactionState.PAYOUT_FAILED,
+                    message="Payout was canceled",
+                    details={
+                        "stripe_payout_id": payout_id,
+                        "provider": "stripe",
+                        "reason": "canceled"
+                    },
+                    provider="stripe"
+                ))
+                quote.state = TransactionState.PAYOUT_FAILED
+                quote.metadata["payout_canceled_at"] = now.isoformat()
+                
+                logger.warning(f"Payout CANCELED for quote {quote_id}: {payout_id}")
+            
+            await self._store_transaction(quote)
+            
+            # Update settlement record
+            await self.settlements_collection.update_one(
+                {"quote_id": quote_id},
+                {
+                    "$set": {
+                        "status": "completed" if payout_status == "paid" else "failed",
+                        "completed_at": now.isoformat() if payout_status == "paid" else None,
+                        "failed_at": now.isoformat() if payout_status in ["failed", "canceled"] else None,
+                        "failure_reason": failure_message or failure_code if payout_status == "failed" else None
+                    }
+                }
+            )
+            
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, "PAYOUT_INITIATED")
+            
+            return quote, None
+            
+        except Exception as e:
+            logger.error(f"Error handling payout webhook: {e}")
+            return None, str(e)
+    
     def _quote_to_doc(self, quote: ProviderQuote) -> Dict:
         """Convert quote to MongoDB document."""
         return {
