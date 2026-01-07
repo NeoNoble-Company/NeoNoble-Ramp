@@ -283,6 +283,47 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Webhook service initialization failed: {e}")
     
+    # Initialize Liquidity Services (Hybrid PoR Liquidity Architecture - Phase 1)
+    try:
+        await treasury_service.initialize()
+        logger.info("Treasury Service initialized - Real treasury tracking enabled")
+    except Exception as e:
+        logger.warning(f"Treasury Service initialization failed: {e}")
+    
+    try:
+        await exposure_service.initialize()
+        logger.info("Exposure Service initialized - Real exposure tracking enabled")
+    except Exception as e:
+        logger.warning(f"Exposure Service initialization failed: {e}")
+    
+    try:
+        await routing_service.initialize()
+        logger.info("Market Routing Service initialized - Shadow mode (log-only)")
+    except Exception as e:
+        logger.warning(f"Market Routing Service initialization failed: {e}")
+    
+    try:
+        await hedging_service.initialize()
+        logger.info("Hedging Service initialized - Shadow mode (audit-only proposals)")
+    except Exception as e:
+        logger.warning(f"Hedging Service initialization failed: {e}")
+    
+    try:
+        await reconciliation_service.initialize()
+        logger.info("Reconciliation Service initialized - Real audit ledger enabled")
+    except Exception as e:
+        logger.warning(f"Reconciliation Service initialization failed: {e}")
+    
+    # Wire liquidity services to PoR engine for lifecycle hooks
+    por_engine.set_liquidity_services(
+        treasury_service=treasury_service,
+        exposure_service=exposure_service,
+        routing_service=routing_service,
+        hedging_service=hedging_service,
+        reconciliation_service=reconciliation_service
+    )
+    logger.info("Liquidity services wired to PoR engine")
+    
     # Initialize PostgreSQL and Dual Database Manager for migration
     try:
         pg_engine, pg_session_factory = await init_pg_engine()
@@ -381,6 +422,7 @@ api_router.include_router(webhook_mgmt_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(migration_router)
 api_router.include_router(stripe_payout_router)
+api_router.include_router(liquidity_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
