@@ -507,7 +507,9 @@ class InternalPoRProvider(BaseProvider):
         Transitions: DEPOSIT_CONFIRMED → SETTLEMENT_PENDING → SETTLEMENT_PROCESSING
                     → PAYOUT_INITIATED → PAYOUT_COMPLETED → COMPLETED
         
-        In INSTANT mode, all transitions happen immediately.
+        If USE_REAL_PAYOUTS is enabled and real_payout_service is configured,
+        this will execute a real Stripe payout to the configured IBAN.
+        Otherwise, virtual settlement is used.
         """
         try:
             quote = await self.get_transaction(quote_id)
@@ -561,31 +563,93 @@ class InternalPoRProvider(BaseProvider):
             quote.state = TransactionState.SETTLEMENT_COMPLETED
             await self._store_transaction(quote)
             
-            # Payout initiated
+            # Execute payout - real or virtual
             bank_account = quote.metadata.get("bank_account", "N/A")
+            payout_result = None
+            payout_method = "virtual"
+            stripe_payout_id = None
+            payout_arrival_date = None
+            payout_error = None
+            
+            # Try real payout if enabled and service is available
+            if USE_REAL_PAYOUTS and self._real_payout_service:
+                logger.info(f"Executing REAL payout for quote {quote_id}: €{quote.net_payout:,.2f}")
+                
+                payout_result = await self._real_payout_service.create_payout(
+                    quote_id=quote_id,
+                    transaction_id=settlement_id,
+                    amount_eur=quote.net_payout,
+                    reference=payout_ref,
+                    metadata={
+                        "crypto_amount": quote.crypto_amount,
+                        "crypto_currency": quote.crypto_currency,
+                        "exchange_rate": quote.exchange_rate,
+                        "fee_amount": quote.fee_amount,
+                        "user_id": quote.metadata.get("user_id"),
+                        "bank_account_masked": bank_account[:8] + "..." if bank_account != "N/A" else None
+                    }
+                )
+                
+                if payout_result.success:
+                    payout_method = payout_result.method.value if payout_result.method else "stripe"
+                    stripe_payout_id = payout_result.payout_id
+                    payout_arrival_date = payout_result.arrival_date
+                    payout_ref = payout_result.provider_reference or payout_ref
+                    
+                    logger.info(
+                        f"✅ Real payout CREATED: {stripe_payout_id}\n"
+                        f"   Method: {payout_method}\n"
+                        f"   Amount: €{quote.net_payout:,.2f}\n"
+                        f"   Arrival: {payout_arrival_date or 'Pending'}"
+                    )
+                else:
+                    payout_error = payout_result.error
+                    logger.error(f"Real payout FAILED: {payout_error}")
+                    # Fall back to virtual settlement
+                    payout_method = "virtual_fallback"
+            
+            # Payout initiated
+            payout_details = {
+                "payout_reference": payout_ref,
+                "amount_eur": quote.net_payout,
+                "destination": bank_account[:8] + "..." if bank_account != "N/A" else "N/A",
+                "method": payout_method
+            }
+            
+            if stripe_payout_id:
+                payout_details["stripe_payout_id"] = stripe_payout_id
+                payout_details["provider"] = "stripe"
+            if payout_arrival_date:
+                payout_details["estimated_arrival"] = payout_arrival_date
+            if payout_error:
+                payout_details["fallback_reason"] = payout_error
+            
             quote.timeline.append(TimelineEvent(
                 timestamp=now.isoformat(),
                 state=TransactionState.PAYOUT_INITIATED,
-                message=f"SEPA payout initiated: €{quote.net_payout:,.2f}",
-                details={
-                    "payout_reference": payout_ref,
-                    "amount_eur": quote.net_payout,
-                    "destination": bank_account[:8] + "..." if bank_account != "N/A" else "N/A",
-                    "method": "SEPA Credit Transfer"
-                },
-                provider="internal_por"
+                message=f"{'Real' if stripe_payout_id else 'Virtual'} SEPA payout initiated: €{quote.net_payout:,.2f}",
+                details=payout_details,
+                provider="stripe" if stripe_payout_id else "internal_por"
             ))
             quote.state = TransactionState.PAYOUT_INITIATED
             await self._store_transaction(quote)
             
-            # In INSTANT mode, complete immediately
-            if self._settlement_mode == SettlementMode.INSTANT:
+            # For real payouts, we wait for webhook confirmation
+            # For virtual payouts or if real payout created successfully with instant confirmation
+            payout_status = payout_result.status.value if payout_result and payout_result.status else None
+            
+            if payout_status == "paid":
+                # Instant confirmation (rare for SEPA, common for card)
                 quote.timeline.append(TimelineEvent(
                     timestamp=now.isoformat(),
                     state=TransactionState.PAYOUT_COMPLETED,
-                    message="Payout completed (instant settlement)",
-                    details={"payout_reference": payout_ref},
-                    provider="internal_por"
+                    message="Payout completed (instant confirmation)",
+                    details={
+                        "payout_reference": payout_ref,
+                        "stripe_payout_id": stripe_payout_id,
+                        "method": payout_method
+                    },
+                    provider="stripe"
                 ))
                 quote.state = TransactionState.PAYOUT_COMPLETED
                 
@@ -596,21 +660,61 @@ class InternalPoRProvider(BaseProvider):
                     details={
                         "settlement_id": settlement_id,
                         "payout_reference": payout_ref,
+                        "stripe_payout_id": stripe_payout_id,
                         "net_payout_eur": quote.net_payout,
+                        "payout_method": payout_method,
+                        "completed_at": now.isoformat()
+                    },
+                    provider="stripe"
+                ))
+                quote.state = TransactionState.COMPLETED
+                
+            elif self._settlement_mode == SettlementMode.INSTANT and not stripe_payout_id:
+                # Virtual instant settlement (no real payout service)
+                quote.timeline.append(TimelineEvent(
+                    timestamp=now.isoformat(),
+                    state=TransactionState.PAYOUT_COMPLETED,
+                    message="Payout completed (virtual instant settlement)",
+                    details={"payout_reference": payout_ref},
+                    provider="internal_por"
+                ))
+                quote.state = TransactionState.PAYOUT_COMPLETED
+                
+                quote.timeline.append(TimelineEvent(
+                    timestamp=now.isoformat(),
+                    state=TransactionState.COMPLETED,
+                    message="Off-ramp completed successfully (virtual)",
+                    details={
+                        "settlement_id": settlement_id,
+                        "payout_reference": payout_ref,
+                        "net_payout_eur": quote.net_payout,
+                        "payout_method": "virtual",
                         "completed_at": now.isoformat()
                     },
                     provider="internal_por"
                 ))
                 quote.state = TransactionState.COMPLETED
             
+            # If real payout is pending (in_transit), state stays at PAYOUT_INITIATED
+            # Webhook will update to PAYOUT_COMPLETED when Stripe confirms
+            
             quote.metadata["settlement_id"] = settlement_id
             quote.metadata["payout_reference"] = payout_ref
-            quote.metadata["completed_at"] = now.isoformat()
+            quote.metadata["payout_method"] = payout_method
+            if stripe_payout_id:
+                quote.metadata["stripe_payout_id"] = stripe_payout_id
+            if payout_arrival_date:
+                quote.metadata["payout_arrival_date"] = payout_arrival_date
+            if quote.state == TransactionState.COMPLETED:
+                quote.metadata["completed_at"] = now.isoformat()
             
             await self._store_transaction(quote)
             
             # Broadcast final webhook event
-            await self._broadcast_state_change(quote, "PAYOUT_COMPLETED" if self._settlement_mode == SettlementMode.INSTANT else "PAYOUT_INITIATED")
+            await self._broadcast_state_change(
+                quote, 
+                "PAYOUT_COMPLETED" if quote.state == TransactionState.COMPLETED else "PAYOUT_INITIATED"
+            )
             
             # Store settlement record
             settlement_doc = {
@@ -620,16 +724,19 @@ class InternalPoRProvider(BaseProvider):
                 "fee_eur": quote.fee_amount,
                 "payout_reference": payout_ref,
                 "bank_account": bank_account,
-                "status": "completed" if self._settlement_mode == SettlementMode.INSTANT else "processing",
+                "status": "completed" if quote.state == TransactionState.COMPLETED else "processing",
                 "settlement_mode": self._settlement_mode.value,
+                "payout_method": payout_method,
+                "stripe_payout_id": stripe_payout_id,
+                "payout_arrival_date": payout_arrival_date,
                 "created_at": now.isoformat(),
-                "completed_at": now.isoformat() if self._settlement_mode == SettlementMode.INSTANT else None
+                "completed_at": now.isoformat() if quote.state == TransactionState.COMPLETED else None
             }
             await self.settlements_collection.insert_one(settlement_doc)
             
             logger.info(
-                f"PoR settlement completed: {settlement_id} | "
-                f"€{quote.net_payout:,.2f} → {payout_ref}"
+                f"PoR settlement {'completed' if quote.state == TransactionState.COMPLETED else 'initiated'}: {settlement_id} | "
+                f"€{quote.net_payout:,.2f} → {payout_ref} ({payout_method})"
             )
             
             result = SettlementResult(
@@ -639,7 +746,10 @@ class InternalPoRProvider(BaseProvider):
                 state=quote.state,
                 details={
                     "net_payout": quote.net_payout,
-                    "settlement_mode": self._settlement_mode.value
+                    "settlement_mode": self._settlement_mode.value,
+                    "payout_method": payout_method,
+                    "stripe_payout_id": stripe_payout_id,
+                    "payout_arrival_date": payout_arrival_date
                 }
             )
             
