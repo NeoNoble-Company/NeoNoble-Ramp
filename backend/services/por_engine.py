@@ -62,6 +62,9 @@ POR_QUOTE_TTL_MINUTES = int(os.environ.get('QUOTE_TTL_MINUTES', '60'))
 LIQUIDITY_POOL_EUR = float(os.environ.get('POR_LIQUIDITY_POOL_EUR', '100000000'))  # 100M EUR
 LIQUIDITY_UNLIMITED = True  # Never block transactions
 
+# Real Payout Configuration
+USE_REAL_PAYOUTS = os.environ.get('USE_REAL_PAYOUTS', 'true').lower() == 'true'
+
 
 class InternalPoRProvider(BaseProvider):
     """
