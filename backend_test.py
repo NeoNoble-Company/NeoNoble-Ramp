@@ -362,7 +362,7 @@ class RealPayoutIntegrationTester:
         self.log_test_result(
             "Payout Summary Configuration",
             summary_valid,
-            f"Status: {status}, IBAN: {configuration.get('iban') or configuration.get('destination_iban') if 'configuration' in locals() else 'N/A'}, Beneficiary: {configuration.get('beneficiary_name') if 'configuration' in locals() else 'N/A'}, Currency: {configuration.get('currency') if 'configuration' in locals() else 'N/A'}"
+            f"Status: {status}, Currency: {config.get('currency') if 'config' in locals() else 'N/A'}, Mode: {config.get('mode') if 'config' in locals() else 'N/A'}, Failed Payouts: {failed_payouts.get('count', 0) if 'failed_payouts' in locals() else 0}"
         )
         
         return summary_valid
