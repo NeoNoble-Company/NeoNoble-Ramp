@@ -298,7 +298,7 @@ class RealPayoutIntegrationTester:
         self.log_test_result(
             "Timeline PAYOUT_INITIATED Event",
             payout_initiated_found,
-            f"Events: {len(events) if 'events' in locals() else 0}, PAYOUT_INITIATED: {'Found' if payout_initiated_found else 'Not Found'}, Stripe ID: {stripe_payout_id or 'N/A'}, Method: {payout_method or 'N/A'}, Provider: {provider or 'N/A'}"
+            f"Events: {len(events) if 'events' in locals() else 0}, PAYOUT/SETTLEMENT Event: {'Found' if payout_initiated_found else 'Not Found'}, Stripe ID: {stripe_payout_id or 'N/A'}, Method: {payout_method or 'N/A'}, Provider: {provider or 'N/A'}"
         )
         
         return timeline_valid and payout_initiated_found
