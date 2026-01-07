@@ -216,7 +216,9 @@ class RealPayoutIntegrationTester:
         # Step 3: Process deposit to trigger payout
         logger.info("Step 3: Process Deposit (Trigger Real Payout)")
         deposit_data = {
-            "quote_id": self.quote_id
+            "quote_id": self.quote_id,
+            "tx_hash": "0xreal_payout_test_hash_001",
+            "amount": 0.1
         }
         
         success, data, status = await self.make_request(
