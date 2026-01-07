@@ -334,7 +334,7 @@ class RealPayoutIntegrationTester:
         self.log_test_result(
             "Payout Record Details",
             payout_record_valid,
-            f"Status: {status}, Payout ID: {data.get('payout_id') or data.get('stripe_payout_id') if isinstance(data, dict) else 'N/A'}, Status: {data.get('status') if isinstance(data, dict) else 'N/A'}, Amount: {data.get('amount') if isinstance(data, dict) else 'N/A'}"
+            f"Status: {status}, Expected: 200 (record found) or 404 (failed payout not saved), Payout ID: {data.get('payout_id') or data.get('stripe_payout_id') if isinstance(data, dict) else 'N/A'}"
         )
         
         return payout_record_valid
