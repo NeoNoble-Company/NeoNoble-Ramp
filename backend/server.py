@@ -111,10 +111,24 @@ audit_logger = AuditLogger(db)
 webhook_service = WebhookService(db)
 real_payout_service = RealPayoutService(db)
 
+# Initialize liquidity services (Hybrid PoR Liquidity Architecture)
+treasury_service = TreasuryService(db)
+exposure_service = ExposureService(db)
+routing_service = MarketRoutingService(db)
+hedging_service = HedgingService(db)
+reconciliation_service = ReconciliationService(db)
+
 # Set global service instances
 set_audit_logger(audit_logger)
 set_webhook_service(webhook_service)
 set_real_payout_service(real_payout_service)
+
+# Set liquidity service instances
+set_treasury_service(treasury_service)
+set_exposure_service(exposure_service)
+set_routing_service(routing_service)
+set_hedging_service(hedging_service)
+set_reconciliation_service(reconciliation_service)
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)
