@@ -503,7 +503,7 @@ class HybridLiquidityArchitectureTester:
             reconstruct_valid = False
             if success and isinstance(data, dict):
                 # Should have all required reconstruction data
-                required_fields = ["exposure_record", "deposit_reference", "payout_reference"]
+                required_fields = ["exposure", "on_chain", "payout"]
                 reconstruct_valid = all(field in data for field in required_fields)
             
             self.log_test_result(
