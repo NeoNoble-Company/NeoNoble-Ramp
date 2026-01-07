@@ -1169,7 +1169,7 @@ class InternalPoRProvider(BaseProvider):
                     eur_equivalent=eur_equivalent,
                     tx_hash=tx_hash
                 )
-                ledger_entry_id = entry.entry_id
+                # Entry stored for audit trail (not directly passed downstream)
                 logger.info(f"[TREASURY] Crypto inflow recorded: {entry.entry_id} | {crypto_amount} {crypto_currency}")
             except Exception as e:
                 logger.error(f"[TREASURY] Failed to record crypto inflow: {e}")
