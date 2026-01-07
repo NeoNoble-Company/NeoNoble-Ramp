@@ -112,6 +112,13 @@ class InternalPoRProvider(BaseProvider):
         
         # Real payout service (optional - for real EUR payouts)
         self._real_payout_service = None
+        
+        # Liquidity services (Hybrid PoR Architecture - Phase 1)
+        self._treasury_service = None
+        self._exposure_service = None
+        self._routing_service = None
+        self._hedging_service = None
+        self._reconciliation_service = None
     
     def set_wallet_service(self, wallet_service):
         """Set wallet service for deposit address generation."""
@@ -129,6 +136,35 @@ class InternalPoRProvider(BaseProvider):
         """Set real payout service for EUR payouts via Stripe."""
         self._real_payout_service = payout_service
         logger.info("Real payout service configured for PoR engine")
+    
+    def set_liquidity_services(
+        self,
+        treasury_service=None,
+        exposure_service=None,
+        routing_service=None,
+        hedging_service=None,
+        reconciliation_service=None
+    ):
+        """
+        Set liquidity services for Hybrid PoR Architecture.
+        
+        Phase 1 Configuration:
+        - Treasury: REAL tracking
+        - Exposure: REAL tracking
+        - Routing: SHADOW mode (log-only)
+        - Hedging: SHADOW mode (audit-only proposals)
+        - Reconciliation: REAL audit ledger
+        """
+        self._treasury_service = treasury_service
+        self._exposure_service = exposure_service
+        self._routing_service = routing_service
+        self._hedging_service = hedging_service
+        self._reconciliation_service = reconciliation_service
+        logger.info(
+            "Liquidity services configured for PoR engine:\n"
+            "  Treasury: REAL | Exposure: REAL | Routing: SHADOW | "
+            "Hedging: SHADOW | Reconciliation: REAL"
+        )
     
     def set_settlement_mode(self, mode: SettlementMode):
         """Configure settlement mode."""
