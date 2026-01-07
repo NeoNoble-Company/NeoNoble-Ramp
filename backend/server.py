@@ -66,6 +66,7 @@ from services.por_engine import InternalPoRProvider
 from services.settlement_service import SettlementService
 from services.audit_logger import AuditLogger, set_audit_logger
 from services.webhook_service import WebhookService, set_webhook_service
+from services.real_payout_service import RealPayoutService, set_real_payout_service
 
 # Import database modules for PostgreSQL migration
 from database.dual_manager import get_dual_db_manager
@@ -81,6 +82,11 @@ from routes.por_api import router as por_router, set_por_engine
 from routes.webhook_routes import router as webhook_mgmt_router, set_hmac_middleware as set_webhook_hmac
 from routes.monitoring import router as monitoring_router, set_monitoring_services
 from routes.migration_control import router as migration_router
+from routes.stripe_payout_routes import (
+    router as stripe_payout_router,
+    set_payout_service as set_stripe_payout_service,
+    set_por_engine as set_stripe_por_engine
+)
 
 # Initialize services
 auth_service = AuthService(db)
@@ -93,10 +99,12 @@ por_engine = InternalPoRProvider(db)
 settlement_service = SettlementService(db)
 audit_logger = AuditLogger(db)
 webhook_service = WebhookService(db)
+real_payout_service = RealPayoutService(db)
 
 # Set global service instances
 set_audit_logger(audit_logger)
 set_webhook_service(webhook_service)
+set_real_payout_service(real_payout_service)
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)
@@ -105,6 +113,7 @@ ramp_service.set_payout_service(payout_service)
 por_engine.set_wallet_service(wallet_service)
 por_engine.set_audit_logger(audit_logger)
 por_engine.set_webhook_service(webhook_service)
+por_engine.set_real_payout_service(real_payout_service)
 
 # Wire up services to routes
 set_auth_service(auth_service)
@@ -113,6 +122,8 @@ set_ramp_api_services(ramp_service, api_key_service)
 set_ramp_service(ramp_service)
 set_payout_service(payout_service)
 set_por_engine(por_engine)
+set_stripe_payout_service(real_payout_service)
+set_stripe_por_engine(por_engine)
 
 # Import and wire PoR engine to user routes and ramp API routes
 from routes.user_ramp import set_por_engine as set_user_por_engine
