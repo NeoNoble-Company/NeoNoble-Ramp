@@ -23,7 +23,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/transak", tags=["Transak"])
+router = APIRouter(prefix="/transak", tags=["Transak"])
 
 
 # Request/Response Models
