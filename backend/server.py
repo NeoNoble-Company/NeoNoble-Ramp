@@ -127,6 +127,12 @@ from routes.audit_routes import router as audit_router
 # Import WebSocket routes
 from routes.websocket_routes import router as websocket_router
 
+# Import Price History routes
+from routes.price_history_routes import router as price_history_router
+
+# Import Notification routes
+from routes.notification_routes import router as notification_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
