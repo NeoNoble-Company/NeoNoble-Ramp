@@ -406,6 +406,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Email Service initialization failed: {e}")
     
+    # Initialize Audit Service (Transaction Timeline)
+    try:
+        await audit_service.initialize()
+        set_audit_service(audit_service)
+        logger.info("Audit Service initialized - Transaction timeline enabled")
+    except Exception as e:
+        logger.warning(f"Audit Service initialization failed: {e}")
+    
     # Initialize PostgreSQL and Dual Database Manager for migration
     try:
         pg_engine, pg_session_factory = await init_pg_engine()
