@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
-NeoNoble Ramp Backend API Test Suite - PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE
+NeoNoble Ramp Backend API Test Suite - C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION
 
-Performs comprehensive end-to-end testing of the Phase 1 Hybrid PoR Liquidity Architecture:
-- New Liquidity API Endpoints (Treasury, Exposure, Routing, Hedging, Reconciliation)
-- Complete Off-Ramp Flow with Liquidity Lifecycle Hooks
-- Liquidity Data Verification after Off-Ramp Flow
-- Financial Auditability (Treasury ledger integrity, exposure reconstructability)
+Performs comprehensive end-to-end testing of:
+- NEW: C-SAFE DEX Service API (Real Market Conversion)
+- NEW: Transak Widget Integration (On/Off-Ramp)
+- REGRESSION: Phase 1 Hybrid PoR Liquidity Architecture
 
 Test Environment:
 - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
-- Phase 1 Services:
+
+New Services (Phase 2):
+  * DEX Service - Real on-chain swaps (1inch + PancakeSwap) - DISABLED mode initially
+  * Transak Service - On/Off-ramp widget integration - DEMO mode (no API key)
+
+Existing Services (Phase 1 - Regression):
   * Treasury Service (REAL) - €100M virtual floor balance
   * Exposure Service (REAL) - Full lifecycle tracking
   * Routing Service (SHADOW) - Log-only market conversion simulation
