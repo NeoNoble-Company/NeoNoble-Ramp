@@ -280,7 +280,66 @@ class Phase2Phase3Tester:
         )
         
         return hedging_summary_valid and proposals_valid and events_valid
-        """Test DEX Service API endpoints as specified in the review request"""
+
+    async def test_existing_services_regression(self):
+        """Test existing services still work (regression testing)"""
+        logger.info("\n=== Testing Existing Services Regression ===")
+        
+        # Test 1: GET /api/liquidity/dashboard - Full dashboard
+        logger.info("Step 1: Test Liquidity Dashboard (Regression)")
+        success, data, status = await self.make_request("GET", "/liquidity/dashboard")
+        
+        dashboard_valid = False
+        if success and isinstance(data, dict):
+            services = data.get("services", {})
+            dashboard_valid = (
+                services.get("treasury") and
+                services.get("exposure") and
+                services.get("routing") and
+                services.get("hedging") and
+                services.get("reconciliation") and
+                data.get("mode") == "hybrid"
+            )
+        
+        self.log_test_result(
+            "Liquidity Dashboard (Regression)",
+            dashboard_valid,
+            f"Status: {status}, Services Active: {len(data.get('services', {})) if isinstance(data, dict) else 'N/A'}, Mode: {data.get('mode') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 2: GET /api/dex/status - DEX service
+        logger.info("Step 2: Test DEX Service Status (Regression)")
+        success, data, status = await self.make_request("GET", "/dex/status")
+        
+        dex_status_valid = False
+        if success and isinstance(data, dict):
+            enabled = data.get("enabled", True)  # Should be false initially
+            dex_status_valid = enabled is False  # DEX should be disabled initially
+        
+        self.log_test_result(
+            "DEX Service Status (Regression)",
+            dex_status_valid,
+            f"Status: {status}, Enabled: {data.get('enabled') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 3: GET /api/transak/status - Transak service
+        logger.info("Step 3: Test Transak Service Status (Regression)")
+        success, data, status = await self.make_request("GET", "/transak/status")
+        
+        transak_status_valid = False
+        if success and isinstance(data, dict):
+            configured = data.get("configured", True)  # Should be false without API key
+            transak_status_valid = configured is False  # Should be in demo mode
+        
+        self.log_test_result(
+            "Transak Service Status (Regression)",
+            transak_status_valid,
+            f"Status: {status}, Configured: {data.get('configured') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return dashboard_valid and dex_status_valid and transak_status_valid
+
+    async def test_dex_service_api(self):
         logger.info("\n=== Testing DEX Service API ===")
         
         # Test 1: GET /api/dex/status - Should return service status with enabled: false, web3_connected: true
