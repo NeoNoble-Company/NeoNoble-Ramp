@@ -10,6 +10,8 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import DevPortal from "./pages/DevPortal";
 import DevLogin from "./pages/DevLogin";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
