@@ -74,6 +74,15 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
 - **Conversion Wallet**: `0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E`
 - **Settlement Wallet**: `0xD91bFc93976054B9fF17672169F6AB558caBCf59`
 
+## $NENO Token Status (Verified March 9, 2026)
+- **Contract**: `0xeF3F5C1892A8d7A3304E4A15959E124402d69974` (BSC)
+- **Name**: NeoNoble Token
+- **Symbol**: $NENO
+- **Decimals**: 18
+- **Total Supply**: 999,885,554 NENO
+- **Fixed Price**: €10,000 per NENO
+- **Trading**: Via NeoNoble PoR engine only (no public DEX pools)
+
 ## Live Trading Status (Updated March 9, 2026)
 | Service | Status |
 |---------|--------|
