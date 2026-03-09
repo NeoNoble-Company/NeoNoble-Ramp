@@ -43,6 +43,100 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
   const [showWidget, setShowWidget] = useState(false);
   const [status, setStatus] = useState(null);
   const [orderId, setOrderId] = useState(null);
+  const [auditSessionId, setAuditSessionId] = useState(null);
+  const [showTimeline, setShowTimeline] = useState(false);
+
+  // Create audit session when widget opens
+  const createAuditSession = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/audit/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          user_id: user?.id || 'guest',
+          product_type: mode,
+          metadata: { initial_mode: mode }
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAuditSessionId(data.session_id);
+        console.log('[AUDIT] Session created:', data.session_id);
+      }
+    } catch (err) {
+      console.error('[AUDIT] Failed to create session:', err);
+    }
+  };
+
+  // Log audit event
+  const logAuditEvent = async (eventType, description = '', metadata = {}) => {
+    if (!auditSessionId) return;
+    
+    try {
+      await fetch(`${BACKEND_URL}/api/audit/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          session_id: auditSessionId,
+          event_type: eventType,
+          description,
+          order_id: orderId,
+          metadata
+        })
+      });
+    } catch (err) {
+      console.error('[AUDIT] Failed to log event:', err);
+    }
+  };
+
+  // Close audit session
+  const closeAuditSession = async (finalStatus = 'completed') => {
+    if (!auditSessionId) return;
+    
+    try {
+      await fetch(`${BACKEND_URL}/api/audit/sessions/close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          session_id: auditSessionId,
+          status: finalStatus,
+          summary: {
+            mode,
+            fiat_currency: fiatCurrency,
+            crypto_currency: cryptoCurrency,
+            amount,
+            order_id: orderId
+          }
+        })
+      });
+    } catch (err) {
+      console.error('[AUDIT] Failed to close session:', err);
+    }
+  };
+
+  // Create audit session when modal opens
+  useEffect(() => {
+    if (isOpen && !auditSessionId) {
+      createAuditSession();
+    }
+  }, [isOpen]);
+
+  // Log mode changes
+  useEffect(() => {
+    if (auditSessionId && mode) {
+      logAuditEvent('mode_selected', `Mode changed to ${mode}`, { mode });
+    }
+  }, [mode, auditSessionId]);
 
   // Generate widget URL
   const generateWidgetUrl = async () => {
