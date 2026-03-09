@@ -104,6 +104,10 @@ from routes.stripe_payout_routes import (
 )
 from routes.liquidity_routes import router as liquidity_router
 
+# Import DEX and Transak routes
+from routes.dex_routes import router as dex_router
+from routes.transak_routes import router as transak_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
