@@ -33,6 +33,10 @@ export default function Dashboard() {
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Transak widget states
+  const [transakOpen, setTransakOpen] = useState(false);
+  const [transakMode, setTransakMode] = useState('BUY');
 
   useEffect(() => {
     loadPrices();
