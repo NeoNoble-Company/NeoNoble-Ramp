@@ -164,10 +164,67 @@ class ConnectorManager:
         """Get a specific exchange connector."""
         return self._connectors.get(exchange)
     
+    def _is_neno_symbol(self, symbol: str) -> bool:
+        """Check if symbol is a NENO trading pair."""
+        return 'NENO' in symbol.upper()
+    
+    async def get_ticker(self, symbol: str, venue: str = None) -> Optional[MarketTicker]:
+        """
+        Get ticker for a symbol from a specific venue or best available.
+        
+        For NENO pairs, returns data from the virtual NENO exchange.
+        """
+        # Handle NENO pairs via virtual exchange
+        if self._is_neno_symbol(symbol):
+            neno_ticker = self._neno_exchange.get_ticker(symbol)
+            if neno_ticker:
+                return MarketTicker(
+                    symbol=neno_ticker.symbol,
+                    bid=neno_ticker.bid,
+                    ask=neno_ticker.ask,
+                    last=neno_ticker.last,
+                    volume_24h=neno_ticker.volume_24h,
+                    high_24h=neno_ticker.high_24h,
+                    low_24h=neno_ticker.low_24h,
+                    timestamp=neno_ticker.timestamp
+                )
+            return None
+        
+        # For non-NENO pairs, use regular connectors
+        if venue:
+            connector = self._connectors.get(venue)
+            if connector and connector.is_connected():
+                return await connector.get_ticker(symbol)
+            return None
+        
+        # Get from any connected venue
+        for name, connector in self._connectors.items():
+            if connector.is_connected():
+                ticker = await connector.get_ticker(symbol)
+                if ticker:
+                    return ticker
+        
+        return None
+    
     async def get_best_price(self, symbol: str) -> Tuple[Optional[MarketTicker], str]:
         """Get best price across all connected venues."""
         best_ticker = None
         best_venue = ""
+        
+        # Handle NENO pairs via virtual exchange
+        if self._is_neno_symbol(symbol):
+            neno_ticker = self._neno_exchange.get_ticker(symbol)
+            if neno_ticker:
+                return MarketTicker(
+                    symbol=neno_ticker.symbol,
+                    bid=neno_ticker.bid,
+                    ask=neno_ticker.ask,
+                    last=neno_ticker.last,
+                    volume_24h=neno_ticker.volume_24h,
+                    high_24h=neno_ticker.high_24h,
+                    low_24h=neno_ticker.low_24h,
+                    timestamp=neno_ticker.timestamp
+                ), "neno_exchange"
         
         for name, connector in self._connectors.items():
             if not connector.is_connected():
