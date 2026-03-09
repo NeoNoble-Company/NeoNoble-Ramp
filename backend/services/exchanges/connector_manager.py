@@ -25,6 +25,7 @@ from .base_connector import (
 )
 from .binance_connector import BinanceConnector
 from .kraken_connector import KrakenConnector
+from .coinbase_connector import CoinbaseConnector
 
 logger = logging.getLogger(__name__)
 
