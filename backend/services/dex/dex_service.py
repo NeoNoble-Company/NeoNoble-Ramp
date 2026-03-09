@@ -502,7 +502,6 @@ class DEXService:
     ) -> SwapResult:
         """Execute swap via 1inch Aggregator."""
         swap_id = f"swap_{uuid4().hex[:12]}"
-        now = datetime.now(timezone.utc)
         
         result = SwapResult(
             swap_id=swap_id,
