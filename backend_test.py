@@ -766,24 +766,33 @@ class CSafeDexTransakTester:
         
         return integrity_valid and (reconstruct_valid if self.exposure_id else True)
 
-    async def run_hybrid_liquidity_architecture_tests(self):
-        """Run all Phase 1 Hybrid PoR Liquidity Architecture tests"""
-        logger.info("🚀 Starting PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE TESTING")
+    async def run_csafe_dex_transak_tests(self):
+        """Run all C-SAFE DEX Off-Ramp + Transak Widget Integration tests"""
+        logger.info("🚀 Starting C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING")
         logger.info(f"Testing against: {BACKEND_URL}")
-        logger.info("Phase 1 Services:")
+        logger.info("New Services (Phase 2):")
+        logger.info("  - DEX Service - Real on-chain swaps (1inch + PancakeSwap) - DISABLED mode initially")
+        logger.info("  - Transak Service - On/Off-ramp widget integration - DEMO mode (no API key)")
+        logger.info("Existing Services (Phase 1 - Regression):")
         logger.info("  - Treasury Service (REAL) - €100M virtual floor balance")
         logger.info("  - Exposure Service (REAL) - Full lifecycle tracking")
         logger.info("  - Routing Service (SHADOW) - Log-only market conversion simulation")
         logger.info("  - Hedging Service (SHADOW) - Policy evaluation and proposals")
         logger.info("  - Reconciliation Service (REAL) - Coverage events and audit ledger")
         
-        # Phase 1 Hybrid Liquidity Architecture Test sequence
+        # C-SAFE DEX Off-Ramp + Transak Widget Integration Test sequence
         tests = [
-            ("Liquidity API Endpoints", self.test_liquidity_api_endpoints),
+            # New Services Testing
+            ("DEX Service API", self.test_dex_service_api),
+            ("Transak Service API", self.test_transak_service_api),
+            ("Transak Order Flow", self.test_transak_order_flow),
+            
+            # Regression Testing (Existing Liquidity Services)
+            ("Liquidity API Endpoints (Regression)", self.test_liquidity_api_endpoints),
             ("User Authentication", self.test_user_authentication),
-            ("Complete Off-Ramp Flow with Liquidity Hooks", self.test_complete_offramp_flow_with_liquidity_hooks),
-            ("Liquidity Data Verification", self.test_liquidity_data_verification),
-            ("Financial Auditability", self.test_financial_auditability),
+            ("Complete Off-Ramp Flow with Liquidity Hooks (Regression)", self.test_complete_offramp_flow_with_liquidity_hooks),
+            ("Liquidity Data Verification (Regression)", self.test_liquidity_data_verification),
+            ("Financial Auditability (Regression)", self.test_financial_auditability),
         ]
         
         for test_name, test_func in tests:
@@ -795,12 +804,14 @@ class CSafeDexTransakTester:
         
         # Summary
         logger.info("\n" + "="*80)
-        logger.info("PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE TESTING SUMMARY")
+        logger.info("C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING SUMMARY")
         logger.info("="*80)
         
         passed = 0
         failed = 0
         critical_failures = []
+        new_service_failures = []
+        regression_failures = []
         
         for test_name, result in self.test_results.items():
             status = "✅ PASS" if result["success"] else "❌ FAIL"
@@ -808,6 +819,12 @@ class CSafeDexTransakTester:
             if not result["success"] and result["details"]:
                 logger.info(f"    Error: {result['details']}")
                 critical_failures.append(test_name)
+                
+                # Categorize failures
+                if any(keyword in test_name.lower() for keyword in ["dex", "transak"]):
+                    new_service_failures.append(test_name)
+                elif "regression" in test_name.lower():
+                    regression_failures.append(test_name)
             
             if result["success"]:
                 passed += 1
@@ -817,13 +834,22 @@ class CSafeDexTransakTester:
         logger.info(f"\nTotal: {passed + failed}, Passed: {passed}, Failed: {failed}")
         
         if critical_failures:
-            logger.error(f"\n🚨 CRITICAL LIQUIDITY ARCHITECTURE FAILURES: {critical_failures}")
-            logger.error("❌ Phase 1 Hybrid PoR Liquidity Architecture testing FAILED")
+            logger.error(f"\n🚨 CRITICAL FAILURES:")
+            if new_service_failures:
+                logger.error(f"   NEW SERVICES: {new_service_failures}")
+            if regression_failures:
+                logger.error(f"   REGRESSIONS: {regression_failures}")
+            logger.error("❌ C-SAFE DEX Off-Ramp + Transak Widget Integration testing FAILED")
         else:
-            logger.info(f"\n✅ PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE TESTING COMPLETE")
-            logger.info("🏆 TREASURY, EXPOSURE, AND RECONCILIATION SERVICES VERIFIED (REAL)")
-            logger.info("🎯 ROUTING AND HEDGING SERVICES VERIFIED (SHADOW MODE)")
-            logger.info("🔒 FINANCIAL AUDITABILITY AND LEDGER INTEGRITY CONFIRMED")
+            logger.info(f"\n✅ C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING COMPLETE")
+            logger.info("🏆 NEW SERVICES VERIFIED:")
+            logger.info("   - DEX Service API (Disabled Mode)")
+            logger.info("   - Transak Service API (Demo Mode)")
+            logger.info("   - Transak Order Flow")
+            logger.info("🔄 REGRESSION TESTS PASSED:")
+            logger.info("   - Treasury, Exposure, and Reconciliation Services (REAL)")
+            logger.info("   - Routing and Hedging Services (SHADOW MODE)")
+            logger.info("   - Financial Auditability and Ledger Integrity")
         
         return self.test_results
 
