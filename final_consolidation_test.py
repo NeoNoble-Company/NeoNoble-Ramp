@@ -14,7 +14,7 @@ import hashlib
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-BACKEND_URL = "https://transak-audit.preview.emergentagent.com/api"
+BACKEND_URL = "https://crypto-liquidity-1.preview.emergentagent.com/api"
 
 async def test_working_consolidation_features():
     """Test working consolidation features"""

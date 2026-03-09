@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 SENDER_NAME = os.environ.get('SENDER_NAME', 'NeoNoble Ramp')
-APP_URL = os.environ.get('APP_URL', 'https://transak-audit.preview.emergentagent.com')
+APP_URL = os.environ.get('APP_URL', 'https://crypto-liquidity-1.preview.emergentagent.com')
 
 
 class EmailService:
