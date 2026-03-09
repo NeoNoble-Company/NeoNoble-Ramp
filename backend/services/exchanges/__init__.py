@@ -9,6 +9,7 @@ Provides real exchange connectivity for:
 Supported Exchanges:
 - Binance (primary)
 - Kraken (fallback)
+- Coinbase (additional venue)
 """
 
 from .base_connector import (
@@ -23,6 +24,7 @@ from .base_connector import (
 
 from .binance_connector import BinanceConnector
 from .kraken_connector import KrakenConnector
+from .coinbase_connector import CoinbaseConnector
 from .connector_manager import ConnectorManager, get_connector_manager, set_connector_manager
 
 __all__ = [
@@ -35,6 +37,7 @@ __all__ = [
     'MarketTicker',
     'BinanceConnector',
     'KrakenConnector',
+    'CoinbaseConnector',
     'ConnectorManager',
     'get_connector_manager',
     'set_connector_manager'
