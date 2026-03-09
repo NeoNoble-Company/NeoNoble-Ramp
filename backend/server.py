@@ -388,6 +388,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Transak Service initialization failed: {e}")
     
+    # Initialize Email Service (Password Reset)
+    try:
+        await email_service.initialize()
+        set_email_service(email_service)
+        set_password_reset_db(db)
+        logger.info("Email Service initialized - Password reset enabled")
+    except Exception as e:
+        logger.warning(f"Email Service initialization failed: {e}")
+    
     # Initialize PostgreSQL and Dual Database Manager for migration
     try:
         pg_engine, pg_session_factory = await init_pg_engine()
