@@ -854,21 +854,21 @@ class CSafeDexTransakTester:
         return self.test_results
 
     async def run_all_tests(self):
-        """Run Phase 1 Hybrid PoR Liquidity Architecture tests"""
-        return await self.run_hybrid_liquidity_architecture_tests()
+        """Run C-SAFE DEX Off-Ramp + Transak Widget Integration tests"""
+        return await self.run_csafe_dex_transak_tests()
 
 async def main():
-    """Main test runner for Phase 1 Hybrid PoR Liquidity Architecture testing"""
-    async with HybridLiquidityArchitectureTester() as tester:
-        results = await tester.run_hybrid_liquidity_architecture_tests()
+    """Main test runner for C-SAFE DEX Off-Ramp + Transak Widget Integration testing"""
+    async with CSafeDexTransakTester() as tester:
+        results = await tester.run_csafe_dex_transak_tests()
         
         # Return exit code based on results
         failed_tests = [name for name, result in results.items() if not result["success"]]
         if failed_tests:
-            logger.error(f"\n❌ {len(failed_tests)} liquidity architecture tests failed")
+            logger.error(f"\n❌ {len(failed_tests)} tests failed")
             return 1
         else:
-            logger.info(f"\n✅ All liquidity architecture tests passed!")
+            logger.info(f"\n✅ All tests passed!")
             return 0
 
 if __name__ == "__main__":
