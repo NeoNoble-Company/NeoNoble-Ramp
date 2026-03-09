@@ -125,4 +125,6 @@ test_plan:
 agent_communication:
   - agent: "testing"
     message: "Password Reset feature testing completed successfully. All backend APIs are working correctly. Fixed password hashing inconsistency between auth service and password routes. Email service logs operations correctly even without API key. Token expiry set to 1 hour as expected. All core functionality verified including user creation, password reset requests, token verification, password changes, and login verification."
+  - agent: "testing"
+    message: "✅ Frontend Password Reset Testing Complete: Both Forgot Password and Reset Password pages are fully implemented and working correctly. Login page has proper 'Password dimenticata?' link, forgot password flow works with email submission and success state display, and reset password page handles token verification and password updates. All UI elements present and functional as expected."
 
