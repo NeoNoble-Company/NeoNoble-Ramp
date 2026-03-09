@@ -148,6 +148,9 @@ connector_manager = ConnectorManager(db)
 # Initialize Transak service (On/Off-Ramp Widget)
 transak_service = TransakService(db)
 
+# Initialize Email service (Password Reset)
+email_service = EmailService()
+
 # Set global service instances
 set_audit_logger(audit_logger)
 set_webhook_service(webhook_service)
