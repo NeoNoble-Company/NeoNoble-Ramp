@@ -207,7 +207,7 @@ async def reset_password(
         {"email": email},
         {
             "$set": {
-                "password": new_password_hash,
+                "password_hash": new_password_hash,
                 "password_updated_at": now.isoformat()
             }
         }
