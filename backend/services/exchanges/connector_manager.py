@@ -423,6 +423,101 @@ class ConnectorManager:
             client_order_id=f"shadow_{reason}"
         )
     
+    async def _execute_neno_order(
+        self,
+        symbol: str,
+        side: OrderSide,
+        quantity: float,
+        order_type: OrderType,
+        price: Optional[float],
+        client_order_id: Optional[str]
+    ) -> Tuple[ExchangeOrder, Optional[str]]:
+        """
+        Execute an order for NENO via the virtual exchange.
+        
+        NENO orders are always executed (no shadow mode check)
+        as they are managed by the platform directly.
+        """
+        try:
+            side_str = side.value if isinstance(side, OrderSide) else side
+            
+            if order_type == OrderType.MARKET:
+                neno_order = self._neno_exchange.place_market_order(
+                    exchange='neno_exchange',
+                    symbol=symbol,
+                    side=side_str,
+                    quantity=quantity,
+                    user_id='system'
+                )
+            else:
+                if price is None:
+                    ticker = self._neno_exchange.get_ticker(symbol)
+                    price = ticker.ask if side_str == 'buy' else ticker.bid
+                
+                neno_order = self._neno_exchange.place_limit_order(
+                    exchange='neno_exchange',
+                    symbol=symbol,
+                    side=side_str,
+                    quantity=quantity,
+                    price=price,
+                    user_id='system'
+                )
+            
+            # Convert to ExchangeOrder
+            status_map = {
+                'filled': OrderStatus.FILLED,
+                'open': OrderStatus.OPEN,
+                'cancelled': OrderStatus.CANCELLED,
+                'pending': OrderStatus.PENDING
+            }
+            
+            order = ExchangeOrder(
+                order_id=neno_order.order_id,
+                exchange='neno_exchange',
+                symbol=symbol,
+                side=OrderSide(side_str),
+                order_type=order_type,
+                status=status_map.get(neno_order.status, OrderStatus.PENDING),
+                quantity=quantity,
+                price=neno_order.price,
+                filled_quantity=neno_order.filled_quantity,
+                average_price=neno_order.average_price,
+                exchange_order_id=neno_order.order_id,
+                client_order_id=client_order_id
+            )
+            
+            # Save to database
+            await self.orders_collection.insert_one({
+                "order_id": order.order_id,
+                "exchange": "neno_exchange",
+                "symbol": symbol,
+                "side": side_str,
+                "order_type": order_type.value,
+                "status": neno_order.status,
+                "quantity": quantity,
+                "price": neno_order.price,
+                "filled_quantity": neno_order.filled_quantity,
+                "average_price": neno_order.average_price,
+                "fee": neno_order.fee,
+                "created_at": neno_order.created_at,
+                "filled_at": neno_order.filled_at,
+                "is_neno": True
+            })
+            
+            logger.info(
+                f"[NENO] Order executed: {order.order_id} | "
+                f"{side_str.upper()} {quantity:.4f} NENO @ €{neno_order.price:,.2f}"
+            )
+            
+            return order, None
+            
+        except Exception as e:
+            logger.error(f"[NENO] Order execution error: {e}")
+            return self._create_shadow_order(
+                symbol, side, quantity, order_type, price,
+                "neno_error", str(e)
+            ), str(e)
+    
     async def enable_live_trading(self, user_id: str = None):
         """Enable live trading (disable shadow mode)."""
         self._shadow_mode = False
