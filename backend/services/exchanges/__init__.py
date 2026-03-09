@@ -10,6 +10,7 @@ Supported Exchanges:
 - Binance (primary)
 - Kraken (fallback)
 - Coinbase (additional venue)
+- NENO Virtual Exchange (platform-managed)
 """
 
 from .base_connector import (
@@ -25,6 +26,7 @@ from .base_connector import (
 from .binance_connector import BinanceConnector
 from .kraken_connector import KrakenConnector
 from .coinbase_connector import CoinbaseConnector
+from .neno_virtual_exchange import NenoVirtualExchange, get_neno_exchange
 from .connector_manager import ConnectorManager, get_connector_manager, set_connector_manager
 
 __all__ = [
@@ -38,6 +40,8 @@ __all__ = [
     'BinanceConnector',
     'KrakenConnector',
     'CoinbaseConnector',
+    'NenoVirtualExchange',
+    'get_neno_exchange',
     'ConnectorManager',
     'get_connector_manager',
     'set_connector_manager'
