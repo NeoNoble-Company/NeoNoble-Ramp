@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, CandlestickSeries, HistogramSeries, ColorType, CrosshairMode } from 'lightweight-charts';
+import { createChart } from 'lightweight-charts';
 import {
   TrendingUp,
   TrendingDown,
-  BarChart3,
   Clock,
   RefreshCw,
   Maximize2,
@@ -30,8 +29,7 @@ export default function NenoCandlestickChart({
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
-  const candlestickSeriesRef = useRef(null);
-  const volumeSeriesRef = useRef(null);
+  const seriesRef = useRef(null);
   
   const [timeframe, setTimeframe] = useState('1h');
   const [loading, setLoading] = useState(true);
@@ -53,32 +51,19 @@ export default function NenoCandlestickChart({
       
       const data = await response.json();
       
-      // Transform data for lightweight-charts
+      // Transform data - use date string format for v5
       const candles = data.candles.map(c => ({
-        time: Math.floor(c.timestamp / 1000), // Convert to seconds
+        time: Math.floor(c.timestamp / 1000),
         open: c.open,
         high: c.high,
         low: c.low,
         close: c.close
       }));
       
-      const volumes = data.candles.map(c => ({
-        time: Math.floor(c.timestamp / 1000),
-        value: c.volume,
-        color: c.close >= c.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
-      }));
-      
       // Update chart
-      if (candlestickSeriesRef.current) {
-        candlestickSeriesRef.current.setData(candles);
-      }
-      if (volumeSeriesRef.current) {
-        volumeSeriesRef.current.setData(volumes);
-      }
-      
-      // Fit content
-      if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
+      if (seriesRef.current && candles.length > 0) {
+        seriesRef.current.setData(candles);
+        chartRef.current?.timeScale().fitContent();
       }
       
     } catch (err) {
@@ -106,10 +91,9 @@ export default function NenoCandlestickChart({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Chart options
-    const chartOptions = {
+    const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
+        background: { color: 'transparent' },
         textColor: '#9CA3AF'
       },
       grid: {
@@ -117,7 +101,6 @@ export default function NenoCandlestickChart({
         horzLines: { color: 'rgba(55, 65, 81, 0.3)' }
       },
       crosshair: {
-        mode: CrosshairMode.Normal,
         vertLine: {
           color: '#6366F1',
           width: 1,
@@ -137,33 +120,15 @@ export default function NenoCandlestickChart({
         secondsVisible: false
       },
       rightPriceScale: {
-        borderColor: 'rgba(55, 65, 81, 0.5)',
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.2
-        }
+        borderColor: 'rgba(55, 65, 81, 0.5)'
       },
-      handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true
-      },
-      handleScale: {
-        axisPressedMouseMove: true,
-        mouseWheel: true,
-        pinch: true
-      }
-    };
-
-    // Create chart
-    const chart = createChart(chartContainerRef.current, {
-      ...chartOptions,
       width: chartContainerRef.current.clientWidth,
       height: compact ? 200 : height
     });
     chartRef.current = chart;
 
-    // Candlestick series (v5 API)
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+    // Add candlestick series
+    const series = chart.addCandlestickSeries({
       upColor: '#22C55E',
       downColor: '#EF4444',
       borderUpColor: '#22C55E',
@@ -171,20 +136,7 @@ export default function NenoCandlestickChart({
       wickUpColor: '#22C55E',
       wickDownColor: '#EF4444'
     });
-    candlestickSeriesRef.current = candlestickSeries;
-
-    // Volume series (v5 API)
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: {
-        type: 'volume'
-      },
-      priceScaleId: '',
-      scaleMargins: {
-        top: 0.85,
-        bottom: 0
-      }
-    });
-    volumeSeriesRef.current = volumeSeries;
+    seriesRef.current = series;
 
     // Resize handler
     const handleResize = () => {
@@ -196,7 +148,6 @@ export default function NenoCandlestickChart({
     };
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       chart.remove();
@@ -208,7 +159,6 @@ export default function NenoCandlestickChart({
     fetchCandles();
     fetchStats();
 
-    // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
       fetchCandles();
       fetchStats();
@@ -216,16 +166,6 @@ export default function NenoCandlestickChart({
 
     return () => clearInterval(interval);
   }, [fetchCandles, fetchStats]);
-
-  // Toggle fullscreen
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-    if (chartRef.current && chartContainerRef.current) {
-      chartRef.current.applyOptions({
-        height: isFullscreen ? (compact ? 200 : height) : window.innerHeight - 200
-      });
-    }
-  };
 
   const priceChange = priceStats?.change_pct_24h || 0;
   const isPositive = priceChange >= 0;
@@ -265,13 +205,6 @@ export default function NenoCandlestickChart({
                   <span>
                     {isPositive ? '+' : ''}{priceChange.toFixed(2)}% (24h)
                   </span>
-                  <span className="text-gray-500">|</span>
-                  <span className="text-gray-400">
-                    H: €{priceStats.high_24h?.toLocaleString()}
-                  </span>
-                  <span className="text-gray-400">
-                    L: €{priceStats.low_24h?.toLocaleString()}
-                  </span>
                 </div>
               )}
             </div>
@@ -306,7 +239,7 @@ export default function NenoCandlestickChart({
             </button>
             
             <button
-              onClick={toggleFullscreen}
+              onClick={() => setIsFullscreen(!isFullscreen)}
               className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
               data-testid="fullscreen-btn"
             >
@@ -359,9 +292,15 @@ export default function NenoCandlestickChart({
             </span>
           </div>
           <div>
-            <span className="text-gray-500 block">Variazione 24h</span>
-            <span className={`font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-              {isPositive ? '+' : ''}€{priceStats.change_24h?.toLocaleString()}
+            <span className="text-gray-500 block">High 24h</span>
+            <span className="text-green-400 font-medium">
+              €{priceStats.high_24h?.toLocaleString()}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-500 block">Low 24h</span>
+            <span className="text-red-400 font-medium">
+              €{priceStats.low_24h?.toLocaleString()}
             </span>
           </div>
           <div>
@@ -369,12 +308,6 @@ export default function NenoCandlestickChart({
             <span className="text-white font-medium flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {TIMEFRAMES.find(t => t.value === timeframe)?.label}
-            </span>
-          </div>
-          <div>
-            <span className="text-gray-500 block">Ultimo aggiornamento</span>
-            <span className="text-white font-medium">
-              {new Date().toLocaleTimeString('it-IT')}
             </span>
           </div>
         </div>
