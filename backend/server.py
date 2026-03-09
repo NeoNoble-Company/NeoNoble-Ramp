@@ -86,6 +86,9 @@ from services.exchanges import ConnectorManager, set_connector_manager
 # Import Transak service (On/Off-Ramp Widget)
 from services.transak_service import TransakService, set_transak_service
 
+# Import Email service (Password Reset)
+from services.email_service import EmailService, set_email_service
+
 # Import database modules for PostgreSQL migration
 from database.dual_manager import get_dual_db_manager
 from database.config import get_pg_session_factory, init_pg_engine
