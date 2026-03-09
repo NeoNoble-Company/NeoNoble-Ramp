@@ -102,6 +102,246 @@ class CSafeDexTransakTester:
             "details": details
         }
 
+    async def test_dex_service_api(self):
+        """Test DEX Service API endpoints as specified in the review request"""
+        logger.info("\n=== Testing DEX Service API ===")
+        
+        # Test 1: GET /api/dex/status - Should return service status with enabled: false, web3_connected: true
+        logger.info("Step 1: Test DEX Service Status")
+        success, data, status = await self.make_request("GET", "/dex/status")
+        
+        dex_status_valid = False
+        if success and isinstance(data, dict):
+            enabled = data.get("enabled", True)  # Should be false initially
+            web3_connected = data.get("web3_connected", False)  # Should be true if configured
+            dex_status_valid = enabled is False  # DEX should be disabled initially
+        
+        self.log_test_result(
+            "DEX Service Status (Disabled Mode)",
+            dex_status_valid,
+            f"Status: {status}, Enabled: {data.get('enabled') if isinstance(data, dict) else 'N/A'}, Web3 Connected: {data.get('web3_connected') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 2: POST /api/dex/quote - Test with payload: {"source_token": "NENO", "destination_token": "USDT", "amount": 1.0}
+        logger.info("Step 2: Test DEX Quote Request")
+        quote_payload = {
+            "source_token": "NENO",
+            "destination_token": "USDT", 
+            "amount": 1.0
+        }
+        success, data, status = await self.make_request("POST", "/dex/quote", quote_payload)
+        
+        dex_quote_valid = False
+        if success and isinstance(data, dict):
+            # Should return quote data even in disabled mode
+            quote_id = data.get("quote_id")
+            source_amount = data.get("source_amount")
+            destination_amount = data.get("destination_amount")
+            dex_quote_valid = bool(quote_id and source_amount and destination_amount)
+        elif status == 503:
+            # Service not available is also acceptable for disabled mode
+            dex_quote_valid = True
+        
+        self.log_test_result(
+            "DEX Quote Request (NENO → USDT)",
+            dex_quote_valid,
+            f"Status: {status}, Quote ID: {data.get('quote_id') if isinstance(data, dict) else 'N/A'}, Source: {data.get('source_amount') if isinstance(data, dict) else 'N/A'}, Dest: {data.get('destination_amount') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 3: GET /api/dex/conversions - Should return empty list initially
+        logger.info("Step 3: Test DEX Conversions History")
+        success, data, status = await self.make_request("GET", "/dex/conversions")
+        
+        dex_conversions_valid = False
+        if success and isinstance(data, dict):
+            swaps = data.get("swaps", [])
+            count = data.get("count", 0)
+            dex_conversions_valid = isinstance(swaps, list) and count >= 0
+        
+        self.log_test_result(
+            "DEX Conversions History",
+            dex_conversions_valid,
+            f"Status: {status}, Swaps Count: {data.get('count') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 4: GET /api/dex/admin/config - Should return DEX configuration
+        logger.info("Step 4: Test DEX Admin Configuration")
+        success, data, status = await self.make_request("GET", "/dex/admin/config")
+        
+        dex_config_valid = False
+        if success and isinstance(data, dict):
+            # Should return config object (may be empty if not configured)
+            dex_config_valid = True
+        elif status == 404:
+            # No config found is also acceptable
+            dex_config_valid = True
+        
+        self.log_test_result(
+            "DEX Admin Configuration",
+            dex_config_valid,
+            f"Status: {status}, Config Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return dex_status_valid and dex_quote_valid and dex_conversions_valid and dex_config_valid
+
+    async def test_transak_service_api(self):
+        """Test Transak Service API endpoints as specified in the review request"""
+        logger.info("\n=== Testing Transak Service API ===")
+        
+        # Test 1: GET /api/transak/status - Should return service status
+        logger.info("Step 1: Test Transak Service Status")
+        success, data, status = await self.make_request("GET", "/transak/status")
+        
+        transak_status_valid = False
+        if success and isinstance(data, dict):
+            configured = data.get("configured", True)  # Should be false without API key
+            environment = data.get("environment")
+            transak_status_valid = configured is False  # Should be in demo mode
+        
+        self.log_test_result(
+            "Transak Service Status (Demo Mode)",
+            transak_status_valid,
+            f"Status: {status}, Configured: {data.get('configured') if isinstance(data, dict) else 'N/A'}, Environment: {data.get('environment') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 2: POST /api/transak/widget-url - Test with payload: {"product_type": "BUY", "fiat_currency": "EUR", "crypto_currency": "USDT", "network": "bsc"}
+        logger.info("Step 2: Test Transak Widget URL Generation")
+        widget_payload = {
+            "product_type": "BUY",
+            "fiat_currency": "EUR",
+            "crypto_currency": "USDT",
+            "network": "bsc"
+        }
+        success, data, status = await self.make_request("POST", "/transak/widget-url", widget_payload)
+        
+        transak_widget_valid = False
+        if success and isinstance(data, dict):
+            widget_url = data.get("widget_url")
+            product_type = data.get("product_type")
+            environment = data.get("environment")
+            transak_widget_valid = bool(widget_url and product_type == "BUY")
+        elif status == 503:
+            # Service not configured is acceptable for demo mode
+            transak_widget_valid = True
+        
+        self.log_test_result(
+            "Transak Widget URL Generation",
+            transak_widget_valid,
+            f"Status: {status}, Widget URL: {'Present' if isinstance(data, dict) and data.get('widget_url') else 'N/A'}, Product Type: {data.get('product_type') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 3: GET /api/transak/currencies/fiat - Should return supported fiat currencies
+        logger.info("Step 3: Test Transak Fiat Currencies")
+        success, data, status = await self.make_request("GET", "/transak/currencies/fiat")
+        
+        transak_fiat_valid = False
+        if success and isinstance(data, dict):
+            currencies = data.get("currencies", [])
+            transak_fiat_valid = isinstance(currencies, list) and len(currencies) > 0
+            # Check for EUR support
+            eur_found = any(c.get("code") == "EUR" for c in currencies)
+            transak_fiat_valid = transak_fiat_valid and eur_found
+        
+        self.log_test_result(
+            "Transak Fiat Currencies",
+            transak_fiat_valid,
+            f"Status: {status}, Currencies Count: {len(data.get('currencies', [])) if isinstance(data, dict) else 'N/A'}, EUR Supported: {any(c.get('code') == 'EUR' for c in data.get('currencies', [])) if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 4: GET /api/transak/currencies/crypto - Should return supported crypto currencies
+        logger.info("Step 4: Test Transak Crypto Currencies")
+        success, data, status = await self.make_request("GET", "/transak/currencies/crypto")
+        
+        transak_crypto_valid = False
+        if success and isinstance(data, dict):
+            currencies = data.get("currencies", [])
+            transak_crypto_valid = isinstance(currencies, list) and len(currencies) > 0
+            # Check for USDT support
+            usdt_found = any(c.get("code") == "USDT" for c in currencies)
+            transak_crypto_valid = transak_crypto_valid and usdt_found
+        
+        self.log_test_result(
+            "Transak Crypto Currencies",
+            transak_crypto_valid,
+            f"Status: {status}, Currencies Count: {len(data.get('currencies', [])) if isinstance(data, dict) else 'N/A'}, USDT Supported: {any(c.get('code') == 'USDT' for c in data.get('currencies', [])) if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return transak_status_valid and transak_widget_valid and transak_fiat_valid and transak_crypto_valid
+
+    async def test_transak_order_flow(self):
+        """Test Transak order creation flow as specified in the review request"""
+        logger.info("\n=== Testing Transak Order Flow ===")
+        
+        # Test 1: POST /api/transak/orders - Create order with: {"user_id": "test123", "product_type": "BUY", "fiat_currency": "EUR", "crypto_currency": "USDT", "fiat_amount": 100}
+        logger.info("Step 1: Create Transak Order")
+        order_payload = {
+            "user_id": "test123",
+            "product_type": "BUY",
+            "fiat_currency": "EUR",
+            "crypto_currency": "USDT",
+            "fiat_amount": 100
+        }
+        success, data, status = await self.make_request("POST", "/transak/orders", order_payload)
+        
+        order_create_valid = False
+        if success and isinstance(data, dict):
+            self.transak_order_id = data.get("order_id")
+            user_id = data.get("user_id")
+            product_type = data.get("product_type")
+            fiat_amount = data.get("fiat_amount")
+            order_create_valid = (
+                self.transak_order_id and
+                user_id == "test123" and
+                product_type == "BUY" and
+                fiat_amount == 100
+            )
+        
+        self.log_test_result(
+            "Create Transak Order",
+            order_create_valid,
+            f"Status: {status}, Order ID: {self.transak_order_id}, User: {data.get('user_id') if isinstance(data, dict) else 'N/A'}, Amount: €{data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not order_create_valid:
+            return False
+        
+        # Test 2: GET /api/transak/orders/{order_id} - Retrieve the created order
+        logger.info("Step 2: Retrieve Transak Order by ID")
+        success, data, status = await self.make_request("GET", f"/transak/orders/{self.transak_order_id}")
+        
+        order_retrieve_valid = False
+        if success and isinstance(data, dict):
+            order_id = data.get("order_id")
+            user_id = data.get("user_id")
+            order_retrieve_valid = order_id == self.transak_order_id and user_id == "test123"
+        
+        self.log_test_result(
+            "Retrieve Transak Order by ID",
+            order_retrieve_valid,
+            f"Status: {status}, Order ID Match: {data.get('order_id') == self.transak_order_id if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 3: GET /api/transak/orders?user_id=test123 - Get orders by user
+        logger.info("Step 3: Get Transak Orders by User")
+        success, data, status = await self.make_request("GET", "/transak/orders?user_id=test123")
+        
+        orders_by_user_valid = False
+        if success and isinstance(data, dict):
+            orders = data.get("orders", [])
+            count = data.get("count", 0)
+            orders_by_user_valid = isinstance(orders, list) and count > 0
+            # Check if our order is in the list
+            order_found = any(o.get("order_id") == self.transak_order_id for o in orders)
+            orders_by_user_valid = orders_by_user_valid and order_found
+        
+        self.log_test_result(
+            "Get Transak Orders by User",
+            orders_by_user_valid,
+            f"Status: {status}, Orders Count: {data.get('count') if isinstance(data, dict) else 'N/A'}, Our Order Found: {any(o.get('order_id') == self.transak_order_id for o in data.get('orders', [])) if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return order_create_valid and order_retrieve_valid and orders_by_user_valid
+
     async def test_liquidity_api_endpoints(self):
         """Test all new Liquidity API endpoints as specified in the review request"""
         logger.info("\n=== Testing Liquidity API Endpoints ===")
