@@ -121,6 +121,9 @@ from routes.exchange_routes import router as exchange_router
 # Import Password Reset routes
 from routes.password_routes import router as password_router, set_password_reset_db
 
+# Import Audit routes
+from routes.audit_routes import router as audit_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
