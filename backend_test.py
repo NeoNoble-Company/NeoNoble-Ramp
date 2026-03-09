@@ -1,26 +1,33 @@
 #!/usr/bin/env python3
 """
-NeoNoble Ramp Backend API Test Suite - C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION
+NeoNoble Ramp Backend API Test Suite - PHASE 2 & 3 VENUE INTEGRATION + HEDGE ACTIVATION
 
 Performs comprehensive end-to-end testing of:
-- NEW: C-SAFE DEX Service API (Real Market Conversion)
-- NEW: Transak Widget Integration (On/Off-Ramp)
-- REGRESSION: Phase 1 Hybrid PoR Liquidity Architecture
+- NEW: Phase 2 - Exchange Connectors API (Venue Integration)
+- NEW: Phase 3 - Hedge Activation API (Hedging Service)
+- REGRESSION: Existing Services (DEX, Transak, Liquidity)
 
 Test Environment:
 - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
 
-New Services (Phase 2):
+Phase 2 - Exchange Connectors (NEW):
+  * Exchange status, balances, orders (shadow mode without credentials)
+  * Binance + Kraken venues (not connected without API keys)
+  * Order placement in shadow mode
+
+Phase 3 - Hedge Activation (NEW):
+  * Hedging service summary (shadow mode with policy)
+  * Hedge proposals and events
+  * Conservative Hybrid Policy configuration
+
+Existing Services (Regression):
   * DEX Service - Real on-chain swaps (1inch + PancakeSwap) - DISABLED mode initially
   * Transak Service - On/Off-ramp widget integration - DEMO mode (no API key)
-
-Existing Services (Phase 1 - Regression):
   * Treasury Service (REAL) - €100M virtual floor balance
   * Exposure Service (REAL) - Full lifecycle tracking
   * Routing Service (SHADOW) - Log-only market conversion simulation
-  * Hedging Service (SHADOW) - Policy evaluation and proposals
   * Reconciliation Service (REAL) - Coverage events and audit ledger
 """
 
