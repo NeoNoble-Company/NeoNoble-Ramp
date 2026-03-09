@@ -239,8 +239,19 @@ class ConnectorManager:
         return best_ticker, best_venue
     
     async def get_all_balances(self) -> Dict[str, List[ExchangeBalance]]:
-        """Get balances from all connected venues."""
+        """Get balances from all connected venues including NENO."""
         all_balances = {}
+        
+        # Add NENO virtual exchange balance
+        neno_balance = self._neno_exchange.get_balance('system')
+        all_balances['neno_exchange'] = [
+            ExchangeBalance(
+                currency='NENO',
+                total=neno_balance.total,
+                available=neno_balance.available,
+                locked=neno_balance.locked
+            )
+        ]
         
         for name, connector in self._connectors.items():
             if connector.is_connected():
@@ -257,6 +268,19 @@ class ConnectorManager:
             "locked": 0,
             "by_venue": {}
         }
+        
+        # Add NENO balance if querying NENO
+        if currency.upper() == 'NENO':
+            neno_balance = self._neno_exchange.get_balance('system')
+            result["total"] += neno_balance.total
+            result["available"] += neno_balance.available
+            result["locked"] += neno_balance.locked
+            result["by_venue"]['neno_exchange'] = {
+                'currency': 'NENO',
+                'total': neno_balance.total,
+                'available': neno_balance.available,
+                'locked': neno_balance.locked
+            }
         
         for name, connector in self._connectors.items():
             if connector.is_connected():
@@ -282,10 +306,18 @@ class ConnectorManager:
         """
         Execute an order on the best venue or specified venue.
         
+        For NENO pairs, routes to the virtual NENO exchange.
+        
         Returns:
             Tuple of (ExchangeOrder, error_message)
         """
         now = datetime.now(timezone.utc)
+        
+        # Handle NENO orders via virtual exchange
+        if self._is_neno_symbol(symbol):
+            return await self._execute_neno_order(
+                symbol, side, quantity, order_type, price, client_order_id
+            )
         
         # Check if trading is enabled
         if not self._enabled:
