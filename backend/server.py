@@ -80,6 +80,9 @@ from services.liquidity import (
 # Import DEX services (C-SAFE Real Market Conversion)
 from services.dex import DEXService, BatchExecutor, set_dex_service
 
+# Import Exchange Connectors (Phase 2 - Venue Integration)
+from services.exchanges import ConnectorManager, set_connector_manager
+
 # Import Transak service (On/Off-Ramp Widget)
 from services.transak_service import TransakService, set_transak_service
 
