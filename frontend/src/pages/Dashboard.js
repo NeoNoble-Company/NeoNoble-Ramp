@@ -38,6 +38,9 @@ export default function Dashboard() {
   // Transak widget states
   const [transakOpen, setTransakOpen] = useState(false);
   const [transakMode, setTransakMode] = useState('BUY');
+  
+  // NENO Trading widget state
+  const [showNenoTrading, setShowNenoTrading] = useState(false);
 
   useEffect(() => {
     loadPrices();
