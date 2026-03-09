@@ -300,7 +300,7 @@ class TransakService:
         
         try:
             await self.webhooks_collection.insert_one(webhook_record)
-        except Exception as e:
+        except Exception:
             # Duplicate event
             logger.warning(f"[TRANSAK] Duplicate webhook event: {event_id}")
             return {"status": "duplicate", "event_id": event_id}
