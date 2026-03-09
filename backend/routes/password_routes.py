@@ -256,9 +256,15 @@ async def change_password(
     
     # This would normally use the authenticated user's ID
     # For now, we require the current password to identify the user
-    current_hash = hash_password(request.current_password)
+    user = await db.users.find_one({"email": {"$exists": True}})
     
-    user = await db.users.find_one({"password": current_hash})
+    # Find all users and check password
+    users_cursor = db.users.find({})
+    user = None
+    async for user_doc in users_cursor:
+        if verify_password(request.current_password, user_doc.get('password_hash', '')):
+            user = user_doc
+            break
     
     if not user:
         raise HTTPException(status_code=401, detail="Password attuale non corretta")
