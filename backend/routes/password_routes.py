@@ -82,11 +82,6 @@ def get_service() -> EmailService:
     return service
 
 
-def hash_password(password: str) -> str:
-    """Hash password using SHA-256."""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
 def generate_reset_token() -> str:
     """Generate a secure reset token."""
     return secrets.token_urlsafe(32)
