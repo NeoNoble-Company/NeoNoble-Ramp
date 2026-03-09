@@ -110,6 +110,7 @@ from routes.liquidity_routes import router as liquidity_router
 # Import DEX and Transak routes
 from routes.dex_routes import router as dex_router
 from routes.transak_routes import router as transak_router
+from routes.exchange_routes import router as exchange_router
 
 # Initialize services
 auth_service = AuthService(db)
