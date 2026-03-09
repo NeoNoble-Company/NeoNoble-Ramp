@@ -245,6 +245,36 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* NENO Trading Quick Access */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">
+                      N
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium">$NENO Trading</h3>
+                      <p className="text-gray-400 text-sm">Trade NeoNoble Token on all exchanges</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowNenoTrading(!showNenoTrading)}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-1"
+                    data-testid="neno-trading-toggle"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    {showNenoTrading ? 'Nascondi' : 'Apri Trading'}
+                  </button>
+                </div>
+                
+                {/* NENO Trading Widget Embedded */}
+                {showNenoTrading && (
+                  <div className="mt-4">
+                    <NenoTradingWidget />
+                  </div>
+                )}
+              </div>
+
               {/* Error/Success Messages */}
               {error && (
                 <div className="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center space-x-2 text-red-200" data-testid="ramp-error">
