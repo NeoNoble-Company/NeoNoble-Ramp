@@ -224,11 +224,11 @@ class CSafeDexTransakTester:
             environment = data.get("environment")
             transak_widget_valid = bool(widget_url and product_type == "BUY")
         elif status == 503:
-            # Service not configured is acceptable for demo mode
+            # Service not configured is expected for demo mode (no API key)
             transak_widget_valid = True
         
         self.log_test_result(
-            "Transak Widget URL Generation",
+            "Transak Widget URL Generation (Demo Mode Expected)",
             transak_widget_valid,
             f"Status: {status}, Widget URL: {'Present' if isinstance(data, dict) and data.get('widget_url') else 'N/A'}, Product Type: {data.get('product_type') if isinstance(data, dict) else 'N/A'}"
         )
