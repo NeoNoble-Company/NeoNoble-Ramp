@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
 from web3 import Web3, AsyncWeb3
-from web3.middleware import geth_poa_middleware
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
