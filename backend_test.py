@@ -1306,9 +1306,9 @@ class Phase2Phase3Tester:
         return await self.run_phase2_phase3_tests()
 
 async def main():
-    """Main test runner for Phase 2 & Phase 3 Venue Integration + Hedge Activation testing"""
+    """Main test runner for Password Reset feature testing"""
     async with Phase2Phase3Tester() as tester:
-        results = await tester.run_phase2_phase3_tests()
+        results = await tester.run_password_reset_tests()
         
         # Return exit code based on results
         failed_tests = [name for name, result in results.items() if not result["success"]]
