@@ -363,6 +363,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Batch Executor initialization failed: {e}")
     
+    # Initialize Exchange Connector Manager (Phase 2 - Venue Integration)
+    try:
+        await connector_manager.initialize()
+        set_connector_manager(connector_manager)
+        logger.info("Connector Manager initialized - Binance + Kraken venues")
+    except Exception as e:
+        logger.warning(f"Connector Manager initialization failed: {e}")
+    
     # Initialize Transak Service (On/Off-Ramp Widget)
     try:
         await transak_service.initialize()
