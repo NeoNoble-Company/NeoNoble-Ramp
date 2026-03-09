@@ -152,12 +152,38 @@ class KrakenConnector(ExchangeConnector):
             "ETHUSD": "XETHZUSD",
             "BNBEUR": "BNBEUR",
             "USDTEUR": "USDTEUR",
-            "USDCEUR": "USDCEUR"
+            "USDCEUR": "USDCEUR",
+            "NENOEUR": "NENOEUR",
+            "NENO-EUR": "NENOEUR",
+            "NENOUSD": "NENOUSD",
+            "NENO-USD": "NENOUSD"
         }
-        return conversions.get(symbol, symbol)
+        return conversions.get(symbol.replace('-', ''), symbol)
+    
+    def _is_neno_symbol(self, symbol: str) -> bool:
+        """Check if symbol is NENO."""
+        return 'NENO' in symbol.upper()
+    
+    def _get_neno_ticker(self, symbol: str) -> MarketTicker:
+        """Get NENO ticker with fixed price."""
+        from .neno_mixin import get_neno_ticker_data
+        data = get_neno_ticker_data(symbol)
+        return MarketTicker(
+            symbol=data['symbol'],
+            bid=data['bid'],
+            ask=data['ask'],
+            last=data['last'],
+            volume_24h=data['volume_24h'],
+            high_24h=data['high_24h'],
+            low_24h=data['low_24h']
+        )
     
     async def get_ticker(self, symbol: str) -> Optional[MarketTicker]:
         """Get current ticker for a symbol."""
+        # Handle NENO symbols with virtual pricing
+        if self._is_neno_symbol(symbol):
+            return self._get_neno_ticker(symbol)
+        
         try:
             kraken_symbol = self._normalize_symbol(symbol)
             data = await self._public_request("Ticker", {"pair": kraken_symbol})
