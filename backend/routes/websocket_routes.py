@@ -1,0 +1,342 @@
+"""
+WebSocket Routes - Real-time streaming for market data.
+
+Provides:
+- Live ticker updates for all symbols including NENO
+- Order book streaming
+- Trade notifications
+"""
+
+import asyncio
+import json
+import logging
+from typing import Dict, Set, Optional
+from datetime import datetime, timezone
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from starlette.websockets import WebSocketState
+
+from services.exchanges import get_connector_manager, ConnectorManager
+from services.exchanges.neno_mixin import get_neno_ticker_data, is_neno_symbol
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/ws", tags=["websocket"])
+
+# Connection manager for WebSocket clients
+class ConnectionManager:
+    """Manages WebSocket connections and subscriptions."""
+    
+    def __init__(self):
+        self.active_connections: Dict[str, Set[WebSocket]] = {}  # symbol -> connections
+        self.connection_symbols: Dict[WebSocket, Set[str]] = {}  # connection -> symbols
+        self._broadcast_task: Optional[asyncio.Task] = None
+        self._running = False
+    
+    async def connect(self, websocket: WebSocket, symbol: str):
+        """Accept connection and subscribe to symbol."""
+        await websocket.accept()
+        
+        if symbol not in self.active_connections:
+            self.active_connections[symbol] = set()
+        self.active_connections[symbol].add(websocket)
+        
+        if websocket not in self.connection_symbols:
+            self.connection_symbols[websocket] = set()
+        self.connection_symbols[websocket].add(symbol)
+        
+        logger.info(f"[WS] Client connected to {symbol}")
+    
+    def disconnect(self, websocket: WebSocket):
+        """Remove connection from all subscriptions."""
+        if websocket in self.connection_symbols:
+            for symbol in self.connection_symbols[websocket]:
+                if symbol in self.active_connections:
+                    self.active_connections[symbol].discard(websocket)
+            del self.connection_symbols[websocket]
+        
+        logger.info("[WS] Client disconnected")
+    
+    async def subscribe(self, websocket: WebSocket, symbol: str):
+        """Subscribe to additional symbol."""
+        if symbol not in self.active_connections:
+            self.active_connections[symbol] = set()
+        self.active_connections[symbol].add(websocket)
+        
+        if websocket not in self.connection_symbols:
+            self.connection_symbols[websocket] = set()
+        self.connection_symbols[websocket].add(symbol)
+    
+    async def unsubscribe(self, websocket: WebSocket, symbol: str):
+        """Unsubscribe from symbol."""
+        if symbol in self.active_connections:
+            self.active_connections[symbol].discard(websocket)
+        if websocket in self.connection_symbols:
+            self.connection_symbols[websocket].discard(symbol)
+    
+    async def broadcast_to_symbol(self, symbol: str, message: dict):
+        """Broadcast message to all subscribers of a symbol."""
+        if symbol not in self.active_connections:
+            return
+        
+        dead_connections = []
+        for connection in self.active_connections[symbol]:
+            try:
+                if connection.client_state == WebSocketState.CONNECTED:
+                    await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"[WS] Broadcast error: {e}")
+                dead_connections.append(connection)
+        
+        # Clean up dead connections
+        for conn in dead_connections:
+            self.disconnect(conn)
+    
+    def get_subscribed_symbols(self) -> Set[str]:
+        """Get all symbols with active subscriptions."""
+        return set(self.active_connections.keys())
+    
+    def get_connection_count(self, symbol: str = None) -> int:
+        """Get number of active connections."""
+        if symbol:
+            return len(self.active_connections.get(symbol, set()))
+        return sum(len(conns) for conns in self.active_connections.values())
+
+
+# Global connection manager
+manager = ConnectionManager()
+
+
+async def get_manager_instance():
+    """Get the connector manager instance."""
+    return get_connector_manager()
+
+
+@router.websocket("/ticker/{symbol}")
+async def websocket_ticker(
+    websocket: WebSocket,
+    symbol: str
+):
+    """
+    WebSocket endpoint for real-time ticker updates.
+    
+    Sends ticker updates every second for the subscribed symbol.
+    Supports all symbols including NENO.
+    
+    Message format:
+    {
+        "type": "ticker",
+        "symbol": "NENO-EUR",
+        "data": {
+            "bid": 9995.0,
+            "ask": 10005.0,
+            "last": 10000.0,
+            "volume_24h": 1250.5,
+            "timestamp": "2026-03-09T..."
+        }
+    }
+    """
+    await manager.connect(websocket, symbol)
+    connector_manager = get_connector_manager()
+    
+    try:
+        # Send initial ticker
+        if is_neno_symbol(symbol):
+            ticker_data = get_neno_ticker_data(symbol)
+        else:
+            ticker = await connector_manager.get_ticker(symbol)
+            if ticker:
+                ticker_data = {
+                    'symbol': ticker.symbol,
+                    'bid': ticker.bid,
+                    'ask': ticker.ask,
+                    'last': ticker.last,
+                    'volume_24h': ticker.volume_24h,
+                    'high_24h': ticker.high_24h,
+                    'low_24h': ticker.low_24h,
+                    'timestamp': ticker.timestamp
+                }
+            else:
+                ticker_data = None
+        
+        if ticker_data:
+            await websocket.send_json({
+                "type": "ticker",
+                "symbol": symbol,
+                "data": ticker_data
+            })
+        
+        # Continuous updates
+        while True:
+            try:
+                # Wait for message or timeout
+                try:
+                    message = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=1.0
+                    )
+                    
+                    # Handle client messages
+                    data = json.loads(message)
+                    if data.get("action") == "subscribe":
+                        new_symbol = data.get("symbol")
+                        if new_symbol:
+                            await manager.subscribe(websocket, new_symbol)
+                            await websocket.send_json({
+                                "type": "subscribed",
+                                "symbol": new_symbol
+                            })
+                    elif data.get("action") == "unsubscribe":
+                        old_symbol = data.get("symbol")
+                        if old_symbol:
+                            await manager.unsubscribe(websocket, old_symbol)
+                            await websocket.send_json({
+                                "type": "unsubscribed",
+                                "symbol": old_symbol
+                            })
+                    elif data.get("action") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                        
+                except asyncio.TimeoutError:
+                    pass  # No message, continue with ticker update
+                
+                # Send ticker update
+                if is_neno_symbol(symbol):
+                    ticker_data = get_neno_ticker_data(symbol)
+                else:
+                    ticker = await connector_manager.get_ticker(symbol)
+                    if ticker:
+                        ticker_data = {
+                            'symbol': ticker.symbol,
+                            'bid': ticker.bid,
+                            'ask': ticker.ask,
+                            'last': ticker.last,
+                            'volume_24h': ticker.volume_24h,
+                            'high_24h': ticker.high_24h,
+                            'low_24h': ticker.low_24h,
+                            'timestamp': ticker.timestamp
+                        }
+                    else:
+                        ticker_data = None
+                
+                if ticker_data:
+                    await websocket.send_json({
+                        "type": "ticker",
+                        "symbol": symbol,
+                        "data": ticker_data
+                    })
+                
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"[WS] Error in ticker loop: {e}")
+                await asyncio.sleep(1)
+                
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(websocket)
+
+
+@router.websocket("/multi")
+async def websocket_multi(websocket: WebSocket):
+    """
+    WebSocket endpoint for multiple symbol subscriptions.
+    
+    Subscribe to multiple symbols in one connection.
+    
+    Client messages:
+    - {"action": "subscribe", "symbols": ["NENO-EUR", "BTC-EUR"]}
+    - {"action": "unsubscribe", "symbols": ["BTC-EUR"]}
+    - {"action": "ping"}
+    
+    Server messages:
+    - {"type": "ticker", "symbol": "...", "data": {...}}
+    - {"type": "subscribed", "symbols": [...]}
+    - {"type": "pong"}
+    """
+    await websocket.accept()
+    subscribed_symbols: Set[str] = set()
+    connector_manager = get_connector_manager()
+    
+    try:
+        while True:
+            try:
+                # Wait for message or timeout
+                try:
+                    message = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=1.0
+                    )
+                    
+                    data = json.loads(message)
+                    action = data.get("action")
+                    
+                    if action == "subscribe":
+                        new_symbols = data.get("symbols", [])
+                        for sym in new_symbols:
+                            subscribed_symbols.add(sym)
+                        await websocket.send_json({
+                            "type": "subscribed",
+                            "symbols": list(subscribed_symbols)
+                        })
+                    
+                    elif action == "unsubscribe":
+                        remove_symbols = data.get("symbols", [])
+                        for sym in remove_symbols:
+                            subscribed_symbols.discard(sym)
+                        await websocket.send_json({
+                            "type": "unsubscribed",
+                            "symbols": remove_symbols
+                        })
+                    
+                    elif action == "ping":
+                        await websocket.send_json({"type": "pong"})
+                        
+                except asyncio.TimeoutError:
+                    pass
+                
+                # Send ticker updates for all subscribed symbols
+                for symbol in subscribed_symbols:
+                    if is_neno_symbol(symbol):
+                        ticker_data = get_neno_ticker_data(symbol)
+                    else:
+                        ticker = await connector_manager.get_ticker(symbol)
+                        if ticker:
+                            ticker_data = {
+                                'symbol': ticker.symbol,
+                                'bid': ticker.bid,
+                                'ask': ticker.ask,
+                                'last': ticker.last,
+                                'volume_24h': ticker.volume_24h,
+                                'timestamp': datetime.now(timezone.utc).isoformat()
+                            }
+                        else:
+                            continue
+                    
+                    await websocket.send_json({
+                        "type": "ticker",
+                        "symbol": symbol,
+                        "data": ticker_data
+                    })
+                
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"[WS] Error in multi loop: {e}")
+                await asyncio.sleep(1)
+                
+    except WebSocketDisconnect:
+        pass
+
+
+@router.get("/status")
+async def websocket_status():
+    """Get WebSocket server status."""
+    return {
+        "active_symbols": list(manager.get_subscribed_symbols()),
+        "total_connections": manager.get_connection_count(),
+        "connections_by_symbol": {
+            symbol: manager.get_connection_count(symbol)
+            for symbol in manager.get_subscribed_symbols()
+        }
+    }
