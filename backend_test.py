@@ -109,7 +109,177 @@ class Phase2Phase3Tester:
             "details": details
         }
 
-    async def test_dex_service_api(self):
+    async def test_phase2_exchange_connectors_api(self):
+        """Test Phase 2 - Exchange Connectors API endpoints as specified in the review request"""
+        logger.info("\n=== Testing Phase 2 - Exchange Connectors API ===")
+        
+        # Test 1: GET /api/exchanges/status - Should return connector manager status
+        logger.info("Step 1: Test Exchange Connectors Status")
+        success, data, status = await self.make_request("GET", "/exchanges/status")
+        
+        exchange_status_valid = False
+        if success and isinstance(data, dict):
+            enabled = data.get("enabled", True)  # Should be false (shadow mode)
+            shadow_mode = data.get("shadow_mode", False)  # Should be true
+            primary_venue = data.get("primary_venue")  # Should be "binance"
+            fallback_venue = data.get("fallback_venue")  # Should be "kraken"
+            venues = data.get("venues", {})
+            
+            exchange_status_valid = (
+                enabled is False and
+                shadow_mode is True and
+                primary_venue == "binance" and
+                fallback_venue == "kraken" and
+                "binance" in venues and
+                "kraken" in venues
+            )
+        
+        self.log_test_result(
+            "Exchange Connectors Status (Shadow Mode)",
+            exchange_status_valid,
+            f"Status: {status}, Enabled: {data.get('enabled') if isinstance(data, dict) else 'N/A'}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}, Primary: {data.get('primary_venue') if isinstance(data, dict) else 'N/A'}, Fallback: {data.get('fallback_venue') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 2: GET /api/exchanges/balances - Should return empty balances (no connected venues)
+        logger.info("Step 2: Test Exchange Balances (No Connected Venues)")
+        success, data, status = await self.make_request("GET", "/exchanges/balances")
+        
+        balances_valid = False
+        if success and isinstance(data, dict):
+            balances = data.get("balances", {})
+            # Should be empty or show venues with no balances (not connected without credentials)
+            balances_valid = isinstance(balances, dict)
+        
+        self.log_test_result(
+            "Exchange Balances (No Connected Venues)",
+            balances_valid,
+            f"Status: {status}, Balances: {data.get('balances') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 3: GET /api/exchanges/orders - Should return empty order list initially
+        logger.info("Step 3: Test Exchange Orders History")
+        success, data, status = await self.make_request("GET", "/exchanges/orders")
+        
+        orders_valid = False
+        if success and isinstance(data, dict):
+            orders = data.get("orders", [])
+            count = data.get("count", 0)
+            orders_valid = isinstance(orders, list) and count >= 0
+        
+        self.log_test_result(
+            "Exchange Orders History",
+            orders_valid,
+            f"Status: {status}, Orders Count: {data.get('count') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 4: POST /api/exchanges/orders - Test placing an order in shadow mode
+        logger.info("Step 4: Test Place Order in Shadow Mode")
+        order_payload = {
+            "symbol": "BNBEUR",
+            "side": "sell",
+            "quantity": 0.1,
+            "order_type": "market"
+        }
+        success, data, status = await self.make_request("POST", "/exchanges/orders", order_payload)
+        
+        order_place_valid = False
+        if success and isinstance(data, dict):
+            mode = data.get("mode")
+            order = data.get("order", {})
+            order_place_valid = mode == "shadow" and isinstance(order, dict)
+        
+        self.log_test_result(
+            "Place Order in Shadow Mode (BNBEUR sell)",
+            order_place_valid,
+            f"Status: {status}, Mode: {data.get('mode') if isinstance(data, dict) else 'N/A'}, Order ID: {data.get('order', {}).get('order_id') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 5: GET /api/exchanges/admin/config - Should return exchange configuration
+        logger.info("Step 5: Test Exchange Admin Configuration")
+        success, data, status = await self.make_request("GET", "/exchanges/admin/config")
+        
+        config_valid = False
+        if success and isinstance(data, dict):
+            # Should return config object (may be empty if not configured)
+            config_valid = True
+        elif status == 404:
+            # No config found is also acceptable
+            config_valid = True
+        
+        self.log_test_result(
+            "Exchange Admin Configuration",
+            config_valid,
+            f"Status: {status}, Config Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return exchange_status_valid and balances_valid and orders_valid and order_place_valid and config_valid
+
+    async def test_phase3_hedge_activation_api(self):
+        """Test Phase 3 - Hedge Activation API endpoints as specified in the review request"""
+        logger.info("\n=== Testing Phase 3 - Hedge Activation API ===")
+        
+        # Test 1: GET /api/liquidity/hedging/summary - Should show shadow mode with policy
+        logger.info("Step 1: Test Hedging Service Summary")
+        success, data, status = await self.make_request("GET", "/liquidity/hedging/summary")
+        
+        hedging_summary_valid = False
+        if success and isinstance(data, dict):
+            shadow_mode = data.get("shadow_mode", False)
+            policy = data.get("policy", {})
+            policy_name = policy.get("name") if isinstance(policy, dict) else None
+            exposure_threshold_pct = policy.get("exposure_threshold_pct") if isinstance(policy, dict) else None
+            batch_window_hours = policy.get("batch_window_hours") if isinstance(policy, dict) else None
+            volatility_guard_enabled = policy.get("volatility_guard_enabled") if isinstance(policy, dict) else None
+            
+            hedging_summary_valid = (
+                shadow_mode is True and
+                policy_name == "Conservative Hybrid Policy" and
+                exposure_threshold_pct == 0.75 and
+                batch_window_hours == 12 and
+                volatility_guard_enabled is True
+            )
+        
+        self.log_test_result(
+            "Hedging Service Summary (Shadow Mode + Policy)",
+            hedging_summary_valid,
+            f"Status: {status}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}, Policy: {data.get('policy', {}).get('name') if isinstance(data, dict) else 'N/A'}, Threshold: {data.get('policy', {}).get('exposure_threshold_pct') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 2: GET /api/liquidity/hedging/proposals - Should return recent hedge proposals
+        logger.info("Step 2: Test Hedge Proposals")
+        success, data, status = await self.make_request("GET", "/liquidity/hedging/proposals")
+        
+        proposals_valid = False
+        if success and isinstance(data, dict):
+            proposals = data.get("proposals", [])
+            count = data.get("count", 0)
+            shadow_mode = data.get("shadow_mode", False)
+            proposals_valid = isinstance(proposals, list) and count >= 0 and shadow_mode is True
+        
+        self.log_test_result(
+            "Hedge Proposals",
+            proposals_valid,
+            f"Status: {status}, Proposals Count: {data.get('count') if isinstance(data, dict) else 'N/A'}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 3: GET /api/liquidity/hedging/events - Should return recent hedge events
+        logger.info("Step 3: Test Hedge Events")
+        success, data, status = await self.make_request("GET", "/liquidity/hedging/events")
+        
+        events_valid = False
+        if success and isinstance(data, dict):
+            hedges = data.get("hedges", [])
+            count = data.get("count", 0)
+            shadow_mode = data.get("shadow_mode", False)
+            events_valid = isinstance(hedges, list) and count >= 0 and shadow_mode is True
+        
+        self.log_test_result(
+            "Hedge Events",
+            events_valid,
+            f"Status: {status}, Events Count: {data.get('count') if isinstance(data, dict) else 'N/A'}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return hedging_summary_valid and proposals_valid and events_valid
         """Test DEX Service API endpoints as specified in the review request"""
         logger.info("\n=== Testing DEX Service API ===")
         
