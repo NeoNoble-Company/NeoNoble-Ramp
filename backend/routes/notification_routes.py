@@ -26,7 +26,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 # Request models
 class CreateAlertRequest(BaseModel):
     symbol: str = Field(..., description="Trading symbol (e.g., NENO-EUR)")
-    condition: str = Field(..., regex="^(above|below|change_pct)$", description="Alert condition")
+    condition: str = Field(..., pattern="^(above|below|change_pct)$", description="Alert condition")
     target_value: float = Field(..., gt=0, description="Target price or percentage")
 
 
