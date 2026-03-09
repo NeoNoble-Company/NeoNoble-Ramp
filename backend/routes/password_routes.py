@@ -69,7 +69,7 @@ def set_password_reset_db(db: AsyncIOMotorDatabase):
 
 
 def get_db() -> AsyncIOMotorDatabase:
-    if not _db:
+    if _db is None:
         raise HTTPException(status_code=503, detail="Database not available")
     return _db
 
