@@ -1100,13 +1100,13 @@ class Phase2Phase3Tester:
         return self.test_results
 
     async def run_all_tests(self):
-        """Run C-SAFE DEX Off-Ramp + Transak Widget Integration tests"""
-        return await self.run_csafe_dex_transak_tests()
+        """Run Phase 2 & Phase 3 Venue Integration + Hedge Activation tests"""
+        return await self.run_phase2_phase3_tests()
 
 async def main():
-    """Main test runner for C-SAFE DEX Off-Ramp + Transak Widget Integration testing"""
-    async with CSafeDexTransakTester() as tester:
-        results = await tester.run_csafe_dex_transak_tests()
+    """Main test runner for Phase 2 & Phase 3 Venue Integration + Hedge Activation testing"""
+    async with Phase2Phase3Tester() as tester:
+        results = await tester.run_phase2_phase3_tests()
         
         # Return exit code based on results
         failed_tests = [name for name, result in results.items() if not result["success"]]
