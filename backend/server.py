@@ -136,6 +136,9 @@ reconciliation_service = ReconciliationService(db)
 dex_service = DEXService(db)
 batch_executor = BatchExecutor(db, dex_service)
 
+# Initialize Exchange Connector Manager (Phase 2 - Venue Integration)
+connector_manager = ConnectorManager(db)
+
 # Initialize Transak service (On/Off-Ramp Widget)
 transak_service = TransakService(db)
 
