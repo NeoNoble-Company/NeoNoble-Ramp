@@ -156,14 +156,19 @@ See `/app/backend/.env` for configuration:
 ## Backlog
 
 ### P0 - Immediate
-- [x] ~~Provide Coinbase API keys~~ ✅ DONE
+- [x] ~~Candlestick chart fix~~ ✅ DONE (March 9, 2026)
+  - Fixed `Invalid language tag: en-US@posix` error
+  - Added `localization: { locale: 'en-US' }` option to chart
 
 ### P1 - Completed
+- [x] ~~Provide Coinbase API keys~~ ✅ DONE
 - [x] ~~Run migration validation~~ ✅ DONE (2/3 checks passed)
 - [x] ~~Switch to postgresql_only mode~~ ✅ DONE
 
 ### P2 - Future
+- [ ] Create Liquidity Pool on PancakeSwap for $NENO
 - [ ] Repository pattern refactoring
 - [ ] Add more exchange connectors
 - [ ] Performance optimization
+- [ ] Fix `concurrent_load_test.py` script
 - [ ] Complete remaining 2 API keys migration (system keys)
