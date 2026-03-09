@@ -1005,33 +1005,36 @@ class Phase2Phase3Tester:
         
         return integrity_valid and (reconstruct_valid if self.exposure_id else True)
 
-    async def run_csafe_dex_transak_tests(self):
-        """Run all C-SAFE DEX Off-Ramp + Transak Widget Integration tests"""
-        logger.info("🚀 Starting C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING")
+    async def run_phase2_phase3_tests(self):
+        """Run all Phase 2 & Phase 3 Venue Integration + Hedge Activation tests"""
+        logger.info("🚀 Starting PHASE 2 & 3 VENUE INTEGRATION + HEDGE ACTIVATION TESTING")
         logger.info(f"Testing against: {BACKEND_URL}")
-        logger.info("New Services (Phase 2):")
+        logger.info("Phase 2 - Exchange Connectors (NEW):")
+        logger.info("  - Exchange status, balances, orders (shadow mode without credentials)")
+        logger.info("  - Binance + Kraken venues (not connected without API keys)")
+        logger.info("  - Order placement in shadow mode")
+        logger.info("Phase 3 - Hedge Activation (NEW):")
+        logger.info("  - Hedging service summary (shadow mode with policy)")
+        logger.info("  - Hedge proposals and events")
+        logger.info("  - Conservative Hybrid Policy configuration")
+        logger.info("Existing Services (Regression):")
         logger.info("  - DEX Service - Real on-chain swaps (1inch + PancakeSwap) - DISABLED mode initially")
         logger.info("  - Transak Service - On/Off-ramp widget integration - DEMO mode (no API key)")
-        logger.info("Existing Services (Phase 1 - Regression):")
-        logger.info("  - Treasury Service (REAL) - €100M virtual floor balance")
-        logger.info("  - Exposure Service (REAL) - Full lifecycle tracking")
-        logger.info("  - Routing Service (SHADOW) - Log-only market conversion simulation")
-        logger.info("  - Hedging Service (SHADOW) - Policy evaluation and proposals")
-        logger.info("  - Reconciliation Service (REAL) - Coverage events and audit ledger")
+        logger.info("  - Liquidity Services - Treasury, Exposure, Routing, Reconciliation")
         
-        # C-SAFE DEX Off-Ramp + Transak Widget Integration Test sequence
+        # Phase 2 & 3 Test sequence
         tests = [
-            # New Services Testing
-            ("DEX Service API", self.test_dex_service_api),
-            ("Transak Service API", self.test_transak_service_api),
-            ("Transak Order Flow", self.test_transak_order_flow),
+            # Phase 2 - Exchange Connectors (NEW)
+            ("Phase 2 - Exchange Connectors API", self.test_phase2_exchange_connectors_api),
             
-            # Regression Testing (Existing Liquidity Services)
+            # Phase 3 - Hedge Activation (NEW)
+            ("Phase 3 - Hedge Activation API", self.test_phase3_hedge_activation_api),
+            
+            # Existing Services Regression Testing
+            ("Existing Services Regression", self.test_existing_services_regression),
+            ("DEX Service API (Regression)", self.test_dex_service_api),
+            ("Transak Service API (Regression)", self.test_transak_service_api),
             ("Liquidity API Endpoints (Regression)", self.test_liquidity_api_endpoints),
-            ("User Authentication", self.test_user_authentication),
-            ("Complete Off-Ramp Flow with Liquidity Hooks (Regression)", self.test_complete_offramp_flow_with_liquidity_hooks),
-            ("Liquidity Data Verification (Regression)", self.test_liquidity_data_verification),
-            ("Financial Auditability (Regression)", self.test_financial_auditability),
         ]
         
         for test_name, test_func in tests:
@@ -1043,13 +1046,14 @@ class Phase2Phase3Tester:
         
         # Summary
         logger.info("\n" + "="*80)
-        logger.info("C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING SUMMARY")
+        logger.info("PHASE 2 & 3 VENUE INTEGRATION + HEDGE ACTIVATION TESTING SUMMARY")
         logger.info("="*80)
         
         passed = 0
         failed = 0
         critical_failures = []
-        new_service_failures = []
+        phase2_failures = []
+        phase3_failures = []
         regression_failures = []
         
         for test_name, result in self.test_results.items():
@@ -1060,8 +1064,10 @@ class Phase2Phase3Tester:
                 critical_failures.append(test_name)
                 
                 # Categorize failures
-                if any(keyword in test_name.lower() for keyword in ["dex", "transak"]):
-                    new_service_failures.append(test_name)
+                if "phase 2" in test_name.lower() or "exchange" in test_name.lower():
+                    phase2_failures.append(test_name)
+                elif "phase 3" in test_name.lower() or "hedge" in test_name.lower():
+                    phase3_failures.append(test_name)
                 elif "regression" in test_name.lower():
                     regression_failures.append(test_name)
             
@@ -1074,21 +1080,22 @@ class Phase2Phase3Tester:
         
         if critical_failures:
             logger.error(f"\n🚨 CRITICAL FAILURES:")
-            if new_service_failures:
-                logger.error(f"   NEW SERVICES: {new_service_failures}")
+            if phase2_failures:
+                logger.error(f"   PHASE 2 (Exchange Connectors): {phase2_failures}")
+            if phase3_failures:
+                logger.error(f"   PHASE 3 (Hedge Activation): {phase3_failures}")
             if regression_failures:
                 logger.error(f"   REGRESSIONS: {regression_failures}")
-            logger.error("❌ C-SAFE DEX Off-Ramp + Transak Widget Integration testing FAILED")
+            logger.error("❌ Phase 2 & 3 Venue Integration + Hedge Activation testing FAILED")
         else:
-            logger.info(f"\n✅ C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING COMPLETE")
-            logger.info("🏆 NEW SERVICES VERIFIED:")
-            logger.info("   - DEX Service API (Disabled Mode)")
-            logger.info("   - Transak Service API (Demo Mode)")
-            logger.info("   - Transak Order Flow")
+            logger.info(f"\n✅ PHASE 2 & 3 VENUE INTEGRATION + HEDGE ACTIVATION TESTING COMPLETE")
+            logger.info("🏆 NEW FEATURES VERIFIED:")
+            logger.info("   - Phase 2: Exchange Connectors API (Shadow Mode)")
+            logger.info("   - Phase 3: Hedge Activation API (Shadow Mode + Policy)")
             logger.info("🔄 REGRESSION TESTS PASSED:")
-            logger.info("   - Treasury, Exposure, and Reconciliation Services (REAL)")
-            logger.info("   - Routing and Hedging Services (SHADOW MODE)")
-            logger.info("   - Financial Auditability and Ledger Integrity")
+            logger.info("   - DEX Service (Disabled Mode)")
+            logger.info("   - Transak Service (Demo Mode)")
+            logger.info("   - Liquidity Services (Treasury, Exposure, Routing, Reconciliation)")
         
         return self.test_results
 
