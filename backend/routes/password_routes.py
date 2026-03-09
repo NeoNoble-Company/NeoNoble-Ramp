@@ -276,7 +276,7 @@ async def change_password(
         {"id": user["id"]},
         {
             "$set": {
-                "password": new_password_hash,
+                "password_hash": new_password_hash,
                 "password_updated_at": now.isoformat()
             }
         }
