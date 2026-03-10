@@ -365,7 +365,7 @@ export default function Dashboard() {
                   </div>
                 </Link>
                 <Link
-                  to="/api-docs"
+                  to="/developer/docs"
                   data-testid="api-docs-link"
                   className="p-4 bg-gradient-to-r from-indigo-600/20 to-violet-600/20 border border-indigo-500/30 rounded-xl hover:border-indigo-400/50 transition-all group"
                 >

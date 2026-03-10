@@ -209,7 +209,7 @@ function AppRoutes() {
 
       {/* API Documentation */}
       <Route
-        path="/api-docs"
+        path="/developer/docs"
         element={<ApiDocs />}
       />
 
