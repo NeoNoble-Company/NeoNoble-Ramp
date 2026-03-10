@@ -21,6 +21,8 @@ import TokenList from "./pages/TokenList";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
 import MarketData from "./pages/MarketData";
 import CardManagement from "./pages/CardManagement";
+import TradingPage from "./pages/TradingPage";
+import ApiDocs from "./pages/ApiDocs";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -193,6 +195,22 @@ function AppRoutes() {
             <CardManagement />
           </ProtectedRoute>
         }
+      />
+
+      {/* Trading */}
+      <Route
+        path="/trade"
+        element={
+          <ProtectedRoute>
+            <TradingPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* API Documentation */}
+      <Route
+        path="/api-docs"
+        element={<ApiDocs />}
       />
 
       {/* Catch all - redirect to home */}

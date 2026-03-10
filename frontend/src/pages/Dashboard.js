@@ -349,6 +349,36 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </Link>
+                <Link
+                  to="/trade"
+                  data-testid="trading-link"
+                  className="p-4 bg-gradient-to-r from-amber-600/20 to-yellow-600/20 border border-amber-500/30 rounded-xl hover:border-amber-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="h-5 w-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-amber-400">Exchange</h3>
+                      <p className="text-gray-400 text-xs">Trading con Order Book</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  to="/api-docs"
+                  data-testid="api-docs-link"
+                  className="p-4 bg-gradient-to-r from-indigo-600/20 to-violet-600/20 border border-indigo-500/30 rounded-xl hover:border-indigo-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                      <Shield className="h-5 w-5 text-indigo-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-indigo-400">API Developer</h3>
+                      <p className="text-gray-400 text-xs">Documenti & API Keys</p>
+                    </div>
+                  </div>
+                </Link>
               </div>
 
               {/* Error/Success Messages */}

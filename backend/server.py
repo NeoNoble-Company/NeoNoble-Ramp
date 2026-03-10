@@ -152,6 +152,12 @@ from routes.analytics_routes import router as analytics_router
 # Import Card Infrastructure routes
 from routes.card_routes import router as card_router
 
+# Import Trading Engine routes
+from routes.trading_engine_routes import router as trading_engine_router
+
+# Import Public API routes
+from routes.public_api_routes import router as public_api_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -576,6 +582,8 @@ api_router.include_router(subscription_router)
 api_router.include_router(market_data_router)
 api_router.include_router(analytics_router)
 api_router.include_router(card_router)
+api_router.include_router(trading_engine_router)
+api_router.include_router(public_api_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
