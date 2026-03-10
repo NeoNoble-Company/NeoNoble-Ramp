@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Coins, CreditCard,
   Shield, Globe, LogOut, ChevronRight, Loader2,
   Check, X, Eye, ArrowUpRight, ArrowDownRight,
-  Activity, Clock, ListChecks, BarChart3
+  Activity, Clock, ListChecks, BarChart3, TrendingUp
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -389,6 +389,116 @@ function SubscriptionsSection() {
   );
 }
 
+// Analytics Section
+function AnalyticsSection() {
+  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState(null);
+  const [engagement, setEngagement] = useState(null);
+  const [days, setDays] = useState(30);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const headers = getAuthHeaders();
+        const [ovRes, engRes] = await Promise.all([
+          fetch(`${BACKEND_URL}/api/analytics/admin/overview?days=${days}`, { headers }),
+          fetch(`${BACKEND_URL}/api/analytics/admin/engagement?days=${Math.min(days, 90)}`, { headers })
+        ]);
+        if (ovRes.ok) setOverview(await ovRes.json());
+        if (engRes.ok) setEngagement(await engRes.json());
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    })();
+  }, [days]);
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-purple-500 animate-spin" /></div>;
+
+  return (
+    <div data-testid="admin-analytics">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-white">Analytics & Traffico</h2>
+        <div className="flex gap-2">
+          {[7, 30, 90].map(d => (
+            <button key={d} onClick={() => setDays(d)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${days === d ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
+              {d}g
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-xl p-5">
+          <div className="text-gray-400 text-sm mb-1">Page Views</div>
+          <div className="text-2xl font-bold text-white">{overview?.page_views?.total || 0}</div>
+        </div>
+        <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/30 rounded-xl p-5">
+          <div className="text-gray-400 text-sm mb-1">Utenti Attivi</div>
+          <div className="text-2xl font-bold text-white">{overview?.users?.active || 0}</div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-xl p-5">
+          <div className="text-gray-400 text-sm mb-1">Nuovi Utenti</div>
+          <div className="text-2xl font-bold text-white">{overview?.users?.new || 0}</div>
+        </div>
+        <div className="bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 border border-cyan-500/30 rounded-xl p-5">
+          <div className="text-gray-400 text-sm mb-1">Sessioni</div>
+          <div className="text-2xl font-bold text-white">{engagement?.sessions || 0}</div>
+        </div>
+      </div>
+
+      {/* Engagement */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Engagement</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between"><span className="text-gray-400">Pagine/Sessione</span><span className="text-white font-medium">{engagement?.avg_pages_per_session || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Durata Media (sec)</span><span className="text-white font-medium">{engagement?.avg_session_duration_seconds || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Token Creati</span><span className="text-white font-medium">{engagement?.recent_activity?.tokens_created || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Nuovi Abbonamenti</span><span className="text-white font-medium">{engagement?.recent_activity?.subscriptions || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Listing Richiesti</span><span className="text-white font-medium">{engagement?.recent_activity?.listings || 0}</span></div>
+          </div>
+        </div>
+
+        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Top Pagine</h3>
+          {(overview?.page_views?.by_page || []).length === 0 ? (
+            <div className="text-gray-500 text-sm py-4 text-center">Nessun dato di traffico ancora</div>
+          ) : (
+            <div className="space-y-2">
+              {(overview?.page_views?.by_page || []).slice(0, 8).map((p, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <span className="text-gray-300 text-sm truncate max-w-[200px]">{p.page}</span>
+                  <span className="text-white font-medium text-sm">{p.views}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Daily Traffic */}
+      {(overview?.daily_traffic || []).length > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Traffico Giornaliero</h3>
+          <div className="flex gap-1 items-end h-32">
+            {overview.daily_traffic.map((d, i) => {
+              const maxViews = Math.max(...overview.daily_traffic.map(x => x.views));
+              const height = maxViews > 0 ? (d.views / maxViews) * 100 : 0;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${d.date}: ${d.views} views`}>
+                  <div className="w-full bg-purple-500/60 rounded-t" style={{ height: `${Math.max(height, 2)}%` }} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Sidebar
 const NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -396,6 +506,7 @@ const NAV_ITEMS = [
   { id: 'listings', label: 'Listing', icon: ListChecks },
   { id: 'users', label: 'Utenti', icon: Users },
   { id: 'subscriptions', label: 'Abbonamenti', icon: CreditCard },
+  { id: 'analytics', label: 'Analytics', icon: TrendingUp },
 ];
 
 export default function AdminDashboard() {
@@ -478,6 +589,7 @@ export default function AdminDashboard() {
           {activeSection === 'listings' && <ListingManagement />}
           {activeSection === 'users' && <UsersSection />}
           {activeSection === 'subscriptions' && <SubscriptionsSection />}
+          {activeSection === 'analytics' && <AnalyticsSection />}
         </div>
       </main>
     </div>

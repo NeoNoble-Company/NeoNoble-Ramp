@@ -143,6 +143,15 @@ from routes.token_routes import router as token_router
 # Import Subscription Infrastructure routes
 from routes.subscription_routes import router as subscription_router
 
+# Import Market Data routes
+from routes.market_data_routes import router as market_data_router
+
+# Import Analytics routes
+from routes.analytics_routes import router as analytics_router
+
+# Import Card Infrastructure routes
+from routes.card_routes import router as card_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -564,6 +573,9 @@ api_router.include_router(price_history_router)
 api_router.include_router(notification_router)
 api_router.include_router(token_router)
 api_router.include_router(subscription_router)
+api_router.include_router(market_data_router)
+api_router.include_router(analytics_router)
+api_router.include_router(card_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)

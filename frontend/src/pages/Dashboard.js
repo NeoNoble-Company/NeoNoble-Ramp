@@ -319,6 +319,36 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </Link>
+                <Link
+                  to="/market"
+                  data-testid="market-data-link"
+                  className="p-4 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 border border-cyan-500/30 rounded-xl hover:border-cyan-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                      <BarChart3 className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-cyan-400">Mercato Crypto</h3>
+                      <p className="text-gray-400 text-xs">30+ criptovalute live</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  to="/cards"
+                  data-testid="cards-link"
+                  className="p-4 bg-gradient-to-r from-pink-600/20 to-rose-600/20 border border-pink-500/30 rounded-xl hover:border-pink-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-pink-500/20 rounded-lg flex items-center justify-center">
+                      <CreditCard className="h-5 w-5 text-pink-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-pink-400">Carte Crypto</h3>
+                      <p className="text-gray-400 text-xs">Spendi crypto ovunque</p>
+                    </div>
+                  </div>
+                </Link>
               </div>
 
               {/* Error/Success Messages */}

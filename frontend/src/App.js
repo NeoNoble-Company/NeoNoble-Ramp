@@ -19,6 +19,9 @@ import AdminDashboard from "./pages/AdminDashboard";
 import TokenCreation from "./pages/TokenCreation";
 import TokenList from "./pages/TokenList";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
+import MarketData from "./pages/MarketData";
+import CardManagement from "./pages/CardManagement";
+import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
@@ -63,6 +66,7 @@ function PublicRoute({ children }) {
 }
 
 function AppRoutes() {
+  usePageTracking();
   return (
     <Routes>
       {/* Public Routes */}
@@ -167,6 +171,26 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SubscriptionPlans />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Market Data */}
+      <Route
+        path="/market"
+        element={
+          <ProtectedRoute>
+            <MarketData />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Card Management */}
+      <Route
+        path="/cards"
+        element={
+          <ProtectedRoute>
+            <CardManagement />
           </ProtectedRoute>
         }
       />
