@@ -128,6 +128,23 @@ class EmailService:
         """
         reset_link = f"{APP_URL}/reset-password?token={reset_token}"
         
+        # Plain text version for better deliverability
+        greeting = f"Ciao {user_name}," if user_name else "Ciao,"
+        text_content = f"""{greeting}
+
+Abbiamo ricevuto una richiesta per reimpostare la password del tuo account NeoNoble Ramp.
+
+Per creare una nuova password, visita questo link:
+{reset_link}
+
+Se non hai richiesto il reset della password, puoi ignorare questa email.
+Il link scadrà tra 1 ora.
+
+---
+NeoNoble Ramp
+https://neonobleramp.com
+"""
+        
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -141,8 +158,9 @@ class EmailService:
                 <tr>
                     <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
                         <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">
-                            🔐 Password Reset
+                            Reimposta Password
                         </h1>
+                        <p style="color: #e0e0e0; margin: 10px 0 0 0; font-size: 14px;">NeoNoble Ramp</p>
                     </td>
                 </tr>
                 
@@ -150,7 +168,7 @@ class EmailService:
                 <tr>
                     <td style="padding: 40px 30px;">
                         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                            {f'Ciao {user_name},' if user_name else 'Ciao,'}
+                            {greeting}
                         </p>
                         
                         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
@@ -191,7 +209,8 @@ class EmailService:
                 <tr>
                     <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
                         <p style="color: #999999; font-size: 12px; margin: 0;">
-                            © 2026 NeoNoble Ramp. Tutti i diritti riservati.
+                            © 2026 NeoNoble Ramp. Tutti i diritti riservati.<br>
+                            <a href="https://neonobleramp.com" style="color: #667eea;">neonobleramp.com</a>
                         </p>
                     </td>
                 </tr>
@@ -202,8 +221,9 @@ class EmailService:
         
         return await self.send_email(
             to_email=to_email,
-            subject="🔐 Reimposta la tua password - NeoNoble Ramp",
-            html_content=html_content
+            subject="Reimposta la tua password - NeoNoble Ramp",
+            html_content=html_content,
+            text_content=text_content
         )
     
     async def send_password_changed_email(
