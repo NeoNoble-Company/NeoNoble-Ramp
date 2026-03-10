@@ -1,8 +1,10 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { Web3Provider } from "./context/Web3Context";
 import { Toaster } from "@/components/ui/sonner";
 import { NotificationToaster } from "./components/NotificationSystem";
+import { WalletModal } from "./components/WalletConnect";
 
 // Pages
 import Home from "./pages/Home";
@@ -13,6 +15,7 @@ import DevPortal from "./pages/DevPortal";
 import DevLogin from "./pages/DevLogin";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import AdminDashboard from "./pages/AdminDashboard";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
