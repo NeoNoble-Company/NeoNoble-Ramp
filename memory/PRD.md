@@ -128,6 +128,8 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
 | Binance | ⚠️ Geo-blocked 451 |
 | MongoDB | ✅ **PRIMARY (mongodb_only mode)** |
 | Email (Resend) | ✅ **WORKING (noreply@neonobleramp.com)** |
+| Multi-Wallet | ✅ **NEW - MetaMask, WalletConnect, Coinbase, Trust** |
+| Admin Dashboard | ✅ **NEW - Base implementation** |
 
 ## Key API Endpoints
 - `/api/auth/*` - Authentication
