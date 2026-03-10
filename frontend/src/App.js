@@ -16,6 +16,9 @@ import DevLogin from "./pages/DevLogin";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminDashboard from "./pages/AdminDashboard";
+import TokenCreation from "./pages/TokenCreation";
+import TokenList from "./pages/TokenList";
+import SubscriptionPlans from "./pages/SubscriptionPlans";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
