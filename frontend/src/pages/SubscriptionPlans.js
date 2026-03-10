@@ -1,17 +1,19 @@
-/**
- * Subscription Plans Page
- * Displays available subscription plans and allows users to subscribe
- */
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Check, Crown, Zap, Code, Building, Loader2,
-  ArrowRight, Star, Shield, AlertCircle
+  ArrowRight, Star, Shield, AlertCircle, ArrowLeft
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+function getAuthHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  };
+}
 
 const PLAN_ICONS = {
   free: Zap,
@@ -22,8 +24,8 @@ const PLAN_ICONS = {
   enterprise: Building,
 };
 
-const PLAN_COLORS = {
-  free: 'from-gray-500 to-gray-600',
+const PLAN_GRADIENTS = {
+  free: 'from-gray-600 to-gray-700',
   pro_trader: 'from-blue-500 to-cyan-500',
   premium: 'from-purple-500 to-pink-500',
   developer_basic: 'from-green-500 to-emerald-500',
@@ -35,98 +37,74 @@ export default function SubscriptionPlans() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [subscribing, setSubscribing] = useState(false);
+  const [subscribing, setSubscribing] = useState(null);
   const [plans, setPlans] = useState([]);
-  const [currentSubscription, setCurrentSubscription] = useState(null);
+  const [currentSub, setCurrentSub] = useState(null);
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [error, setError] = useState('');
-
-  // Get token from localStorage
-  const token = localStorage.getItem('token');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch plans
-      const plansRes = await fetch(`${BACKEND_URL}/api/subscriptions/plans/list`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const headers = getAuthHeaders();
+      const [plansRes, subRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/subscriptions/plans/list`, { headers }),
+        fetch(`${BACKEND_URL}/api/subscriptions/my-subscription`, { headers })
+      ]);
       const plansData = await plansRes.json();
       setPlans(plansData.plans || []);
 
-      // Fetch current subscription
-      const subRes = await fetch(`${BACKEND_URL}/api/subscriptions/my-subscription`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
       if (subRes.ok) {
         const subData = await subRes.json();
-        setCurrentSubscription(subData);
+        setCurrentSub(subData);
       }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
   const handleSubscribe = async (planId) => {
-    setSubscribing(true);
+    setSubscribing(planId);
     setError('');
-
+    setSuccess('');
     try {
-      const response = await fetch(`${BACKEND_URL}/api/subscriptions/subscribe`, {
+      const res = await fetch(`${BACKEND_URL}/api/subscriptions/subscribe`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          plan_id: planId,
-          billing_cycle: billingCycle
-        })
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle })
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Errore nella sottoscrizione');
-      }
-
-      // Refresh data
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Errore nella sottoscrizione');
+      setSuccess(`Sottoscrizione a ${data.plan_name} attivata con successo!`);
       await fetchData();
-      
-    } catch (err) {
-      setError(err.message);
+    } catch (e) {
+      setError(e.message);
     } finally {
-      setSubscribing(false);
+      setSubscribing(null);
     }
   };
 
   const handleCancel = async () => {
     if (!window.confirm('Sei sicuro di voler cancellare il tuo abbonamento?')) return;
-
     try {
-      const response = await fetch(`${BACKEND_URL}/api/subscriptions/cancel`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+      const res = await fetch(`${BACKEND_URL}/api/subscriptions/cancel`, {
+        method: 'POST', headers: getAuthHeaders()
       });
-
-      if (response.ok) {
+      if (res.ok) {
+        setSuccess('Abbonamento cancellato. Manterrai l\'accesso fino alla fine del periodo.');
         await fetchData();
       }
-    } catch (error) {
-      console.error('Error cancelling:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
-  // Group plans by type
   const userPlans = plans.filter(p => p.plan_type === 'user');
-  const developerPlans = plans.filter(p => p.plan_type === 'developer');
-  const enterprisePlans = plans.filter(p => p.plan_type === 'enterprise');
+  const devPlans = plans.filter(p => p.plan_type === 'developer');
+  const entPlans = plans.filter(p => p.plan_type === 'enterprise');
 
   if (loading) {
     return (
@@ -137,43 +115,56 @@ export default function SubscriptionPlans() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950" data-testid="subscription-plans-page">
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/50">
-        <div className="max-w-6xl mx-auto px-4 py-8 text-center">
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
-            Scegli il tuo Piano
-          </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            Sblocca funzionalità premium, riduci le commissioni e accedi all'infrastruttura completa di NeoNoble Ramp
-          </p>
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-lg">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
+              <ArrowLeft className="w-5 h-5 text-gray-400" />
+            </button>
+            <div>
+              <h1 className="text-lg font-bold text-white">Piani di Abbonamento</h1>
+              <p className="text-gray-400 text-sm">Sblocca funzionalita' premium su NeoNoble Ramp</p>
+            </div>
+          </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Error */}
+        {/* Messages */}
         {error && (
-          <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400" />
-            <p className="text-red-400">{error}</p>
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2">
+            <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+            <p className="text-green-400 text-sm">{success}</p>
           </div>
         )}
 
         {/* Current Subscription */}
-        {currentSubscription && (
-          <div className="mb-8 bg-purple-500/10 border border-purple-500/30 rounded-xl p-6">
+        {currentSub && (
+          <div className="mb-8 bg-purple-500/10 border border-purple-500/30 rounded-xl p-5" data-testid="current-subscription">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm mb-1">Il tuo piano attuale</p>
-                <h3 className="text-xl font-bold text-white">{currentSubscription.plan_name}</h3>
+                <p className="text-gray-400 text-xs mb-1">Il tuo piano attuale</p>
+                <h3 className="text-lg font-bold text-white">{currentSub.plan_name}</h3>
                 <p className="text-gray-400 text-sm mt-1">
-                  Scade il {new Date(currentSubscription.current_period_end).toLocaleDateString('it-IT')}
+                  {currentSub.billing_cycle === 'monthly' ? 'Mensile' : 'Annuale'} - €{currentSub.amount_paid}/
+                  {currentSub.billing_cycle === 'monthly' ? 'mese' : 'anno'}
                 </p>
+                {currentSub.current_period_end && (
+                  <p className="text-gray-500 text-xs mt-1">
+                    Scade il {new Date(currentSub.current_period_end).toLocaleDateString('it-IT')}
+                  </p>
+                )}
               </div>
-              <button
-                onClick={handleCancel}
-                className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-              >
+              <button onClick={handleCancel} data-testid="cancel-subscription-btn"
+                className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors">
                 Cancella
               </button>
             </div>
@@ -182,83 +173,63 @@ export default function SubscriptionPlans() {
 
         {/* Billing Toggle */}
         <div className="flex items-center justify-center gap-4 mb-8">
-          <span className={`text-sm ${billingCycle === 'monthly' ? 'text-white' : 'text-gray-400'}`}>
-            Mensile
-          </span>
-          <button
-            onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-            className={`relative w-14 h-7 rounded-full transition-colors ${
-              billingCycle === 'yearly' ? 'bg-purple-500' : 'bg-gray-700'
-            }`}
-          >
-            <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-              billingCycle === 'yearly' ? 'translate-x-8' : 'translate-x-1'
-            }`} />
+          <span className={`text-sm ${billingCycle === 'monthly' ? 'text-white font-medium' : 'text-gray-400'}`}>Mensile</span>
+          <button onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
+            data-testid="billing-toggle"
+            className={`relative w-12 h-6 rounded-full transition-colors ${billingCycle === 'yearly' ? 'bg-purple-500' : 'bg-gray-700'}`}>
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${billingCycle === 'yearly' ? 'translate-x-6' : 'translate-x-0.5'}`} />
           </button>
-          <span className={`text-sm ${billingCycle === 'yearly' ? 'text-white' : 'text-gray-400'}`}>
-            Annuale
-            <span className="ml-1 text-green-400 text-xs">-17%</span>
+          <span className={`text-sm ${billingCycle === 'yearly' ? 'text-white font-medium' : 'text-gray-400'}`}>
+            Annuale <span className="text-green-400 text-xs ml-1">Risparmia -17%</span>
           </span>
         </div>
 
         {/* User Plans */}
-        <section className="mb-12">
-          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-            <Crown className="w-5 h-5 text-purple-400" />
-            Piani Trading
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {userPlans.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                billingCycle={billingCycle}
-                isCurrentPlan={currentSubscription?.plan_id === plan.id}
-                onSubscribe={() => handleSubscribe(plan.id)}
-                subscribing={subscribing}
-              />
-            ))}
-          </div>
-        </section>
+        {userPlans.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
+              <Crown className="w-5 h-5 text-purple-400" /> Piani Trading
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {userPlans.map(plan => (
+                <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle}
+                  isCurrentPlan={currentSub?.plan_id === plan.id}
+                  onSubscribe={() => handleSubscribe(plan.id)}
+                  subscribing={subscribing === plan.id} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Developer Plans */}
-        <section className="mb-12">
-          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-            <Code className="w-5 h-5 text-green-400" />
-            Piani Developer
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {developerPlans.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                billingCycle={billingCycle}
-                isCurrentPlan={currentSubscription?.plan_id === plan.id}
-                onSubscribe={() => handleSubscribe(plan.id)}
-                subscribing={subscribing}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* Enterprise */}
-        {enterprisePlans.length > 0 && (
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-              <Building className="w-5 h-5 text-red-400" />
-              Enterprise
+        {devPlans.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
+              <Code className="w-5 h-5 text-green-400" /> Piani Developer
             </h2>
-            <div className="grid grid-cols-1 gap-6">
-              {enterprisePlans.map((plan) => (
-                <PlanCard
-                  key={plan.id}
-                  plan={plan}
-                  billingCycle={billingCycle}
-                  isCurrentPlan={currentSubscription?.plan_id === plan.id}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {devPlans.map(plan => (
+                <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle}
+                  isCurrentPlan={currentSub?.plan_id === plan.id}
                   onSubscribe={() => handleSubscribe(plan.id)}
-                  subscribing={subscribing}
-                  featured
-                />
+                  subscribing={subscribing === plan.id} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Enterprise Plans */}
+        {entPlans.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
+              <Building className="w-5 h-5 text-red-400" /> Enterprise
+            </h2>
+            <div className="grid grid-cols-1 gap-5">
+              {entPlans.map(plan => (
+                <PlanCard key={plan.id} plan={plan} billingCycle={billingCycle}
+                  isCurrentPlan={currentSub?.plan_id === plan.id}
+                  onSubscribe={() => handleSubscribe(plan.id)}
+                  subscribing={subscribing === plan.id} featured />
               ))}
             </div>
           </section>
@@ -268,113 +239,74 @@ export default function SubscriptionPlans() {
   );
 }
 
-function PlanCard({ plan, billingCycle, isCurrentPlan, onSubscribe, subscribing, featured = false }) {
+function PlanCard({ plan, billingCycle, isCurrentPlan, onSubscribe, subscribing, featured }) {
   const Icon = PLAN_ICONS[plan.code] || Shield;
-  const gradient = PLAN_COLORS[plan.code] || 'from-purple-500 to-pink-500';
+  const gradient = PLAN_GRADIENTS[plan.code] || 'from-purple-500 to-pink-500';
   const price = billingCycle === 'monthly' ? plan.price_monthly : plan.price_yearly;
   const period = billingCycle === 'monthly' ? '/mese' : '/anno';
 
-  // Parse features
-  const featureList = Object.entries(plan.features || {}).map(([key, value]) => {
-    const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    if (typeof value === 'boolean') {
-      return { label, enabled: value };
-    } else if (value === -1) {
-      return { label: `${label}: Illimitato`, enabled: true };
-    } else {
-      return { label: `${label}: ${value.toLocaleString()}`, enabled: true };
+  const features = [];
+  if (plan.trading_fee_discount > 0)
+    features.push(`${(plan.trading_fee_discount * 100).toFixed(0)}% sconto commissioni`);
+  if (plan.max_api_keys > 0)
+    features.push(plan.max_api_keys === -1 ? 'API Keys illimitate' : `${plan.max_api_keys} API Keys`);
+  if (plan.max_tokens_created > 0)
+    features.push(plan.max_tokens_created === -1 ? 'Token illimitati' : `${plan.max_tokens_created} Token`);
+  if (plan.max_listings > 0)
+    features.push(plan.max_listings === -1 ? 'Listing illimitati' : `${plan.max_listings} Listing`);
+
+  Object.entries(plan.features || {}).forEach(([key, val]) => {
+    if (typeof val === 'boolean' && val) {
+      features.push(key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+    } else if (typeof val === 'number' && val !== 0) {
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      features.push(val === -1 ? `${label}: Illimitato` : `${label}: ${val.toLocaleString()}`);
     }
-  }).filter(f => f.enabled);
+  });
 
   return (
-    <div className={`relative bg-gray-900 border rounded-2xl overflow-hidden ${
-      isCurrentPlan 
-        ? 'border-purple-500 ring-2 ring-purple-500/20' 
-        : featured 
-          ? 'border-gray-700 bg-gradient-to-br from-gray-900 to-gray-800'
-          : 'border-gray-800 hover:border-gray-700'
-    }`}>
+    <div className={`relative bg-gray-900 border rounded-xl overflow-hidden ${
+      isCurrentPlan ? 'border-purple-500 ring-2 ring-purple-500/20' :
+      featured ? 'border-gray-600' : 'border-gray-800 hover:border-gray-700'
+    }`} data-testid={`plan-card-${plan.code}`}>
       {isCurrentPlan && (
-        <div className="absolute top-0 right-0 bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-          ATTIVO
-        </div>
+        <div className="absolute top-0 right-0 bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">ATTIVO</div>
       )}
-
-      <div className={`p-6 bg-gradient-to-r ${gradient} bg-opacity-10`}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className={`p-2 rounded-lg bg-gradient-to-r ${gradient}`}>
-            <Icon className="w-5 h-5 text-white" />
+      <div className="p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`p-1.5 rounded-lg bg-gradient-to-r ${gradient}`}>
+            <Icon className="w-4 h-4 text-white" />
           </div>
-          <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+          <h3 className="text-lg font-bold text-white">{plan.name}</h3>
         </div>
-        <p className="text-gray-400 text-sm">{plan.description}</p>
-      </div>
+        {plan.description && <p className="text-gray-400 text-sm mb-4">{plan.description}</p>}
 
-      <div className="p-6">
-        <div className="mb-6">
-          <span className="text-4xl font-bold text-white">
-            €{price.toLocaleString()}
-          </span>
-          <span className="text-gray-400">{period}</span>
+        <div className="mb-5">
+          <span className="text-3xl font-bold text-white">€{price.toLocaleString()}</span>
+          <span className="text-gray-400 text-sm">{period}</span>
         </div>
 
-        <ul className="space-y-3 mb-6">
-          {plan.trading_fee_discount > 0 && (
-            <li className="flex items-center gap-2 text-sm">
-              <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-              <span className="text-gray-300">
-                {(plan.trading_fee_discount * 100).toFixed(0)}% sconto commissioni
-              </span>
-            </li>
-          )}
-          {plan.max_api_keys > 0 && (
-            <li className="flex items-center gap-2 text-sm">
-              <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-              <span className="text-gray-300">
-                {plan.max_api_keys === -1 ? 'API Keys illimitate' : `${plan.max_api_keys} API Keys`}
-              </span>
-            </li>
-          )}
-          {plan.max_tokens_created > 0 && (
-            <li className="flex items-center gap-2 text-sm">
-              <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-              <span className="text-gray-300">
-                {plan.max_tokens_created === -1 ? 'Token illimitati' : `${plan.max_tokens_created} Token`}
-              </span>
-            </li>
-          )}
-          {featureList.slice(0, 4).map((feature, idx) => (
-            <li key={idx} className="flex items-center gap-2 text-sm">
-              <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-              <span className="text-gray-300">{feature.label}</span>
+        <ul className="space-y-2 mb-5">
+          {features.slice(0, 6).map((f, i) => (
+            <li key={i} className="flex items-center gap-2 text-sm">
+              <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+              <span className="text-gray-300">{f}</span>
             </li>
           ))}
         </ul>
 
-        <button
-          onClick={onSubscribe}
+        <button onClick={onSubscribe}
           disabled={subscribing || isCurrentPlan || price === 0}
-          className={`w-full py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-            isCurrentPlan
-              ? 'bg-gray-800 text-gray-400 cursor-default'
-              : price === 0
-                ? 'bg-gray-800 text-gray-400'
-                : `bg-gradient-to-r ${gradient} text-white hover:opacity-90`
-          }`}
           data-testid={`subscribe-${plan.code}`}
-        >
-          {subscribing ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : isCurrentPlan ? (
-            'Piano Attivo'
-          ) : price === 0 ? (
-            'Piano Attuale'
-          ) : (
-            <>
-              Sottoscrivi
-              <ArrowRight className="w-4 h-4" />
-            </>
-          )}
+          className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+            isCurrentPlan ? 'bg-gray-800 text-gray-500 cursor-default' :
+            price === 0 ? 'bg-gray-800 text-gray-500' :
+            `bg-gradient-to-r ${gradient} text-white hover:opacity-90`
+          }`}>
+          {subscribing ? <Loader2 className="w-4 h-4 animate-spin" /> :
+           isCurrentPlan ? 'Piano Attivo' :
+           price === 0 ? 'Piano Attuale' :
+           <><span>Sottoscrivi</span><ArrowRight className="w-4 h-4" /></>}
         </button>
       </div>
     </div>

@@ -118,3 +118,21 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 async def logout():
     """Logout (client should discard token)."""
     return {"success": True, "message": "Logged out successfully"}
+
+
+
+@router.get("/admin/users")
+async def admin_list_users(current_user: dict = Depends(get_current_user)):
+    """List all users. Admin only."""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    users = await auth_service.db.users.find(
+        {}, {"_id": 0, "password_hash": 0}
+    ).sort("created_at", -1).to_list(500)
+    
+    for u in users:
+        if "created_at" in u and hasattr(u["created_at"], "isoformat"):
+            u["created_at"] = u["created_at"].isoformat()
+    
+    return {"users": users, "total": len(users)}
