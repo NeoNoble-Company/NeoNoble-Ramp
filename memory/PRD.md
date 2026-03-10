@@ -118,7 +118,7 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
     - 24h stats (volume, high, low)
     - Fullscreen mode
 
-## Live Trading Status (Updated March 9, 2026)
+## Live Trading Status (Updated March 10, 2026)
 | Service | Status |
 |---------|--------|
 | DEX | ✅ ENABLED, READY |
@@ -126,8 +126,8 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
 | Kraken | ✅ Connected |
 | Coinbase | ✅ Connected |
 | Binance | ⚠️ Geo-blocked 451 |
-| PostgreSQL | ✅ **PRIMARY (postgresql_only mode)** |
-| MongoDB | ✅ Connected (legacy backup) |
+| MongoDB | ✅ **PRIMARY (mongodb_only mode)** |
+| Email (Resend) | ✅ **WORKING (noreply@neonobleramp.com)** |
 
 ## Key API Endpoints
 - `/api/auth/*` - Authentication
