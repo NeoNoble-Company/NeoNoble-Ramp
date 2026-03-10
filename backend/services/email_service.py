@@ -59,6 +59,7 @@ class EmailService:
         to_email: str,
         subject: str,
         html_content: str,
+        text_content: Optional[str] = None,
         from_email: Optional[str] = None
     ) -> Dict:
         """
@@ -68,6 +69,7 @@ class EmailService:
             to_email: Recipient email address
             subject: Email subject
             html_content: HTML content of the email
+            text_content: Plain text content (improves deliverability)
             from_email: Optional sender email (defaults to SENDER_EMAIL)
             
         Returns:
@@ -83,8 +85,13 @@ class EmailService:
             "from": sender,
             "to": [to_email],
             "subject": subject,
-            "html": html_content
+            "html": html_content,
+            "reply_to": SENDER_EMAIL
         }
+        
+        # Add plain text version for better deliverability
+        if text_content:
+            params["text"] = text_content
         
         try:
             # Run sync SDK in thread to keep FastAPI non-blocking
