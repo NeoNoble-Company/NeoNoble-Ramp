@@ -234,6 +234,22 @@ https://neonobleramp.com
         """
         Send password changed confirmation email.
         """
+        greeting = f"Ciao {user_name}," if user_name else "Ciao,"
+        current_time = datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')
+        
+        text_content = f"""{greeting}
+
+La password del tuo account NeoNoble Ramp è stata aggiornata con successo.
+
+Se non hai effettuato questa modifica, contattaci immediatamente.
+
+Data: {current_time} UTC
+
+---
+NeoNoble Ramp
+https://neonobleramp.com
+"""
+        
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -247,8 +263,9 @@ https://neonobleramp.com
                 <tr>
                     <td style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); padding: 40px 30px; text-align: center;">
                         <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">
-                            ✅ Password Aggiornata
+                            Password Aggiornata
                         </h1>
+                        <p style="color: #e0e0e0; margin: 10px 0 0 0; font-size: 14px;">NeoNoble Ramp</p>
                     </td>
                 </tr>
                 
@@ -256,7 +273,7 @@ https://neonobleramp.com
                 <tr>
                     <td style="padding: 40px 30px;">
                         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                            {f'Ciao {user_name},' if user_name else 'Ciao,'}
+                            {greeting}
                         </p>
                         
                         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
@@ -268,7 +285,7 @@ https://neonobleramp.com
                         </p>
                         
                         <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
-                            Data: {datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')} UTC
+                            Data: {current_time} UTC
                         </p>
                     </td>
                 </tr>
@@ -277,7 +294,8 @@ https://neonobleramp.com
                 <tr>
                     <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
                         <p style="color: #999999; font-size: 12px; margin: 0;">
-                            © 2026 NeoNoble Ramp. Tutti i diritti riservati.
+                            © 2026 NeoNoble Ramp. Tutti i diritti riservati.<br>
+                            <a href="https://neonobleramp.com" style="color: #667eea;">neonobleramp.com</a>
                         </p>
                     </td>
                 </tr>
@@ -288,8 +306,9 @@ https://neonobleramp.com
         
         return await self.send_email(
             to_email=to_email,
-            subject="✅ Password aggiornata - NeoNoble Ramp",
-            html_content=html_content
+            subject="Password aggiornata - NeoNoble Ramp",
+            html_content=html_content,
+            text_content=text_content
         )
     
     async def send_welcome_email(
