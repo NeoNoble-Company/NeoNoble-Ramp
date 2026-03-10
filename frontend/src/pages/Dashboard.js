@@ -161,6 +161,10 @@ export default function Dashboard() {
               <span className="text-xl font-bold text-white">NeoNoble Ramp</span>
             </Link>
             <div className="flex items-center space-x-4">
+              {/* Wallet Connect */}
+              <ChainSelector />
+              <WalletConnectButton />
+              
               {isDeveloper && (
                 <Link
                   to="/dev"
@@ -170,6 +174,14 @@ export default function Dashboard() {
                   Dev Portal
                 </Link>
               )}
+              <Link
+                to="/admin"
+                className="flex items-center gap-1 text-gray-300 hover:text-white px-3 py-2 text-sm"
+                data-testid="nav-admin"
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Link>
               <span className="text-gray-400 text-sm">{user?.email}</span>
               <button
                 onClick={handleLogout}
