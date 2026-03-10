@@ -333,6 +333,7 @@ https://neonobleramp.com
         """
         Send welcome email to new users.
         """
+        app_url = get_app_url()
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -346,7 +347,7 @@ https://neonobleramp.com
                 <tr>
                     <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
                         <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">
-                            🎉 Benvenuto su NeoNoble Ramp!
+                            Benvenuto su NeoNoble Ramp!
                         </h1>
                     </td>
                 </tr>
@@ -363,16 +364,16 @@ https://neonobleramp.com
                         </p>
                         
                         <ul style="color: #333333; font-size: 16px; line-height: 1.8; padding-left: 20px;">
-                            <li>💰 Acquista crypto con carta o bonifico</li>
-                            <li>💸 Vendi crypto e ricevi EUR</li>
-                            <li>📊 Monitora le tue transazioni</li>
+                            <li>Acquista crypto con carta o bonifico</li>
+                            <li>Vendi crypto e ricevi EUR</li>
+                            <li>Monitora le tue transazioni</li>
                         </ul>
                         
                         <!-- Button -->
                         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 30px;">
                             <tr>
                                 <td align="center">
-                                    <a href="{APP_URL}/dashboard" 
+                                    <a href="{app_url}/dashboard" 
                                        style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                                               color: #ffffff; text-decoration: none; padding: 15px 40px; 
                                               border-radius: 8px; font-size: 16px; font-weight: 600;">
