@@ -289,6 +289,38 @@ export default function Dashboard() {
                 )}
               </div>
 
+              {/* Token & Subscription Quick Access */}
+              <div className="mb-6 grid grid-cols-2 gap-4">
+                <Link
+                  to="/tokens/create"
+                  className="p-4 bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl hover:border-green-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                      <Coins className="h-5 w-5 text-green-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-green-400">Crea Token</h3>
+                      <p className="text-gray-400 text-xs">Lancia il tuo token</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  to="/subscriptions"
+                  className="p-4 bg-gradient-to-r from-orange-600/20 to-amber-600/20 border border-orange-500/30 rounded-xl hover:border-orange-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="h-5 w-5 text-orange-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-orange-400">Abbonamenti</h3>
+                      <p className="text-gray-400 text-xs">Piani Pro & Developer</p>
+                    </div>
+                  </div>
+                </Link>
+              </div>
+
               {/* Error/Success Messages */}
               {error && (
                 <div className="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center space-x-2 text-red-200" data-testid="ramp-error">
