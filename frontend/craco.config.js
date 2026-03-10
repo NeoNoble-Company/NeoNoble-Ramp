@@ -61,6 +61,19 @@ const webpackConfig = {
         ],
       };
 
+      // Resolve optional peer dependencies for web3 packages
+      webpackConfig.resolve = {
+        ...webpackConfig.resolve,
+        fallback: {
+          ...webpackConfig.resolve?.fallback,
+          '@react-native-async-storage/async-storage': false,
+          'porto': false,
+          'porto/internal': false,
+          '@safe-global/safe-apps-sdk': false,
+          '@safe-global/safe-apps-provider': false,
+        },
+      };
+
       // Add health check plugin to webpack if enabled
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);

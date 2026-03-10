@@ -28,7 +28,7 @@ export default function TokenCreation() {
   // Get token from localStorage
   const token = localStorage.getItem('token');
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [createdToken, setCreatedToken] = useState(null);

@@ -1,163 +1,359 @@
 <analysis>**original_problem_statement:**
-The user's initial goal was to build the NeoNoble Ramp platform. Over several sessions, the scope expanded significantly to include:
-1.  **Database Migration:** Migrate from MongoDB to PostgreSQL. (Completed)
-2.  **Real Fiat Payouts:** Integrate Stripe for EUR payouts. (Completed)
-3.  **Hybrid PoR Liquidity Architecture:** Implement a provider-grade liquidity framework. (Completed)
-4.  **C-SAFE DEX Off-Ramp:** Implement an on-chain off-ramp using DEXs for the native  token. (Completed & Configured)
-5.  **Transak Widget Integration:** Add the Transak on-ramp widget. (Completed)
-6.  **Live Exchange Trading & Hedging:** Implement live connectors for Binance, Kraken, and Coinbase, and enable real execution. (Completed & Configured)
-7.  **Password Reset via Email:** Add a password reset feature using Resend. (Completed)
-8.  **Transak Audit Log:** Create a visual timeline to log all user interactions within the Transak widget. (Completed)
-9.  ** Token Integration:** Integrate the native  token as a virtual listing across all connected exchanges (Binance, Kraken, Coinbase) with a fixed price, making it behave like any other listed asset. (Completed)
-10. **Real-Time Trading UI:** Build a frontend widget for trading  with real-time price updates via WebSockets, order placement, and balance tracking. (Completed)
-11. **Advanced UI Features:** Add candlestick charts for price history and a push notification system for executed orders. (In Progress)
+The user has provided a detailed architectural directive to build NeoNoble Ramp as a global, enterprise-grade fintech infrastructure, moving beyond an MVP. The platform is envisioned to be a scalable, modular system comparable to Stripe, Coinbase, or MoonPay.
+
+The core components to be implemented are:
+1.  **Scalable Infrastructure:** Microservices architecture (Docker, Kubernetes).
+2.  **Identity & Access Management:** Secure, role-based (User, Developer, Admin) authentication.
+3.  **Wallet Infrastructure:** Multi-wallet support (MetaMask, WalletConnect, etc.) with multi-chain capabilities.
+4.  **Fiat On/Off Ramp:** Transak widget integration.
+5.  **Crypto Exchange Infrastructure:** Full exchange engine with a matching engine, order book, and professional charts (TradingView).
+6.  **Liquidity Aggregation:** Multi-DEX liquidity aggregator (Uniswap, PancakeSwap, etc.).
+7.  **Token Infrastructure:** An in-platform system for users/admins to create tokens.
+8.  **Custom Token Support:** Treat custom tokens like  as first-class tradable assets.
+9.  **Trading Pairs:** Ability to create 10+ trading pairs for each token.
+10. **Token Listing Marketplace:** A monetizable system for users to pay for token listings.
+11. **Subscription Infrastructure:** A recurring revenue system with tiered plans for Users and Developers.
+12. **Crypto Market Data:** Integration of data for at least 30 major cryptocurrencies.
+13. **Admin Control System:** A comprehensive dashboard for platform management and analytics.
+14. **Developer API Ecosystem:** Public APIs to enable third-party developers to build on the platform.
+
+The user has specified a clear, business-driven implementation order, prioritizing the platform's core economic engine first.
 
 **User's preferred language**: Italian. The next agent MUST respond in Italian.
 
 **what currently exists?**
-The application is a fully-featured crypto finance platform with a FastAPI/PostgreSQL backend and a React frontend. The migration to PostgreSQL is complete, and the system is running in  mode. All core services are live and configured with user-provided API keys: live trading is enabled on Kraken and Coinbase (Binance is geo-blocked but configured), the C-SAFE DEX off-ramp is configured with user wallets, and the Transak widget with its audit log is fully functional.
+The application is a full-stack monolith with a FastAPI/MongoDB backend and a React frontend. The database was reverted from PostgreSQL to MongoDB to meet deployment requirements.
 
-A complete trading experience for the native token, , has been implemented. This includes:
--   A virtual listing that makes  tradeable via the same APIs and UI as other cryptos on Kraken, Coinbase, and Binance.
--   A real-time frontend trading widget () connected to a WebSocket backend for live updates.
--   Backend services and API endpoints for candlestick price data () and user notifications ().
--   Initial frontend components for displaying candlestick charts and a notification system ( toasts).
+The following features from the new architectural directive have been scaffolded:
+-   **Backend:**
+    -   New MongoDB data models for , , , and  have been added to .
+    -   API endpoints for the Token Creation Infrastructure () and Subscription System () have been created and are functional.
+    -   An admin user () was created and used to seed the database with default subscription plans.
+-   **Frontend:**
+    -   Multi-wallet support has been added using **Web3Modal**, with a Connetti Wallet button on the main dashboard.
+    -   Basic UI pages have been created for , , , and .
+    -   These new pages are correctly routed in  and linked from the .
 
 **Last working item**:
--   **Last item agent was working:** The agent was debugging the  component. After discovering that the API of  version 5 was causing errors, it correctly decided to downgrade the library to version 4. The agent was in the middle of adapting the component's code to work with the version 4 API.
+-   **Last item agent was working:** The agent was debugging a deployment failure. The build logs provided by the user indicated that the frontend build was failing due to  errors for several peer dependencies of  and . The agent correctly identified the issue and was about to install the missing packages.
 -   **Status:** IN PROGRESS
--   **Agent Testing Done:** N (For this specific fix, but extensive testing was done prior)
--   **Which testing method agent to use?** screenshot tool. Once the chart component is fixed, take a screenshot of the dashboard with the trading widget open to verify the chart renders correctly.
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** deployment_agent. After installing the dependencies, the agent must call the  with the user's original build logs to confirm that the fix resolves the build errors.
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Candlestick chart is broken after library version issues. (P0)**
-    -   **Attempted fixes:** The agent tried to adapt the code to the  v5 API but failed. It then successfully downgraded the library to v4.
+-   **Issue 1: Deployment fails due to missing frontend dependencies. (P0 - BLOCKER)**
+    -   **Attempted fixes:** The agent analyzed the build logs and identified the missing packages.
     -   **Next debug checklist:**
-        1.  View .
-        2.  Modify the code to use the  v4 API (e.g., ). Ensure the data format passed to the series (especially the  property) is correct for v4.
-        3.  Take a screenshot of the dashboard page with the trading widget open to confirm the chart renders.
-    -   **Why fix this issue and what will be achieved with the fix?** This will complete the user's request for a visual price history, making the trading UI feature-complete.
+        1.  In the  directory, run yarn add v1.22.22
+[1/4] Resolving packages...
+[2/4] Fetching packages...
+[3/4] Linking dependencies...
+[4/4] Building fresh packages...
+success Saved lockfile.
+success Saved 162 new dependencies.
+info Direct dependencies
+├─ @base-org/account@2.5.2
+├─ @coinbase/wallet-sdk@4.3.7
+├─ @metamask/sdk@0.34.0
+├─ @tanstack/react-query@5.90.21
+├─ @wagmi/connectors@7.2.1
+├─ @wagmi/core@3.4.0
+├─ viem@2.47.1
+└─ wagmi@3.5.0
+info All dependencies
+├─ @adraffy/ens-normalize@1.11.1
+├─ @babel/runtime@7.28.6
+├─ @base-org/account@2.5.2
+├─ @coinbase/cdp-sdk@1.45.0
+├─ @coinbase/wallet-sdk@4.3.7
+├─ @ecies/ciphers@0.2.5
+├─ @ethereumjs/common@3.2.0
+├─ @metamask/json-rpc-engine@8.0.2
+├─ @metamask/json-rpc-middleware-stream@7.0.2
+├─ @metamask/object-multiplex@2.1.0
+├─ @metamask/onboarding@1.0.1
+├─ @metamask/providers@16.1.0
+├─ @metamask/sdk-communication-layer@0.33.1
+├─ @metamask/sdk-install-modal-web@0.32.1
+├─ @metamask/sdk@0.34.0
+├─ @metamask/superstruct@3.2.1
+├─ @noble/curves@1.9.7
+├─ @scure/bip32@1.7.0
+├─ @scure/bip39@1.6.0
+├─ @solana-program/system@0.10.0
+├─ @solana-program/token@0.9.0
+├─ @solana/buffer-layout@4.0.1
+├─ @solana/instruction-plans@5.5.1
+├─ @solana/kit@5.5.1
+├─ @solana/options@5.5.1
+├─ @solana/plugin-core@5.5.1
+├─ @solana/programs@5.5.1
+├─ @solana/rpc-subscriptions-api@5.5.1
+├─ @solana/rpc-subscriptions-channel-websocket@5.5.1
+├─ @solana/rpc-transport-http@5.5.1
+├─ @solana/signers@5.5.1
+├─ @solana/sysvars@5.5.1
+├─ @solana/transaction-confirmation@5.5.1
+├─ @solana/web3.js@1.98.4
+├─ @swc/helpers@0.5.19
+├─ @tanstack/query-core@5.90.20
+├─ @tanstack/react-query@5.90.21
+├─ @types/connect@3.4.38
+├─ @types/ms@2.1.0
+├─ @types/uuid@10.0.0
+├─ @types/ws@7.4.7
+├─ @wagmi/connectors@7.2.1
+├─ @wagmi/core@3.4.0
+├─ abitype@1.2.3
+├─ abort-controller@3.0.0
+├─ agentkeepalive@4.6.0
+├─ asynckit@0.4.0
+├─ available-typed-arrays@1.0.7
+├─ axios-retry@4.5.0
+├─ axios@1.13.6
+├─ base-x@3.0.11
+├─ base64-js@1.5.1
+├─ bn.js@5.2.3
+├─ borsh@0.7.0
+├─ brotli-wasm@3.0.1
+├─ bs58@4.0.1
+├─ bufferutil@4.1.0
+├─ call-bind-apply-helpers@1.0.2
+├─ call-bind@1.0.8
+├─ chalk@5.6.2
+├─ charenc@0.0.2
+├─ clsx@1.2.1
+├─ combined-stream@1.0.8
+├─ commander@14.0.2
+├─ core-util-is@1.0.3
+├─ crc-32@1.2.2
+├─ cross-fetch@4.1.0
+├─ crypt@0.0.2
+├─ date-fns@2.30.0
+├─ define-data-property@1.1.4
+├─ delay@5.0.0
+├─ delayed-stream@1.0.0
+├─ detect-browser@5.3.0
+├─ dunder-proto@1.0.1
+├─ eciesjs@0.4.18
+├─ end-of-stream@1.4.5
+├─ engine.io-client@6.6.4
+├─ engine.io-parser@5.2.3
+├─ es-object-atoms@1.1.1
+├─ es-set-tostringtag@2.1.0
+├─ es6-promise@4.2.8
+├─ es6-promisify@5.0.0
+├─ eth-rpc-errors@4.0.3
+├─ event-target-shim@5.0.1
+├─ eventemitter2@6.4.9
+├─ events@3.3.0
+├─ extension-port-stream@3.0.0
+├─ eyes@0.1.8
+├─ fast-deep-equal@3.1.3
+├─ fast-stable-stringify@1.0.0
+├─ follow-redirects@1.15.11
+├─ for-each@0.3.5
+├─ form-data@4.0.5
+├─ generator-function@2.0.1
+├─ has-property-descriptors@1.0.2
+├─ has-symbols@1.1.0
+├─ humanize-ms@1.2.1
+├─ idb-keyval@6.2.1
+├─ ieee754@1.2.1
+├─ inherits@2.0.4
+├─ is-arguments@1.2.0
+├─ is-buffer@1.1.6
+├─ is-callable@1.2.7
+├─ is-generator-function@1.1.2
+├─ is-regex@1.2.1
+├─ is-retry-allowed@2.2.0
+├─ is-stream@2.0.1
+├─ is-typed-array@1.1.15
+├─ isarray@1.0.0
+├─ isomorphic-ws@4.0.1
+├─ isows@1.0.7
+├─ jayson@4.3.0
+├─ jose@6.2.1
+├─ json-stringify-safe@5.0.1
+├─ math-intrinsics@1.1.0
+├─ md5@2.3.0
+├─ micro-ftch@0.3.1
+├─ mime-db@1.52.0
+├─ mime-types@2.1.35
+├─ mipd@0.0.7
+├─ ms@2.1.3
+├─ node-gyp-build@4.8.4
+├─ obj-multiplex@1.0.0
+├─ openapi-fetch@0.13.8
+├─ openapi-typescript-helpers@0.0.15
+├─ ox@0.14.0
+├─ possible-typed-array-names@1.1.0
+├─ preact@10.24.2
+├─ process-nextick-args@2.0.1
+├─ process@0.11.10
+├─ proxy-from-env@1.1.0
+├─ pump@3.0.4
+├─ rpc-websockets@9.3.5
+├─ safe-buffer@5.1.2
+├─ safe-regex-test@1.1.0
+├─ set-function-length@1.2.2
+├─ socket.io-client@4.8.3
+├─ socket.io-parser@4.2.5
+├─ stream-chain@2.2.5
+├─ stream-json@1.9.1
+├─ string_decoder@1.3.0
+├─ superstruct@2.0.2
+├─ text-encoding-utf-8@1.0.2
+├─ tr46@0.0.3
+├─ tslib@2.8.1
+├─ uncrypto@0.1.3
+├─ undici-types@7.18.2
+├─ use-sync-external-store@1.4.0
+├─ utf-8-validate@6.0.6
+├─ util-deprecate@1.0.2
+├─ util@0.12.5
+├─ viem@2.47.1
+├─ wagmi@3.5.0
+├─ webextension-polyfill@0.10.0
+├─ webidl-conversions@3.0.1
+├─ whatwg-url@5.0.0
+├─ which-typed-array@1.1.20
+├─ wrappy@1.0.2
+├─ ws@8.18.3
+├─ xmlhttprequest-ssl@2.1.2
+├─ zod@3.25.76
+└─ zustand@5.0.0
+Done in 43.17s.. This will install the required peer dependencies.
+        2.  After the installation is complete, invoke the  with the original logs to verify the fix and attempt a new build.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a hard blocker preventing the application from being deployed. Fixing it is essential for any further progress.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Frontend
-    -   **Blocked on other issue:** None
+    -   **Should Test frontend/backend/both after fix?** Frontend (via deployment build process).
+    -   **Blocked on other issue:** None. This is the primary blocker.
 
 **In progress Task List**:
--   **Task 1: Complete UI for Advanced Features (P0)**
-    -   **Where to resume:** Finish debugging the  component as described in the issue above.
-    -   **What will be achieved with this?** A fully functional trading UI with live price updates, candlestick charts, and order notifications, as requested by the user.
+-   **Task 1: Build Frontend UI for Core Economic Engine (P0)**
+    -   **Where to resume:** The backend APIs and data models for Token Creation and Subscriptions are already in place. The frontend has placeholder pages. The next step, after fixing the deployment blocker, is to build out the complete, functional UI for:
+        -   : Connect the form to the  endpoint.
+        -   : Create the UI for the Token Listing Marketplace, allowing users to request listings and admins to manage them.
+        -   : Implement the logic for users to select and subscribe to a plan (this will require payment integration in a later step).
+    -   **What will be achieved with this?** This will complete the user-prioritized first phase of building the platform's core monetizable features.
     -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** Both (Frontend via screenshot, backend notifications can be tested via  if needed, but UI test is sufficient).
-    -   **Blocked on something:** Blocked on resolving Issue 1.
+    -   **Should Test frontend/backend/both after fix?** Both.
+    -   **Blocked on something:** Blocked on resolving Issue 1: Deployment fails....
 
 **Upcoming and Future Tasks**
--   **Upcoming Tasks:**
-    -   **P1: Create Liquidity Pool on PancakeSwap:** The agent previously suggested creating a real liquidity pool for the  token on a DEX like PancakeSwap to enable decentralized trading. This would be the next logical step after completing the UI.
+-   **Upcoming Tasks (User-defined priority):**
+    -   **P1: 30 Crypto Market Data Integration:** Implement a backend service to fetch and store market data from an external source (e.g., CoinGecko) and display it on the frontend.
+    -   **P2: Full Exchange Engine & Order Book:** Develop the backend matching engine and order book logic.
+    -   **P3: TradingView Integration:** Integrate TradingView charts into the frontend to provide a professional trading experience.
 -   **Future Tasks:**
-    -   **Repository Pattern Refactoring:** Refactor services to exclusively use the repository interfaces, fully decoupling business logic from the PostgreSQL data access layer.
-    -   **Fix :** The validation script at  has incorrect endpoints and should be fixed.
-    -   **Performance Optimization:** Review and optimize database queries and API responses as the platform scales.
+    -   **Microservices Architecture:** Begin the strategic refactor of the monolith into a distributed system as per the user's architectural directive.
+    -   **Multi-Chain Support:** Extend the token creation infrastructure to support deploying contracts on multiple blockchains.
+    -   **Fix :** Update the validation script at  with correct endpoints.
 
 **Completed work in this session**
--   **Live Trading & Full Exchange Integration (DONE):**
-    -   Enabled live trading mode for both DEX and CEXs.
-    -   Added and configured the Coinbase connector with user-provided API keys.
-    -   Integrated the native token  as a virtual asset across Binance, Kraken, and Coinbase, allowing it to be traded via the standard exchange APIs and UI.
--   **Complete PostgreSQL Migration (DONE):**
-    -   Installed and configured PostgreSQL.
-    -   Executed a data migration script to sync existing data from MongoDB.
-    -   Switched the application to  mode, completing the migration.
--   **Real-Time Trading UI & WebSocket (DONE):**
-    -   Created a backend WebSocket for real-time data streaming.
-    -   Built a comprehensive frontend trading widget () for , including order placement, balance display, and an exchange selector.
--   **Candlestick Chart & Notification Services (Scaffolded):**
-    -   Created backend services and APIs for price history () and notifications ().
-    -   Integrated frontend components for charts and  toast notifications.
--   **C-SAFE Wallet Configuration (DONE):**
-    -   Correctly configured the two private keys provided by the user for the conversion and settlement wallets.
--   **Transak Audit Log (DONE):**
-    -   Successfully implemented and tested the visual audit log for all user interactions within the Transak widget.
+-   **Candlestick Chart Fix:** Resolved rendering issues in  by downgrading  to v4 and configuring the localization settings.
+-   **Password Reset Email Fix:** Debugged and resolved a complex email delivery issue by:
+    -   Configuring Resend with a verified user domain ().
+    -   Refactoring  to use lazy-loaded environment variables to fix an import-order bug.
+    -   Improving email deliverability by optimizing headers and content.
+-   **Deployment Re-architecture:** Reverted the application database from PostgreSQL back to MongoDB to align with production deployment environment constraints.
+-   **Token & Subscription Infrastructure (Backend):** Created the foundational data models (, , etc.) and API routes (, ) for the platform's core economic engine.
+-   **Initial Frontend Scaffolding:**
+    -   Integrated **Web3Modal** for multi-wallet connectivity.
+    -   Created placeholder pages for Admin, Token Creation, and Subscription Plans.
 
 **Earlier issues found/mentioned but not fixed**
--   The concurrent load test script () has incorrect API endpoints and payloads and remains unfixed.
+-   The load testing script  is outdated and non-functional.
 
 **Known issue recurrence from previous fork**
--   None. The previous PostgreSQL instability was resolved by a clean installation during this session.
+-   None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, PostgreSQL, SQLAlchemy, WebSockets
--   **Frontend:** React,  (v4),  (for toasts)
--   **Trading Logic:** Virtual exchange listing, Exchange connector mixins ()
--   **Database:** Full migration from MongoDB to PostgreSQL is complete. The system now operates in  mode.
+-   **Backend:** FastAPI, MongoDB (Motor client).
+-   **Frontend:** React, Craco, Web3Modal, Wagmi, viem, .
+-   **Authentication:** JWT-based, with role handling for USER, DEVELOPER, and ADMIN.
+-   **Deployment:** Fails at the frontend build step due to missing peer dependencies.
 
 **key DB schema**
--   All , , , , etc., models now reside in PostgreSQL, defined in . No new tables were added in the last steps, but services for price history and notifications were created (data is in-memory for now).
+-   **tokens:** 
+-   **token_listings:** 
+-   **subscription_plans:** 
+-   **trading_pairs:** 
 
 **changes in tech stack**
--   **Frontend:** Added  and .
+-   **Frontend:** Added , , , . These additions have introduced peer dependency issues that are blocking deployment.
+-   **Backend:** The application was reverted from a PostgreSQL/MongoDB dual-write setup to **MongoDB-only**.
 
 **All files of reference**
--   : The file that needs to be fixed.
--   : The parent component that uses the chart.
--   : To confirm the  version is .
--   : The core logic for the virtual NENO listing.
+-   **Deployment Logs:** The user-provided logs in message #464 are the source of truth for the current deployment blocker.
+-   : Shows the newly added dependencies and is key to resolving the build error.
+-   : Contains the schema for the new token and subscription infrastructure.
+-   : Contains the lazy-loading pattern for environment variables.
+-   : The central configuration for Web3Modal and wallet connection.
 
 **Areas that need refactoring**:
--   The  service currently generates random OHLC data. For a production system, this should be replaced with a mechanism to persist and retrieve real price data.
+-   The entire application is slated for a future refactor into a microservices architecture per the user's long-term vision.
 
 **key api endpoints**
--   : WebSocket endpoint for real-time trading data.
--   : GET endpoint to fetch historical OHLC data for charts.
--   : POST endpoint to create a new price alert.
+-   : Creates a new token.
+-   : Lists all tokens.
+-   : Provides statistics on created tokens.
+-   : Returns all visible subscription plans.
+-   : (Admin) Creates the default set of subscription plans.
 
 **Critical Info for New Agent**
 -   **LANGUAGE:** You **MUST** communicate with the user in **Italian**.
--   Your immediate priority is to fix the candlestick chart by adapting  to the  version 4 API.
--   The entire system is now live. Exchange trading, DEX swaps, and the PostgreSQL database are all fully enabled and configured.
--   The previous approach of a separate virtual exchange for NENO was refactored into a  class, which is a cleaner solution that has been applied to all exchange connectors.
+-   **TOP PRIORITY:** The immediate task is to fix the deployment build error. Install the missing wagmi/web3modal peer dependencies in  and then call the  to confirm the fix.
+-   **ARCHITECTURAL DIRECTIVE:** A detailed directive from the user (message #233 and #283) now dictates the project roadmap. The priority is to build the economic engine (Token Creation, Listing Marketplace, Subscriptions) before adding market data or other features.
+-   **DATABASE:** The project is **MongoDB-only**.
+-   **TESTING CREDENTIALS:** An admin user exists for testing purposes:  / .
 
 **documents and test reports created in this job**
--   : Has been created and updated throughout the session.
--   : Test report for the Transak Audit Log feature.
--   : Test report for Live Trading and PostgreSQL dual-write mode.
+-   : Updated with the latest progress and the new architectural goals.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (Latest):** Execute the Next Steps 2 and 3 complete -> Request to implement candlestick charts and push notifications. **Status: IN PROGRESS**
-2.  **Agent:** Finished NENO integration and proposed next steps (chart, notifications, liquidity pool).
-3.  **User:** Integrate that NENO is like all other cryptos on all Exchanges including Binance... and execute points 1 and 2 for the next steps -> Request to integrate NENO fully and build the WebSocket UI. **Status: COMPLETED**
-4.  **Agent:** Finished NENO virtual exchange integration and proposed next steps.
-5.  **User:** Integrate as if it were a crypto listed on Kraken and Coinbase with the same functionalities **Status: COMPLETED**
-6.  **Agent:** Confirmed that NENO exists on-chain but has no public liquidity, trading happens via the platform's fixed price.
-7.  **User:** Yes test it also on NeoNoble Token to see if it is active and working **Status: COMPLETED**
-8.  **Agent:** Finished the full PostgreSQL migration and Coinbase configuration.
-9.  **User:** Provided the Coinbase public key. **Status: COMPLETED**
-10. **Agent:** Asked for the Coinbase public key after receiving the secret.
+1.  **User (LATEST):** Provided build logs and requested a fix for the deployment failure. **Status: IN PROGRESS**
+2.  **User:** Confirmed the agent should proceed with the next steps in sequence. **Status: ACKNOWLEDGED**
+3.  **User:** Provided a new, detailed priority list, emphasizing the core business logic (Token Creation -> Listing -> Subscriptions) should be built before market data integration. **Status: IN PROGRESS**
+4.  **User:** Provided a detailed, multi-page Architectural Directive outlining the vision for NeoNoble Ramp as an enterprise-grade fintech platform. **Status: ACKNOWLEDGED**
+5.  **User:** Confirmed that the password reset email now works and is received correctly. **Status: COMPLETED**
+6.  **User:** Requested that the password reset functionality work for all users, not just the test/developer email. **Status: COMPLETED**
+7.  **User:** Reported that the password reset email was still not arriving. **Status: COMPLETED**
+8.  **User:** Confirmed their domain () is verified on Resend via a screenshot. **Status: COMPLETED**
+9.  **User:** Explained that the previously suggested domain was an Emergent preview domain and could not be verified by them on Resend. **Status: COMPLETED**
+10. **User:** Reported that the password reset email was not arriving after the initial fix attempt. **Status: COMPLETED**
 
 **Project Health Check:**
--   **Working:** Core app, Live CEX/DEX trading, PostgreSQL database, Password Reset, Transak widget & audit log, Real-time NENO trading UI.
--   **Broken:** The Candlestick chart component is visually broken and needs a code fix.
+-   **Working:** The application runs correctly in the local development environment. Core features like authentication, password reset, and the newly added backend APIs for tokens/subscriptions are functional.
+-   **Broken:** The application is **NOT DEPLOYABLE**. The frontend build process fails due to missing peer dependencies related to the new Web3Modal/Wagmi integration.
 
 **3rd Party Integrations**
--   **Stripe:** (Configured)
--   **PostgreSQL 15:** (Primary Database)
--   **BNB Smart Chain:** (via )
--   **Transak:** (Configured)
--   **Resend:** (Configured)
--   **Binance / Kraken / Coinbase:** Exchange connectors with live API keys.
--   **:** Frontend library for financial charts.
+-   **Resend:** Fully configured and working for transactional emails with the user's verified domain.
+-   **Web3Modal / Wagmi:** Integrated for multi-wallet support but is the source of the current deployment-blocking build error.
+-   **Stripe, Binance, Kraken, Coinbase, Transak:** Previously integrated and configured.
+-   **MongoDB:** The sole database for the application.
 
 **Testing status**
--   **Testing agent used after significant changes:** YES
+-   **Testing agent used after significant changes:** NO
 -   **Troubleshoot agent used after agent stuck in loop:** NO
 -   **Test files created:** None
--   **Known regressions:** The frontend candlestick chart is currently broken.
+-   **Known regressions:** The entire application is unable to be deployed.
 
 **Credentials to test flow:**
--   All necessary credentials (database, exchange APIs, Resend) are configured in . New users can be registered via the UI to test the full application flow.
+-   Admin User:
+    -   Email: 
+    -   Password: 
+-   Regular User:
+    -   Email: 
+    -   Password: 
 
 **What agent forgot to execute**
--   The agent did not forget to execute any requested tasks. It was actively in the middle of fixing a frontend bug when the session ended.</analysis>
+-   The agent was actively fixing the deployment issue but did not complete the yarn add v1.22.22
+info Visit https://yarnpkg.com/en/docs/cli/add for documentation about this command. command before the session ended.
+-   The low-priority task to fix the  script remains outstanding.</analysis>
