@@ -54,6 +54,10 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'neonoble_ramp')]
 
+# Set database instance for routes
+from database.mongodb import set_database
+set_database(db)
+
 # Import services
 from services.auth_service import AuthService
 from services.api_key_service import PlatformApiKeyService
