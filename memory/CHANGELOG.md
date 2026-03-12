@@ -1,5 +1,25 @@
 # NeoNoble Ramp - Changelog
 
+## [5.0.0] - 2026-03-12 - Financial Infrastructure Activation (Phase 5)
+
+### Added
+- **Multi-Chain Wallet Service** (`multichain_service.py`) - Real on-chain balance sync for ETH/BSC/Polygon via public RPCs
+- **Multi-Chain API Routes** (`multichain_routes.py`) - Link wallet, sync balances, chain discovery
+- **Banking Rails** (`banking_routes.py`) - Virtual IBAN assignment, SEPA deposit/withdrawal, transaction history, admin overview
+- **Enhanced Card Issuing** - Physical cards with shipping address, tracking number (NN-*), delivery estimates
+- **Wallet & Banking Frontend** (`WalletPage.js`) - 3-tab page: Wallet (balances, convert), On-Chain (multi-chain sync), Banking (IBAN/SEPA)
+- **Dashboard Navigation** - "Wallet & Banking" card added to dashboard quick links
+- Card shipping status endpoint `GET /api/cards/{id}/shipping`
+- Card creation now validates shipping address for physical cards (400 error if missing)
+- Physical cards start with `pending_shipment` status (virtual remain `active`)
+
+### Validated (E2E - 100% pass rate, 24/24 tests + frontend)
+- Multi-chain wallet sync (3 chains)
+- Banking Rails (IBAN assign, SEPA deposit/withdrawal)
+- Enhanced card issuing (physical + shipping)
+- Crypto-to-Fiat payment pipeline
+- Wallet & Banking UI (all 3 tabs)
+
 ## [4.0.0] - 2026-03-12 - Final Execution Phase Validation
 
 ### Fixed

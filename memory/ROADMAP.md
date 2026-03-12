@@ -5,22 +5,21 @@
 - [x] Platform Infrastructure (Market Data, Analytics, Cards UI)
 - [x] Trading & Developer Ecosystem (Exchange Engine, Charts, API Portal)
 - [x] Final Execution Phase (Card Issuing, Settlement, Advanced Trading, Paper Trading, WebSocket)
+- [x] Financial Infrastructure Activation (Multi-Chain Wallet, Banking Rails, Enhanced Cards, Wallet UI)
 
 ## P1 - Next Phase
+- [ ] **Production Key Activation**
+  - NIUM: Test → Production API key for real card issuing
+  - Banking Partner: Real IBAN/SEPA integration (NIUM Banking, Modulr, or Railsr)
+  - Exchange: Real order routing via Binance/Kraken connectors
 - [ ] **Microservices Architecture Refactoring**
-  - Separate: Exchange Engine, Wallet Infrastructure, Settlement Layer, Card Issuing, API Gateway
-  - Event-driven communication between services
-  - Independent deployment and scaling
+  - Separate: Exchange Engine, Wallet, Settlement, Card Issuing, API Gateway
 - [ ] **Full Margin Trading Implementation**
-  - Leveraged position opening/closing
-  - Liquidation engine
-  - Real-time PnL tracking
-  - Risk management (maintenance margin, margin calls)
+  - Leveraged positions, liquidation, PnL tracking
 
 ## P2 - Future
-- [ ] Developer API Ecosystem expansion (more endpoints, versioning)
-- [ ] Enhanced real-time notification system (order fills, price alerts)
-- [ ] Update `concurrent_load_test.py` for current endpoints
-- [ ] Multi-chain support expansion
+- [ ] Real On/Off-Ramp (Transak production)
 - [ ] KYC/AML compliance layer
+- [ ] Multi-chain token discovery (auto-detect new tokens)
 - [ ] Advanced analytics and reporting
+- [ ] Load testing script update
