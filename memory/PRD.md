@@ -1,98 +1,94 @@
 # NeoNoble Ramp - Product Requirements Document
 
-## Vision
-NeoNoble Ramp is a global, enterprise-grade fintech infrastructure platform - a token-native financial platform comparable to Stripe, Coinbase, or MoonPay.
+## Overview
+NeoNoble Ramp is a global, enterprise-grade fintech infrastructure platform comparable to Stripe or Coinbase. Built with FastAPI/MongoDB backend and React/lightweight-charts frontend.
 
-## Core Architecture
-- **Backend:** FastAPI + MongoDB (Motor async client)
-- **Frontend:** React + Craco + Tailwind CSS + lightweight-charts v4
-- **Auth:** JWT-based with roles: USER, DEVELOPER, ADMIN
-- **Web3:** Web3Modal + Wagmi + viem for wallet connectivity
-- **Market Data:** CoinGecko API with cache + fallback
+## Core Requirements
+- Crypto on/off-ramp platform with HMAC-secured API access
+- BSC blockchain integration with real-time monitoring
+- Professional trading engine with order book matching
+- Card issuing infrastructure (NIUM integration)
+- Multi-asset wallet with conversion pipeline
+- Developer API ecosystem
 
-## Implemented Features
+## User Personas
+- **End Users**: Crypto traders, card holders, token creators
+- **Developers**: API consumers building on the platform
+- **Admins**: Platform operators monitoring analytics and trades
 
-### Phase 0 - Foundation (Complete)
-- [x] User authentication (register, login, JWT)
-- [x] Role-based access control (USER, DEVELOPER, ADMIN)
-- [x] Password reset via email (Resend integration)
-- [x] Dashboard with live crypto prices
-- [x] Transak On/Off-Ramp integration
-- [x] Multi-wallet connectivity (Web3Modal)
-- [x] Transaction timeline and audit service
+## Architecture
+- **Backend**: FastAPI + MongoDB (Motor) + WebSockets
+- **Frontend**: React + lightweight-charts + TailwindCSS + Shadcn UI
+- **3rd Party**: NIUM (Cards), CoinGecko (Market Data), Stripe (Payouts), Resend (Email), Binance/Kraken/Coinbase (Exchange Connectors)
 
-### Phase 1 - Core Economic Engine (Complete)
-- [x] Token Creation Infrastructure (€100 fee, multi-chain)
-- [x] Token Listing Marketplace (Standard €500, Premium €2K, Featured €5K)
-- [x] Subscription System (6 plans: Free → Enterprise €999.99)
-- [x] Admin Dashboard (real-time stats, full management)
+## Completed Features
 
-### Phase 2 - Platform Infrastructure (Complete)
-- [x] Market Data Integration (CoinGecko 32 cryptos, cache + fallback)
-- [x] Admin Analytics & Traffic Monitoring (page views, engagement, sessions)
-- [x] Crypto-Enabled Card Infrastructure (virtual/physical, crypto-to-fiat)
+### Phase 1: Core Economic Engine
+- Token Creation & Management
+- Token Listing Marketplace
+- Subscription Plans (Basic, Pro, Enterprise, Institutional)
+- Auth system (JWT-based)
 
-### Phase 3 - Trading & Developer Ecosystem (Complete - March 2026)
-- [x] **Exchange Engine + Order Book** - 15 trading pairs (including NENO-EUR, NENO-USDT). Matching engine with market/limit orders. Bid/ask levels, market depth. Trade history with real execution.
-- [x] **TradingView Integration** - Professional candlestick charts (lightweight-charts v4). 6 timeframes (1m, 5m, 15m, 1H, 4H, 1D). Volume overlay. Italian localization.
-- [x] **Developer API Ecosystem** - 7 public REST API endpoints. Rate limiting per tier (100/1K/10K req/hour). API key management. Full documentation page.
-- [x] **Card Issuer Partners** - Documentation with 6 partners: Marqeta, Stripe Issuing, Wallester, Highnote, Weavr, NIUM.
+### Phase 2: Platform Infrastructure
+- Market Data Integration (CoinGecko)
+- Admin Analytics Dashboard
+- Crypto-Enabled Card UI
+- Password Reset (Resend email)
 
-### Key API Endpoints
-**Trading Engine:**
-- GET /api/trading/pairs (15 pairs)
-- GET /api/trading/pairs/{id}/ticker
-- GET /api/trading/pairs/{id}/orderbook
-- GET /api/trading/pairs/{id}/candles
-- POST /api/trading/orders (market/limit)
-- GET /api/trading/orders/my
-- POST /api/trading/orders/cancel
-- GET /api/trading/trades/{id}
+### Phase 3: Trading & Developer Ecosystem
+- Exchange Engine (matching engine, order book)
+- Professional candlestick charts (lightweight-charts)
+- Developer API documentation portal
+- Exchange connectors (Binance, Kraken, Coinbase)
 
-**Public Developer API:**
-- GET /api/public/v1/docs
-- GET /api/public/v1/market/coins
-- GET /api/public/v1/market/ticker/{id}
-- GET /api/public/v1/market/orderbook/{id}
-- GET /api/public/v1/market/candles/{id}
-- GET /api/public/v1/market/trades/{id}
-- GET /api/public/v1/pairs
-- GET /api/public/v1/tokens
+### Phase 4: Final Execution Phase (VALIDATED - March 2026)
+All 10 features tested and operational (100% pass rate):
 
-## Trading Pairs
-BTC-EUR, ETH-EUR, SOL-EUR, BNB-EUR, XRP-EUR, ADA-EUR, DOGE-EUR, DOT-EUR, LINK-EUR, AVAX-EUR, NENO-EUR, NENO-USDT, BTC-USDT, ETH-USDT, ETH-BTC
+1. **Card Issuing (NIUM)** - Virtual card creation, top-up, freeze/unfreeze, funding from crypto
+2. **Settlement Engine** - Crypto-to-Fiat, Crypto-to-Crypto, Fiat-to-Crypto conversions (0.3% fee)
+3. **Trading Engine (Full)** - 15 trading pairs, market/limit order execution and matching
+4. **Conversion & Settlement Pipeline** - Trade -> Convert -> Settle -> Wallet Credit (E2E)
+5. **NENO Token Liquidity** - NENO-EUR and NENO-USDT pairs fully operational
+6. **Token Compatibility** - All tokens compatible with trading, conversion, card funding
+7. **Advanced Trading Orders** - Stop-Loss and Take-Profit (pending_trigger status)
+8. **Margin Trading Preparation** - Account creation, leverage settings, position tracking
+9. **WebSocket Infrastructure** - Real-time ticker streaming, multi-symbol subscriptions
+10. **Paper Trading** - Simulated trades, portfolio tracking, reset functionality
 
-## Roadmap
+## Key API Endpoints
 
-### P1 - Real Card Issuer Integration
-- Partner with Marqeta/Stripe Issuing
-- KYC/AML compliance
-- Real card issuance
+### Trading
+- `GET /api/trading/pairs` - 15 trading pairs
+- `POST /api/trading/orders` - Place market/limit/SL/TP orders
+- `GET /api/trading/pairs/{pair}/orderbook` - Order book
+- `GET /api/trading/pairs/{pair}/candles` - OHLCV data
+- `POST /api/trading/paper/trade` - Paper trading
+- `POST /api/trading/margin/account` - Margin accounts
 
-### P2 - Microservices Architecture
-- Decompose monolith into services
+### Wallet & Settlement
+- `GET /api/wallet/balances` - Multi-asset balances
+- `POST /api/wallet/convert` - Asset conversion (any direction)
+- `POST /api/wallet/fund-card` - Crypto->Fiat->Card pipeline
+- `GET /api/wallet/conversion-rates` - 14 supported assets
 
-### P3 - Real-time Notifications
-- WebSocket + email alerts
+### Cards
+- `POST /api/cards/create` - Virtual/physical cards (max 3)
+- `POST /api/cards/{id}/top-up` - Crypto top-up
+- `POST /api/cards/{id}/freeze` - Freeze/unfreeze
 
-### P4 - Advanced Exchange Features
-- Stop-loss / Take-profit orders
-- Margin trading
-- Multi-chain DEX aggregation
-
-## Test Reports
-- iteration_3: Core Economic Engine (17/17)
-- iteration_4: Platform Infrastructure (24/24)
-- iteration_5: Trading & Developer (23/23)
+### WebSocket
+- `WS /api/ws/ticker/{symbol}` - Live ticker
+- `WS /api/ws/multi` - Multi-symbol subscriptions
 
 ## Test Credentials
 - Admin: admin@neonobleramp.com / Admin1234!
 - User: testchart@example.com / Test1234!
 
-## Card Issuing Partners (Ready for Integration)
-1. **Marqeta** - https://www.marqeta.com (Programmable card issuing, JIT Funding)
-2. **Stripe Issuing** - https://stripe.com/issuing (Quick setup, Stripe ecosystem)
-3. **Wallester** - https://wallester.com (EU Regulated, White-label)
-4. **Highnote** - https://www.highnote.com (Enterprise-grade, Global BIN)
-5. **Weavr (Railsbank)** - https://www.weavr.io (BaaS, No license required)
-6. **NIUM** - https://www.nium.com (Global coverage, Multi-payment)
+## Upcoming Tasks (P1)
+- Microservices Architecture Refactoring
+- Full Margin Trading Implementation
+
+## Future Backlog (P2)
+- Developer API Ecosystem expansion
+- Enhanced real-time notification system
+- Load testing script update
