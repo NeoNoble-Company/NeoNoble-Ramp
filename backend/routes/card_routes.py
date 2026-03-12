@@ -50,6 +50,7 @@ class CreateCardRequest(BaseModel):
     funding_source: str = Field(default="platform_balance", description="Crypto asset to fund card")
     daily_limit: float = Field(default=1000.0, ge=0)
     monthly_limit: float = Field(default=10000.0, ge=0)
+    shipping_address: Optional[dict] = Field(None, description="Required for physical cards")
 
 
 class TopUpCardRequest(BaseModel):
@@ -80,6 +81,9 @@ async def create_card(request: CreateCardRequest, current_user: dict = Depends(g
     if existing >= 3:
         raise HTTPException(status_code=400, detail=f"Maximum 3 {request.card_type} cards allowed")
 
+    if request.card_type == "physical" and not request.shipping_address:
+        raise HTTPException(status_code=400, detail="Indirizzo di spedizione richiesto per carta fisica")
+
     card_number_masked = f"**** **** **** {uuid.uuid4().hex[:4].upper()}"
     fees = CARD_FEES[request.card_type]
 
@@ -96,7 +100,7 @@ async def create_card(request: CreateCardRequest, current_user: dict = Depends(g
         "monthly_limit": request.monthly_limit,
         "daily_spent": 0.0,
         "monthly_spent": 0.0,
-        "status": "active" if request.card_type == "virtual" else "pending",
+        "status": "active" if request.card_type == "virtual" else "pending_shipment",
         "issuance_fee": fees["issuance"],
         "monthly_fee": fees.get("monthly", 0),
         "issuer": "NIUM",
@@ -104,6 +108,13 @@ async def create_card(request: CreateCardRequest, current_user: dict = Depends(g
         "created_at": datetime.now(timezone.utc),
         "expires_at": datetime.now(timezone.utc) + timedelta(days=1095),
     }
+
+    if request.card_type == "physical":
+        card["shipping_address"] = request.shipping_address
+        card["shipping_status"] = "processing"
+        card["tracking_number"] = f"NN-{uuid.uuid4().hex[:10].upper()}"
+        card["estimated_delivery"] = "5-10 giorni lavorativi"
+        card["delivery_fee"] = fees.get("delivery", 14.99)
 
     await db.cards.insert_one({**card, "_id": card["id"]})
 
@@ -203,6 +214,27 @@ async def cancel_card(card_id: str, current_user: dict = Depends(get_current_use
 
     await db.cards.update_one({"id": card_id}, {"$set": {"status": "cancelled"}})
     return {"message": "Carta cancellata permanentemente"}
+
+
+@router.get("/{card_id}/shipping")
+async def get_shipping_status(card_id: str, current_user: dict = Depends(get_current_user)):
+    """Get shipping status for a physical card."""
+    db = get_database()
+    card = await db.cards.find_one({"id": card_id, "user_id": current_user["user_id"]})
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    if card.get("card_type") != "physical":
+        raise HTTPException(status_code=400, detail="Solo le carte fisiche hanno tracking spedizione")
+
+    return {
+        "card_id": card_id,
+        "shipping_status": card.get("shipping_status", "unknown"),
+        "tracking_number": card.get("tracking_number"),
+        "estimated_delivery": card.get("estimated_delivery"),
+        "shipping_address": card.get("shipping_address"),
+    }
+
+
 
 
 @router.get("/{card_id}/transactions")

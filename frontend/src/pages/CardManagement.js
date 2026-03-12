@@ -19,6 +19,7 @@ function getAuthHeaders() {
 const STATUS_COLORS = {
   active: 'bg-green-500/20 text-green-400 border-green-500/30',
   pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  pending_shipment: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   frozen: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
@@ -249,7 +250,18 @@ function CardVisual({ card, isSelected, onSelect, onFreeze, onCancel, onTopUp, a
         </div>
       </div>
       {/* Actions */}
-      <div className="bg-gray-900 border border-gray-800 border-t-0 rounded-b-xl p-3 flex gap-2">
+      <div className="bg-gray-900 border border-gray-800 border-t-0 rounded-b-xl p-3">
+        {/* Shipping info for physical cards */}
+        {card.card_type === 'physical' && card.tracking_number && (
+          <div className="mb-2 p-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg text-xs" data-testid={`shipping-${card.id}`}>
+            <div className="flex justify-between items-center">
+              <span className="text-yellow-400 font-medium">Spedizione: {card.shipping_status || 'processing'}</span>
+              <span className="text-gray-400 font-mono">{card.tracking_number}</span>
+            </div>
+            {card.estimated_delivery && <div className="text-gray-500 mt-0.5">Consegna: {card.estimated_delivery}</div>}
+          </div>
+        )}
+        <div className="flex gap-2">
         <button onClick={(e) => { e.stopPropagation(); onTopUp(); }}
           data-testid={`topup-card-${card.id}`}
           className="flex-1 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-colors">
@@ -264,6 +276,7 @@ function CardVisual({ card, isSelected, onSelect, onFreeze, onCancel, onTopUp, a
           className="py-1.5 px-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition-colors">
           <X className="w-3 h-3" />
         </button>
+        </div>
       </div>
     </div>
   );
@@ -274,15 +287,23 @@ function CreateCardModal({ onClose, onSuccess }) {
   const [network, setNetwork] = useState('visa');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+  const [address, setAddress] = useState({ line1: '', city: '', zip: '', country: 'IT' });
 
   const handleCreate = async () => {
     setCreating(true);
     setError('');
     try {
+      const body = { card_type: cardType, card_network: network, currency: 'EUR' };
+      if (cardType === 'physical') {
+        if (!address.line1 || !address.city || !address.zip) {
+          throw new Error('Compila tutti i campi dell\'indirizzo');
+        }
+        body.shipping_address = address;
+      }
       const res = await fetch(`${BACKEND_URL}/api/cards/create`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ card_type: cardType, card_network: network, currency: 'EUR' })
+        body: JSON.stringify(body)
       });
       if (!res.ok) {
         const data = await res.json();
@@ -306,7 +327,7 @@ function CreateCardModal({ onClose, onSuccess }) {
             <div className="grid grid-cols-2 gap-3">
               {[
                 { id: 'virtual', label: 'Virtuale', desc: 'Gratis - Pagamenti online', fee: '€0' },
-                { id: 'physical', label: 'Fisica', desc: 'POS e ATM', fee: '€9.99' },
+                { id: 'physical', label: 'Fisica', desc: 'POS, ATM, spedizione', fee: '€9.99 + €14.99 spedizione' },
               ].map(t => (
                 <button key={t.id} onClick={() => setCardType(t.id)}
                   className={`p-3 rounded-xl border text-left transition-all ${cardType === t.id ? 'border-pink-500 bg-pink-500/10' : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'}`}>
@@ -331,6 +352,31 @@ function CreateCardModal({ onClose, onSuccess }) {
               ))}
             </div>
           </div>
+
+          {cardType === 'physical' && (
+            <div data-testid="shipping-address-form">
+              <label className="text-gray-400 text-sm mb-2 block">Indirizzo di Spedizione</label>
+              <div className="space-y-2">
+                <input type="text" placeholder="Via e numero civico" value={address.line1}
+                  onChange={e => setAddress({...address, line1: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:border-pink-500 focus:outline-none" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" placeholder="Citta'" value={address.city}
+                    onChange={e => setAddress({...address, city: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:border-pink-500 focus:outline-none" />
+                  <input type="text" placeholder="CAP" value={address.zip}
+                    onChange={e => setAddress({...address, zip: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:border-pink-500 focus:outline-none" />
+                </div>
+                <select value={address.country} onChange={e => setAddress({...address, country: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+                  <option value="IT">Italia</option><option value="DE">Germania</option><option value="FR">Francia</option>
+                  <option value="ES">Spagna</option><option value="GB">Regno Unito</option><option value="US">Stati Uniti</option>
+                  <option value="CH">Svizzera</option><option value="AT">Austria</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
         <button onClick={handleCreate} disabled={creating}

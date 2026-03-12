@@ -22,6 +22,7 @@ import SubscriptionPlans from "./pages/SubscriptionPlans";
 import MarketData from "./pages/MarketData";
 import CardManagement from "./pages/CardManagement";
 import TradingPage from "./pages/TradingPage";
+import WalletPage from "./pages/WalletPage";
 import ApiDocs from "./pages/ApiDocs";
 import { usePageTracking } from "./hooks/usePageTracking";
 
@@ -203,6 +204,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <TradingPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Wallet & Banking */}
+      <Route
+        path="/wallet"
+        element={
+          <ProtectedRoute>
+            <WalletPage />
           </ProtectedRoute>
         }
       />
