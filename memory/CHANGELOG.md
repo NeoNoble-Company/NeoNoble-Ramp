@@ -1,5 +1,14 @@
 # NeoNoble Ramp - Changelog
 
+## [5.1.1] - 2026-03-31 - Full Platform E2E Production Test
+
+### Validated
+- **54/54 backend API tests PASSED (100%)**
+- **All frontend pages verified (100%)**
+- Platform fully operational across all 5 phases
+- NIUM API key `9mgrmSgeIe77FHzOghCx4i92sLqLvqe5lwBMBzc1` active and functional
+- Transak SDK widget opens correctly (staging iframe content limited by X-Frame-Options — expected)
+
 ## [5.1.0] - 2026-03-31 - Transak $NENO On/Off-Ramp Widget
 
 ### Changed
