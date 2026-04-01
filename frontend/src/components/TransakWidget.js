@@ -1,136 +1,151 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Transak } from '@transak/transak-sdk';
+import React, { useCallback, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowRight } from 'lucide-react';
 
-const TRANSAK_STAGING = 'https://global-stg.transak.com';
 const TRANSAK_API_KEY = process.env.REACT_APP_TRANSAK_API_KEY || '5911d9ec-46b5-48b0-a4c8-0b67aa60baae';
-const REFERRER = typeof window !== 'undefined' ? window.location.origin : 'https://neonobleramp.com';
-
-function buildWidgetUrl(mode, email) {
-  const params = new URLSearchParams({
-    apiKey: TRANSAK_API_KEY,
-    productsAvailed: mode,
-    defaultCryptoCurrency: 'NENO',
-    cryptoCurrencyList: 'NENO,BNB,ETH,USDT,USDC,BTC',
-    network: 'bsc',
-    defaultNetwork: 'bsc',
-    networks: 'bsc,ethereum,polygon',
-    defaultFiatCurrency: 'EUR',
-    themeColor: '7c3aed',
-    colorMode: 'DARK',
-    hideMenu: 'true',
-    exchangeScreenTitle: mode === 'BUY' ? 'Acquista $NENO' : 'Vendi $NENO',
-    referrerDomain: REFERRER,
-  });
-  if (email) params.set('email', email);
-  return `${TRANSAK_STAGING}?${params.toString()}`;
-}
+const TRANSAK_BASE = 'https://global-stg.transak.com';
 
 /**
- * Official Transak SDK widget for $NENO on/off-ramp.
+ * Transak On/Off-Ramp Widget — popup-based integration.
+ *
+ * Opens Transak in a popup window (recommended pattern for KYC flows).
+ * Bypasses X-Frame-Options restrictions.
+ * Default crypto: BNB on BSC. Users convert BNB → NENO on the platform.
  */
 export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) {
   const { user } = useAuth();
-  const transakRef = useRef(null);
-  const [status, setStatus] = useState(null);
-  const [ready, setReady] = useState(false);
+  const [launched, setLaunched] = useState(false);
 
-  const cleanup = useCallback(() => {
-    try { transakRef.current?.close(); } catch (_) {}
-    transakRef.current = null;
-    setReady(false);
-    setStatus(null);
-  }, []);
+  const buildUrl = useCallback(() => {
+    const params = new URLSearchParams({
+      apiKey: TRANSAK_API_KEY,
+      productsAvailed: initialMode,
+      defaultCryptoCurrency: 'BNB',
+      cryptoCurrencyList: 'BNB,ETH,USDT,USDC,BTC,MATIC',
+      network: 'bsc',
+      defaultNetwork: 'bsc',
+      networks: 'bsc,ethereum,polygon',
+      defaultFiatCurrency: 'EUR',
+      themeColor: '7c3aed',
+      colorMode: 'DARK',
+      hideMenu: 'true',
+      exchangeScreenTitle: initialMode === 'BUY' ? 'Buy Crypto — NeoNoble Ramp' : 'Sell Crypto — NeoNoble Ramp',
+      referrerDomain: window.location.origin,
+    });
+    if (user?.email) params.set('email', user.email);
+    return `${TRANSAK_BASE}?${params.toString()}`;
+  }, [initialMode, user]);
 
-  useEffect(() => {
-    if (!isOpen) { cleanup(); return; }
-
-    const url = buildWidgetUrl(initialMode, user?.email);
-    try {
-      transakRef.current = new Transak({
-        widgetUrl: url,
-        referrer: REFERRER,
-        containerId: 'transak-mount',
-        themeColor: '#7c3aed',
-      });
-
-      transakRef.current.init();
-      setReady(true);
-
-      Transak.on(Transak.EVENTS.TRANSAK_ORDER_CREATED, () => {
-        setStatus({ type: 'info', msg: 'Ordine creato, elaborazione in corso...' });
-      });
-
-      Transak.on(Transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, () => {
-        setStatus({ type: 'success', msg: 'Transazione completata!' });
-        setTimeout(() => { cleanup(); onClose?.(); }, 2500);
-      });
-
-      Transak.on(Transak.EVENTS.TRANSAK_ORDER_FAILED, () => {
-        setStatus({ type: 'error', msg: 'Transazione fallita. Riprova.' });
-      });
-
-      Transak.on(Transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
-        cleanup();
-        onClose?.();
-      });
-    } catch (err) {
-      console.error('[Transak] init error', err);
-      setStatus({ type: 'error', msg: "Errore nell'inizializzazione del widget." });
-    }
-
-    return cleanup;
-  }, [isOpen, initialMode, user, onClose, cleanup]);
+  const handleLaunch = useCallback(() => {
+    const url = buildUrl();
+    const w = 480;
+    const h = 680;
+    const left = (window.screen.width - w) / 2;
+    const top = (window.screen.height - h) / 2;
+    window.open(
+      url,
+      'transak_widget',
+      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+    );
+    setLaunched(true);
+  }, [buildUrl]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl"
+      <div className="relative w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl"
         data-testid="transak-widget-modal">
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-          <span className="text-white font-semibold text-sm">
-            {initialMode === 'BUY' ? 'Acquista $NENO' : 'Vendi $NENO'} — Transak
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+          <span className="text-white font-semibold">
+            {initialMode === 'BUY' ? 'Acquista Crypto' : 'Vendi Crypto'}
           </span>
-          <button onClick={() => { cleanup(); onClose?.(); }} data-testid="transak-close-btn"
+          <button onClick={onClose} data-testid="transak-close-btn"
             className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors">
             <X className="w-4 h-4 text-gray-400" />
           </button>
         </div>
 
-        {/* Status bar */}
-        {status && (
-          <div className={`flex items-center gap-2 px-4 py-2 text-xs ${
-            status.type === 'error'   ? 'bg-red-500/10 text-red-400' :
-            status.type === 'success' ? 'bg-green-500/10 text-green-400' :
-            'bg-blue-500/10 text-blue-400'
-          }`}>
-            {status.type === 'success' && <CheckCircle className="w-3.5 h-3.5" />}
-            {status.type === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
-            {status.type === 'info' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {status.msg}
+        {/* Content */}
+        <div className="p-5 space-y-5">
+          {/* Transak Logo */}
+          <div className="flex items-center justify-center py-3">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-2xl px-6 py-3 rounded-xl shadow-lg shadow-purple-500/20">
+              Transak
+            </div>
           </div>
-        )}
 
-        {/* SDK mount point */}
-        <div id="transak-mount"
-          className="w-full bg-gray-950"
-          style={{ minHeight: 560 }}
-          data-testid="transak-sdk-container"
-        >
-          {!ready && (
-            <div className="flex flex-col items-center justify-center h-[560px] gap-3">
-              <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-              <span className="text-gray-400 text-sm">Caricamento Transak...</span>
+          {/* Info */}
+          <div className="space-y-3 text-center">
+            <h3 className="text-white font-medium">
+              {initialMode === 'BUY'
+                ? 'Acquista crypto con carta o bonifico'
+                : 'Vendi crypto e ricevi EUR'}
+            </h3>
+            <p className="text-gray-400 text-sm">
+              {initialMode === 'BUY'
+                ? 'Acquista BNB, ETH, USDT o BTC via Transak. Poi converti in $NENO dalla sezione Wallet della piattaforma.'
+                : 'Vendi i tuoi crypto e ricevi EUR direttamente sul tuo conto bancario.'}
+            </p>
+          </div>
+
+          {/* Supported assets */}
+          <div className="bg-gray-800/50 rounded-xl p-3">
+            <div className="text-gray-400 text-xs mb-2 text-center">Crypto disponibili</div>
+            <div className="flex justify-center gap-2 flex-wrap">
+              {['BNB', 'ETH', 'USDT', 'BTC', 'USDC', 'MATIC'].map(c => (
+                <span key={c} className="px-3 py-1 bg-gray-700/50 text-gray-300 rounded-full text-xs font-mono">{c}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Conversion flow info */}
+          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
+            <div className="flex items-center justify-center gap-2 text-xs text-purple-300">
+              <span className="font-medium">Transak</span>
+              <ArrowRight className="w-3 h-3" />
+              <span>BNB / ETH</span>
+              <ArrowRight className="w-3 h-3" />
+              <span className="font-medium">Converti in $NENO</span>
+            </div>
+          </div>
+
+          {/* Launch button */}
+          {!launched ? (
+            <button onClick={handleLaunch} data-testid="transak-launch-btn"
+              className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20">
+              <ExternalLink className="w-4 h-4" />
+              {initialMode === 'BUY' ? 'Apri Transak — Acquista' : 'Apri Transak — Vendi'}
+            </button>
+          ) : (
+            <div className="text-center space-y-3">
+              <div className="flex items-center justify-center gap-2 text-green-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Transak aperto in una nuova finestra
+              </div>
+              <button onClick={handleLaunch} className="text-purple-400 text-xs hover:text-purple-300 underline">
+                Riapri Transak
+              </button>
             </div>
           )}
+
+          {/* Payment methods */}
+          <div className="flex items-center justify-center gap-3 pt-2 opacity-60">
+            <span className="text-gray-500 text-[10px]">Visa</span>
+            <span className="text-gray-600">|</span>
+            <span className="text-gray-500 text-[10px]">Mastercard</span>
+            <span className="text-gray-600">|</span>
+            <span className="text-gray-500 text-[10px]">SEPA</span>
+            <span className="text-gray-600">|</span>
+            <span className="text-gray-500 text-[10px]">Apple Pay</span>
+          </div>
         </div>
 
-        <div className="px-4 py-2 border-t border-gray-800 text-center">
+        <div className="px-5 py-3 border-t border-gray-800 text-center">
           <span className="text-gray-500 text-[10px]">
-            Powered by Transak — Sicuro & Regolamentato
+            Powered by Transak — Sicuro & Regolamentato — 170+ Paesi supportati
           </span>
         </div>
       </div>
