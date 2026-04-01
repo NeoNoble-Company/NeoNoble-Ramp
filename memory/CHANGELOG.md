@@ -1,5 +1,29 @@
 # NeoNoble Ramp - Changelog
 
+## [6.0.0] - 2026-04-01 - NeoNoble Internal NENO Exchange
+
+### Added
+- **NeoNoble Exchange** — Motore di conversione interno completamente indipendente da provider esterni
+  - Prezzo fisso $NENO: **EUR 10.000**
+  - Buy NENO con: BNB, ETH, USDT, BTC, USDC, MATIC, EUR, USD
+  - Sell NENO per: tutti gli stessi asset
+  - Off-Ramp diretto su **Carta** (NIUM) e **Conto Bancario** (SEPA)
+  - Quote preview in tempo reale con fee 0.3%
+  - Storico transazioni (buy/sell/offramp)
+- Backend: `/api/neno-exchange/` con 6 endpoint (market, quote, buy, sell, offramp, transactions)
+- Frontend: Pagina `/neno-exchange` con 3 tab (Acquista, Vendi, Off-Ramp)
+- Dashboard: Card "$NENO Exchange" con link diretto all'exchange
+
+### Changed
+- Settlement engine: NENO price aggiornato da €0.50 a €10.000
+- Dashboard: Rimosso Transak widget, sostituito con NeoNoble Exchange interno
+
+### Validated (E2E - 100% pass rate)
+- 21/21 backend tests + 10/10 frontend tests
+- Tutte le coppie di conversione bidirezionali
+- Off-ramp su carta e conto bancario
+- Error handling (saldo insufficiente, card_id mancante)
+
 ## [5.1.1] - 2026-03-31 - Full Platform E2E Production Test
 
 ### Validated
