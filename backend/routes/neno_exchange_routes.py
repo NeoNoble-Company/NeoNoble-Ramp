@@ -106,8 +106,11 @@ async def _get_custom_token_price(db, symbol: str) -> Optional[float]:
 
 
 async def _get_any_price_eur(db, asset: str) -> Optional[float]:
-    """Get EUR price for built-in OR custom token."""
+    """Get EUR price for built-in OR custom token OR NENO."""
     asset = asset.upper()
+    if asset == "NENO":
+        pricing = await _get_dynamic_neno_price()
+        return pricing["price"]
     if asset in MARKET_PRICES_EUR:
         return MARKET_PRICES_EUR[asset]
     return await _get_custom_token_price(db, asset)
