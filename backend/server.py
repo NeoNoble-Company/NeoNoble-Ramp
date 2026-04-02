@@ -191,6 +191,9 @@ from routes.nium_onboarding_routes import router as nium_onboarding_router
 # Import Alert & Browser Push routes
 from routes.alert_routes import router as alert_router
 
+# Import DCA Bot routes
+from routes.dca_routes import router as dca_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -369,6 +372,13 @@ async def lifespan(app: FastAPI):
     await db.price_alerts.create_index([("user_id", 1), ("triggered", 1)])
     await db.browser_push_queue.create_index([("user_id", 1), ("delivered", 1)])
     
+    # DCA Bot indexes
+    await db.dca_plans.create_index([("user_id", 1), ("status", 1)])
+    await db.dca_plans.create_index("id", unique=True)
+    await db.dca_executions.create_index([("plan_id", 1), ("executed_at", -1)])
+    await db.dca_executions.create_index("id", unique=True)
+    await db.sms_log.create_index([("user_id", 1), ("sent_at", -1)])
+    
     # Initialize wallet service
     try:
         await wallet_service.initialize()
@@ -532,13 +542,22 @@ async def lifespan(app: FastAPI):
     
     logger.info("Database indexes created")
     
-    # Start background scheduler (price alerts, NIUM auth, rate limiter cleanup)
+    # Start background scheduler (price alerts, NIUM auth, rate limiter cleanup, DCA bot)
     try:
         from services.background_scheduler import start_scheduler
         await start_scheduler()
         logger.info("Background scheduler started")
     except Exception as e:
         logger.warning(f"Background scheduler failed to start: {e}")
+
+    # Load NIUM_TEMPLATE_ID from DB config if not in env
+    try:
+        template_cfg = await db.platform_config.find_one({"key": "NIUM_TEMPLATE_ID"}, {"_id": 0})
+        if template_cfg and template_cfg.get("value") and not os.environ.get("NIUM_TEMPLATE_ID"):
+            os.environ["NIUM_TEMPLATE_ID"] = template_cfg["value"]
+            logger.info(f"Loaded NIUM_TEMPLATE_ID from DB: {template_cfg['value']}")
+    except Exception as e:
+        logger.warning(f"Failed to load NIUM_TEMPLATE_ID from DB: {e}")
     
     yield
     
@@ -648,6 +667,7 @@ api_router.include_router(admin_audit_router)
 api_router.include_router(export_router)
 api_router.include_router(nium_onboarding_router)
 api_router.include_router(alert_router)
+api_router.include_router(dca_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)

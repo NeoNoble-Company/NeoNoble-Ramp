@@ -284,5 +284,63 @@ async def notify_price_alert(user_id: str, asset: str, price: float, condition: 
     await asyncio.gather(
         _push_inapp(user_id, title, message, "trade", "info", "/portfolio-tracker"),
         _push_browser(user_id, title, message),
+        _send_sms_notification(user_id, f"[NeoNoble] {title}: {message}"),
+        return_exceptions=True,
+    )
+
+
+# ── SMS Dispatch (Twilio-ready) ──
+
+async def _send_sms_notification(user_id: str, message: str):
+    """Send SMS via Twilio if configured. Falls back silently if not."""
+    import os
+    twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    twilio_token = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    twilio_from = os.environ.get("TWILIO_PHONE_NUMBER", "")
+
+    if not (twilio_sid and twilio_token and twilio_from):
+        return  # SMS not configured, skip silently
+
+    db = get_database()
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "phone": 1, "notification_prefs": 1})
+    if not user:
+        return
+
+    phone = user.get("phone", "")
+    prefs = user.get("notification_prefs", {})
+    if not phone or not prefs.get("sms_enabled", False):
+        return
+
+    try:
+        import httpx
+        auth = (twilio_sid, twilio_token)
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(url, data={
+                "From": twilio_from,
+                "To": phone,
+                "Body": message[:1600],
+            }, auth=auth)
+            if resp.status_code in (200, 201):
+                logger.info(f"[SMS] Sent to {user_id}: {phone}")
+                await db.sms_log.insert_one({
+                    "user_id": user_id, "phone": phone, "message": message[:200],
+                    "status": "sent", "sid": resp.json().get("sid", ""),
+                    "sent_at": datetime.now(timezone.utc).isoformat(),
+                })
+            else:
+                logger.warning(f"[SMS] Failed: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        logger.error(f"[SMS] Error sending to {user_id}: {e}")
+
+
+async def notify_dca_executed(user_id: str, asset: str, qty: float, price: float, amount_eur: float):
+    """Notify user about DCA execution."""
+    title = f"DCA {asset} Eseguito"
+    message = f"Acquistati {qty:.8f} {asset} @ {price:.2f} EUR (Investiti: {amount_eur:.2f} EUR)"
+
+    await asyncio.gather(
+        _push_inapp(user_id, title, message, "trade", "info", "/wallet"),
+        _push_browser(user_id, title, message),
         return_exceptions=True,
     )

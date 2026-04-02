@@ -459,6 +459,24 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </Link>
+
+                {/* DCA Trading Bot */}
+                <Link
+                  to="/dca"
+                  data-testid="dca-bot-link"
+                  className="p-4 bg-gradient-to-r from-emerald-600/20 to-green-600/20 border border-emerald-500/30 rounded-xl hover:border-emerald-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                      <RefreshCw className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-emerald-400">DCA Bot</h3>
+                      <p className="text-gray-400 text-xs">Accumulo automatico programmato</p>
+                    </div>
+                    <span className="ml-auto text-[10px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded font-bold">AUTO</span>
+                  </div>
+                </Link>
               </div>
 
               {/* Error/Success Messages */}

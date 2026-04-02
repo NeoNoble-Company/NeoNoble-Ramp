@@ -340,7 +340,9 @@ class BlockchainListener:
             from_block = max(0, current_block - 1000)
             
             for item in addresses_with_quotes:
-                address = item['address']
+                address = item.get('address') or item.get('deposit_address', '')
+                if not address:
+                    continue
                 quote_id = item['quote_id']
                 expected_amount = item['expected_amount']
                 

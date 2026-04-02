@@ -246,7 +246,7 @@ class NiumAuthDiscovery:
 
         db = get_database()
         is_customer_create = method == "POST" and "/customer" in path and path.count("/") <= 5
-        versions = ["v3", "v4", "v2", "v1"] if is_customer_create else [None]
+        versions = ["v2", "v3", "v4", "v1"] if is_customer_create else [None]
 
         best_result = None
         for version in versions:
@@ -440,6 +440,19 @@ async def create_nium_customer(
     if req.kyc_mode.upper() not in valid_modes:
         raise HTTPException(status_code=400, detail=f"kycMode non valido. Supportati: {', '.join(valid_modes)}")
 
+    # Map user-friendly strings to NIUM enum codes
+    MONTHLY_FUNDING_MAP = {
+        "0-1000": "MF001", "1000-5000": "MF002", "5000-10000": "MF003",
+        "10000-50000": "MF004", "50000+": "MF005",
+    }
+    USE_OF_ACCOUNT_MAP = {
+        "Day-to-day spending": "IU100", "Savings": "IU200",
+        "International transfers": "IU300", "Business payments": "IU400",
+    }
+
+    emf = MONTHLY_FUNDING_MAP.get(req.estimated_monthly_funding, req.estimated_monthly_funding)
+    iua = USE_OF_ACCOUNT_MAP.get(req.intended_use_of_account, req.intended_use_of_account)
+
     payload = {
         "firstName": req.first_name,
         "lastName": req.last_name,
@@ -449,8 +462,18 @@ async def create_nium_customer(
         "mobile": int(req.mobile.replace("+", "").replace(" ", "")) if req.mobile else 0,
         "dateOfBirth": req.date_of_birth,
         "kycMode": req.kyc_mode.upper(),
+        "estimatedMonthlyFunding": emf,
+        "intendedUseOfAccount": iua,
         "verificationConsent": True,
+        "pep": req.pep,
+        "region": req.country_code or "EU",
     }
+
+    # Add templateId if configured in env
+    template_id = os.environ.get("NIUM_TEMPLATE_ID", "")
+    if template_id:
+        payload["templateId"] = template_id
+
     if req.billing_address1:
         payload["billingAddress1"] = req.billing_address1
     if req.billing_city:
@@ -475,24 +498,41 @@ async def create_nium_customer(
             for t in req.tax_details
         ]
 
-    result = await _auth.execute("POST", f"/api/v1/client/{NIUM_CLIENT_HASH}/customer", payload)
+    # Multi-version customer creation: try v2 first (Unified API), then v3, v4, v1
+    result = None
+    versions_tried = []
+    for ver in ["v2", "v3", "v4", "v1"]:
+        endpoint = f"/api/{ver}/client/{NIUM_CLIENT_HASH}/customer"
+        result = await _auth.execute("POST", endpoint, payload)
+        versions_tried.append(ver)
+        if not result.get("error"):
+            break
+        # If template-specific error, no point retrying other versions with same config
+        err_detail = str(result.get("detail", ""))
+        if "templateId" in err_detail or "Configuration not found" in err_detail:
+            logger.warning(f"[NIUM] Template config issue on {ver}: {err_detail[:100]}")
+            continue
+        if result.get("status_code") in (400, 403):
+            logger.warning(f"[NIUM] {ver} returned {result.get('status_code')}: {err_detail[:100]}")
+            continue
 
     if result.get("error"):
         error_detail = result.get("detail", "")
-        # Enriched error message for common issues
         troubleshooting = []
         if "templateId" in error_detail or "Configuration not found" in error_detail:
             troubleshooting = [
                 "L'account NIUM necessita di un template di onboarding configurato.",
-                "Accedi al portale NIUM Admin (https://admin.nium.com) > Templates > Crea template individuale",
-                "Il sistema ha provato automaticamente v3, v4, v2, v1 - tutti richiedono il template",
-                "L'autenticazione API funziona correttamente (x-api-key su gateway.nium.com)",
+                "Accedi al portale NIUM Admin (https://admin.nium.com) > Configurazione > Templates",
+                "Usa la Fetch Corporate Constants API per ottenere i templateId validi",
+                f"Versioni API provate automaticamente: {', '.join(versions_tried)}",
+                "Imposta NIUM_TEMPLATE_ID nel .env del backend dopo aver configurato il template",
                 f"Client Hash ID: {NIUM_CLIENT_HASH}",
+                "Autenticazione API funzionante: x-api-key su gateway.nium.com",
             ]
         elif "Forbidden" in error_detail:
             troubleshooting = [
-                "L'API key non ha i permessi per la creazione clienti su questo endpoint",
-                "Il sistema ha provato automaticamente tutte le versioni API (v1-v4)",
+                "L'API key non ha i permessi per la creazione clienti",
+                f"Versioni API provate: {', '.join(versions_tried)}",
             ]
 
         raise HTTPException(
@@ -501,8 +541,8 @@ async def create_nium_customer(
                 "message": "Errore NIUM API",
                 "nium_error": error_detail,
                 "strategy_used": result.get("strategy_used", ""),
-                "version_used": result.get("version_used", ""),
-                "auto_discovery": "Provate automaticamente v3, v4, v2, v1 su gateway.nium.com",
+                "versions_tried": versions_tried,
+                "auto_discovery": f"Provate {len(versions_tried)} versioni API su gateway.nium.com",
                 "troubleshooting": troubleshooting,
             },
         )
@@ -644,6 +684,28 @@ async def get_available_methods():
     }
 
 
+class SetTemplateRequest(BaseModel):
+    template_id: str
+
+
+@router.post("/set-template-id")
+async def set_nium_template_id(req: SetTemplateRequest, current_user: dict = Depends(get_current_user)):
+    """Admin: Set NIUM_TEMPLATE_ID at runtime (persisted in DB config)."""
+    db = get_database()
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Solo admin possono configurare il template NIUM")
+
+    os.environ["NIUM_TEMPLATE_ID"] = req.template_id
+
+    await db.platform_config.update_one(
+        {"key": "NIUM_TEMPLATE_ID"},
+        {"$set": {"key": "NIUM_TEMPLATE_ID", "value": req.template_id, "updated_by": current_user["user_id"]}},
+        upsert=True,
+    )
+    return {"message": f"NIUM_TEMPLATE_ID impostato: {req.template_id}", "active": True}
+
+
+
 @router.get("/auth-discovery-status")
 async def auth_discovery_status():
     """Show current NIUM auth discovery status and all tested strategies."""
@@ -658,4 +720,87 @@ async def auth_discovery_reset():
         "message": "Discovery completata" if result else "Nessuna strategia funzionante trovata",
         "active": result.to_dict() if result else None,
         "all_strategies": [s.to_dict() for s in _auth._strategies],
+    }
+
+
+@router.get("/templates")
+async def list_nium_templates():
+    """Attempt to fetch available onboarding templates from NIUM."""
+    if not NIUM_API_KEY or not NIUM_CLIENT_HASH:
+        raise HTTPException(status_code=503, detail="NIUM non configurato")
+
+    result = await _auth.execute("GET", f"/api/v1/client/{NIUM_CLIENT_HASH}/templates")
+
+    template_id_env = os.environ.get("NIUM_TEMPLATE_ID", "")
+    return {
+        "nium_response": result if not result.get("error") else None,
+        "error": result.get("detail") if result.get("error") else None,
+        "configured_template_id": template_id_env or None,
+        "hint": "Se il template non e' configurato, accedi al portale NIUM Admin > Templates > Crea template individuale. Poi imposta NIUM_TEMPLATE_ID nel .env",
+    }
+
+
+@router.get("/diagnostic")
+async def nium_diagnostic():
+    """Full NIUM integration diagnostic — checks auth, client info, and configuration status."""
+    diag = {
+        "api_key_set": bool(NIUM_API_KEY),
+        "client_hash_set": bool(NIUM_CLIENT_HASH),
+        "template_id_set": bool(os.environ.get("NIUM_TEMPLATE_ID")),
+        "auth_strategy": None,
+        "client_info": None,
+        "template_info": None,
+        "recommendations": [],
+    }
+
+    strategy = await _auth.discover()
+    if strategy:
+        diag["auth_strategy"] = strategy.to_dict()
+    else:
+        diag["recommendations"].append("Nessuna strategia NIUM funzionante. Verificare API key e Client Hash.")
+        return diag
+
+    # Try to get client info
+    client_result = await _auth.execute("GET", f"/api/v1/client/{NIUM_CLIENT_HASH}")
+    if not client_result.get("error"):
+        diag["client_info"] = {
+            "name": client_result.get("name", ""),
+            "status": client_result.get("status", ""),
+            "country": client_result.get("countryCode", ""),
+        }
+    else:
+        diag["recommendations"].append(f"Client info non disponibile: {client_result.get('detail', '')[:100]}")
+
+    # Check template
+    if not os.environ.get("NIUM_TEMPLATE_ID"):
+        diag["recommendations"].append("NIUM_TEMPLATE_ID non configurato. Impostarlo in .env se la creazione clienti fallisce con 404.")
+
+    return diag
+
+
+@router.get("/corporate-constants")
+async def fetch_corporate_constants():
+    """Fetch NIUM corporate constants including available template IDs and configuration options."""
+    if not NIUM_API_KEY or not NIUM_CLIENT_HASH:
+        raise HTTPException(status_code=503, detail="NIUM non configurato")
+
+    results = {}
+
+    # Try fetching corporate constants from multiple endpoints
+    for endpoint_name, path in [
+        ("constants", f"/api/v1/client/{NIUM_CLIENT_HASH}/corporateConstants"),
+        ("settings", f"/api/v1/client/{NIUM_CLIENT_HASH}/settings"),
+        ("programs", f"/api/v1/client/{NIUM_CLIENT_HASH}/programs"),
+    ]:
+        result = await _auth.execute("GET", path)
+        if not result.get("error"):
+            results[endpoint_name] = result
+        else:
+            results[endpoint_name] = {"error": result.get("detail", "")[:200]}
+
+    return {
+        "client_hash": NIUM_CLIENT_HASH,
+        "data": results,
+        "configured_template_id": os.environ.get("NIUM_TEMPLATE_ID", None),
+        "hint": "Usa i templateId ritornati qui per impostare NIUM_TEMPLATE_ID nel .env",
     }

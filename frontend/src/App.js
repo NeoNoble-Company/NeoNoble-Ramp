@@ -32,6 +32,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ApiDocs from "./pages/ApiDocs";
 import AuditLog from "./pages/AuditLog";
 import PortfolioTracker from "./pages/PortfolioTracker";
+import DCABot from "./pages/DCABot";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -298,6 +299,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <PortfolioTracker />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* DCA Bot */}
+      <Route
+        path="/dca"
+        element={
+          <ProtectedRoute>
+            <DCABot />
           </ProtectedRoute>
         }
       />

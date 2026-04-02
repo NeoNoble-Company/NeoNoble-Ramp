@@ -5,6 +5,7 @@ Runs periodic background tasks:
 1. Price Alert Checker — every 60 seconds
 2. NIUM Auth Discovery — every 30 minutes (auto-refresh)
 3. Rate Limiter Cleanup — every 5 minutes
+4. DCA Bot Executor — every 60 seconds (checks and executes due plans)
 """
 
 import asyncio
@@ -71,6 +72,17 @@ async def _check_price_alerts():
         logger.info(f"[SCHEDULER] Price alerts: {triggered} triggered out of {len(active_alerts)} active")
 
 
+async def _execute_dca_bot():
+    """Execute all due DCA plans."""
+    try:
+        from routes.dca_routes import execute_dca_plans
+        executed = await execute_dca_plans()
+        if executed > 0:
+            logger.info(f"[SCHEDULER] DCA Bot: {executed} plans executed")
+    except Exception as e:
+        logger.error(f"[SCHEDULER] DCA Bot error: {e}")
+
+
 async def _cleanup_rate_limiter():
     """Clean stale entries from rate limiter."""
     try:
@@ -108,9 +120,10 @@ async def start_scheduler():
         asyncio.create_task(_run_periodic("PriceAlerts", _check_price_alerts, 60)),
         asyncio.create_task(_run_periodic("RateLimiterCleanup", _cleanup_rate_limiter, 300)),
         asyncio.create_task(_run_periodic("NiumAuthRefresh", _nium_auth_refresh, 1800)),
+        asyncio.create_task(_run_periodic("DCABot", _execute_dca_bot, 60)),
     ]
 
-    logger.info("[SCHEDULER] Background tasks started: PriceAlerts(60s), RateLimiterCleanup(300s), NiumAuthRefresh(1800s)")
+    logger.info("[SCHEDULER] Background tasks started: PriceAlerts(60s), RateLimiterCleanup(300s), NiumAuthRefresh(1800s), DCABot(60s)")
 
 
 async def stop_scheduler():
