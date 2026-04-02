@@ -9,7 +9,7 @@
 - **Test User**: testchart@example.com / Test1234!
 
 ## API
-- **Base URL**: https://neon-margin-trade.preview.emergentagent.com
+- **Base URL**: https://multi-chain-wallet-14.preview.emergentagent.com
 - **Auth Header**: Authorization: Bearer {token from POST /api/auth/login}
 
 ## NIUM Integration

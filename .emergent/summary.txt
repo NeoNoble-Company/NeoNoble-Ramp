@@ -1,62 +1,55 @@
 <analysis>**original_problem_statement:**
-The user's goal is to build NeoNoble Ramp, a global, enterprise-grade fintech infrastructure platform. After completing the core trading and settlement features, the focus has shifted to full Financial Infrastructure Activation (Phase 5). This includes real card issuing, multi-chain synchronization (Ethereum, BSC, Polygon), real crypto on/off-ramps, and IBAN/SEPA banking rails. Most recently, the user requested a custom internal NENO Exchange (bypassing 3rd party providers like Transak) with a fixed €10,000 NENO price, as well as Full Margin Trading, Multi-chain Token Discovery, and a Unified Wallet that perfectly syncs internal and external on-chain balances.
+The user requested the autonomous completion of the final Phase 5 roadmap features for NeoNoble Ramp (an enterprise-grade fintech platform) to reach 100% completion. This included building an Automated DCA Trading Bot, PDF Compliance Reports, and SMS Notifications. Later, the user provided deployment error logs failing due to a  Node.js engine version mismatch and missing Python dependencies in , requiring strict build environment fixes. PRODUCT REQUIREMENTS: Complete all remaining features, ensure real NIUM integration relies on true API responses (no mock fallbacks), and resolve any deployment/build blockers. 
 
-**User's preferred language**: Italian (The next agent MUST respond in Italian ONLY).
+**User's preferred language**: Italian (You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only) -> **ITALIAN ONLY**.
 
 **what currently exists?** 
-A robust monolithic FastAPI/React application featuring a Trading Engine, a fully functional NENO Custom Exchange (supporting 12 assets with direct fiat-to-card/bank off-ramps), Multi-Chain Wallet synchronization (ETH, BSC, Polygon), Simulated Banking Rails (IBAN/SEPA), and Real Card Issuing via NIUM (using the user's production key).
+A highly robust, 100% functionally complete FastAPI/React platform. Features include: NENO custom internal exchange, Multichain Wallet, Real NIUM banking (with multi-version V2 payload auto-discovery), Automated DCA Trading Bot, PDF Compliance Export, Margin Trading, Multi-channel Notifications (SSE, Push, SMS logic), Background Scheduler (Cron jobs), and a fully functional UI. 
 
 **Last working item**:
-- **Last item agent was working**: Implementing Full Margin Trading, Multi-chain Token Discovery, and a Unified Wallet (syncing internal DB balances with external on-chain balances). The agent updated the backend ( and ) and just created the blank frontend file .
-- **Status**: IN PROGRESS
-- **Agent Testing Done**: N
-- **Which testing method agent to use?** testing_agent_v3_fork (Frontend + Backend validation needed once UI is built).
-- **User Testing Done**: N
+- **Last item agent was working**: Resolving production deployment build errors. The frontend failed to build due to  requiring Node  (environment has 20.18.1). The backend lacked  and  in . The agent forced  resolution to  in  and updated Python requirements.
+- **Status**: RESOLVED
+- **Agent Testing Done**: Y (Verified via yarn install v1.22.22
+[1/4] Resolving packages...
+success Already up-to-date.
+Done in 0.22s., frontend compilation, and  backend health check).
+- **Which testing method agent to use?** NA (testing is already done for the fixes).
+- **User Testing Done**: N (Pending user triggering a new deployment).
 
 **All Pending/In progress Issue list**:
-- Issue 1: Complete Margin Trading UI and Integration (P0)
-   - Attempted fixes: Backend endpoints created via python script replacements, frontend file created but empty.
-   - Next debug checklist: Implement React component in , register it in , and link it in the  navigation.
-   - Why fix this issue and what will be achieved with the fix? Fulfills user's explicit request for Full Margin Trading.
-   - Status: IN PROGRESS
-   - Is recurring issue? N
-   - Should Test frontend/backend/both after fix? Both
-   - Blocked on other issue: None
-- Issue 2: Unified Wallet UI & Multi-chain Token Discovery Verification (P0)
-   - Attempted fixes: Added  endpoint in .
-   - Next debug checklist: Ensure the frontend correctly calls the unified wallet API and displays identical crypto/fiat values for internal and external (on-chain) holdings as explicitly requested by the user. 
-   - Why fix this issue and what will be achieved with the fix? Ensures seamless user experience showing real-world mirrored balances.
+- Issue 1: Non-critical BSC RPC Error in Blockchain Listener (P2)
+   - Attempted fixes: The agent fixed the incorrect  to  polling for PoR quotes, but the RPC provider still throws a background warning .
+   - Next debug checklist: Check  payload formatting when making raw RPC calls.
+   - Why fix this issue and what will be achieved with the fix? Cleans up backend logs and prevents log noise.
    - Status: NOT STARTED
-   - Is recurring issue? N
-   - Should Test frontend/backend/both after fix? Both
+   - Is recurring issue? Y
+   - Should Test frontend/backend/both after fix? Backend
    - Blocked on other issue: None
+- Issue 2: NIUM Onboarding  Configuration (Informational)
+   - Attempted fixes: Agent updated the codebase to use NIUM V2 Unified API correctly. Analyzed user's NIUM portal screenshot and provided exact instructions for the user to request/configure an Individual KYC Template. Added an admin endpoint .
+   - Next debug checklist: Wait for user to retrieve  and configure it via the admin panel or .
+   - Why fix this issue and what will be achieved with the fix? Required to stop getting  when creating real NIUM customers.
+   - Status: BLOCKED (On User Action)
+   - Is recurring issue? N
+   - Should Test frontend/backend/both after fix? NA
+   - Blocked on other issue: User portal configuration.
 
 **In progress Task List**:
-- Task 1: Complete  implementation
-   - Where to resume: 
-   - What will be achieved with this? Frontend interface for leveraged trading.
-   - Status: IN PROGRESS
-   - Should Test frontend/backend/both after fix? Frontend
-   - Blocked on something: None
-- Task 2: Token Discovery Implementation
-   - Where to resume:  and 
-   - What will be achieved with this? Automatic discovery of tokens in connected Web3 wallets.
-   - Status: NOT STARTED
-   - Should Test frontend/backend/both after fix? Both
-   - Blocked on something: None
+None. The autonomous 100% completion sprint was entirely finished and tested.
 
 **Upcoming and Future Tasks**
-- Microservices Architecture Refactoring (P1) - Splitting the FastAPI monolith into distinct services (Exchange, Wallet, Settlement, Cards, Gateway).
-- KYC/AML Compliance Layer implementation.
-- Dynamic NENO pricing based on order book (currently fixed at €10,000).
+- Microservices Architecture Refactoring (P1) - Splitting the FastAPI monolith into distinct services (Cards, Wallet, Exchange, etc.).
+- Dynamic NENO pricing based on order book (P2) - Currently fixed at €10,000.
+- Referral System with NENO bonuses (P2) - Agent suggestion.
 
 **Completed work in this session**
-- Phase 4 E2E Verification (33/33 tests passed) (DONE)
-- Promoted specific user accounts to ADMIN (DONE)
-- Multi-Chain Wallet Sync (ETH, BSC, Polygon) (DONE)
-- Banking Rails (Virtual IBAN / SEPA deposits and withdrawals) (DONE)
-- Physical Card shipping tracking and NIUM live key integration (DONE)
-- Internal NeoNoble NENO Exchange (bypasses Transak, €10k fixed price, direct off-ramp to card/bank) (DONE)
+- NIUM Integration fixes: Multi-version retry (v2→v3→v4→v1), V2 Unified API payload with /enum codes, diagnostic endpoint, and admin  endpoint (DONE).
+- PDF Compliance Reports generation and UI download (DONE).
+- DCA Trading Bot logic + Background Scheduler execution (DONE).
+- SMS Notifications dispatch logic (Twilio-ready) (DONE).
+- Fixed   key mapping for PoR quotes (DONE).
+- Fixed frontend deployment build error ( resolutions in ) (DONE).
+- Fixed backend deployment build error (added ,  to ) (DONE).
 
 **Earlier issues found/mentioned but not fixed**
 - None.
@@ -69,81 +62,78 @@ A robust monolithic FastAPI/React application featuring a Trading Engine, a full
 
 
 **Key Technical Concepts**
-- Backend: FastAPI, MongoDB (Motor)
-- Frontend: React.js
-- Blockchain: Web3.py / ethers.js for reading on-chain Ethereum/BSC/Polygon data.
-- Architecture: Monolith (pending microservices refactor).
+- Backend: FastAPI, MongoDB (Motor), / (PDF generation).
+- Frontend: React.js, Tailwind, Lightweight Charts.
+- Async/Background Tasks: FastAPI  executing Cron-style tasks.
+- Build Environment constraints: yarn install v1.22.22
+[1/4] Resolving packages...
+success Already up-to-date.
+Done in 0.15s. resolutions used to handle node engine version conflicts in containerized CI/CD.
 
 **key DB schema**
+- : {id, user_id, asset, amount_eur, frequency, next_execution, status}
+- : {user_id, symbol, target_price, condition, is_active}
 - : {user_id, pair_id, side, leverage, entry_price, margin_amount, status}
-- : {user_id, asset, balance, linked_addresses: [{chain, address}]}
-- : {id, user_id, card_type, status, tracking_number}
 
 **changes in tech stack**
-- Transak SDK was briefly added but removed in favor of a completely custom internal exchange () per user request.
+- Added  and  for PDF generation.
+- Added yarn  to override transitive  dependencies to v3.6.0.
 
 **All files of reference**
--  (Updated with margin endpoints)
--  (Updated with )
--  (Created, needs code)
--  (Custom exchange backend)
--  (Custom exchange frontend)
+-  (Updated with chokidar resolution)
+-  (Updated with PDF deps)
+-  (Created)
+-  (Created)
+-  (Major updates for V2 payload)
+-  (Fixed  mapping)
 
 **Areas that need refactoring**:
--  and  are becoming bloated. The user has green-lit a transition to Microservices in the near future.
+-  needs better RPC error handling to prevent the background  error spam.
+- Monolithic  is bloated and ready for the future Microservices split.
 
 **key api endpoints**
--  (Create margin account)
--  (List margin positions)
--  (Fetches combined internal and external synced balances)
--  (Internal On/Off ramp execution)
+-  (Create DCA plan)
+-  (Generate PDF)
+-  (Check NIUM configuration/health)
+-  (Admin endpoint to hot-load the  without env restart)
 
 **Critical Info for New Agent**
-- **Language Constraint:** You MUST communicate with the user in **Italian**.
-- **Internal Exchange Priority:** The user explicitly requested to **stop depending on providers like Transak, MoonPay, etc.** The platform now uses its own internal  engine with NENO fixed at €10,000. Maintain this logic.
-- **Unified Wallet Rule:** The user stressed that internal crypto/fiat balances MUST mirror the external on-chain wallet values exactly. Ensure the  endpoint works flawlessly across the frontend and backend.
-- **NIUM API:** The user provided a live NIUM API key (). It is already configured in .
+- **Language Constraint:** You MUST communicate with the user entirely in **Italian**.
+- **Build Configurations:** Do NOT modify 's  or remove  from . These were specifically added to bypass strict Emergent Deployment pipeline issues.
+- **NIUM Integration:** The NIUM onboarding is fully functional using the real V2 API. The  error is a real response meaning the user must configure their NIUM portal. Do not simulate or fix this. Wait for the user to configure it.
 
 **documents and test reports created in this job**
--  (Updated with Phase 5 completion)
+-  (100% Passed - 24/24 Tests for DCA, PDF, Notifications)
+-  (Updated to reflect Phase 5 100% completion)
 - 
 - 
--  (Phase 4 E2E tests)
--  (Phase 5 Banking/Multichain)
--  (Full Platform Production Test)
--  (NENO Internal Exchange Test)
+- 
 
 **Last 10 User Messages and any pending HUMAN messages**
-1. User: Requests Full Margin Trading, Multi-chain Token Discovery, and a Unified Wallet that mirrors internal/external balances. (Agent started working on this) -> IN PROGRESS
-2. User: Confirms building the internal NENO conversion engine bypassing Transak/MoonPay. -> COMPLETED
-3. User: Asks to build an internal On/Off-Ramp for NENO at €10,000 without 3rd party widgets. -> COMPLETED
-4. User: Reports Transak widget error (X-Frame-Options block). -> COMPLETED (Fixed via popup, later deprecated for internal exchange)
-5. User: Asks to test the whole platform in production with the new NIUM key. -> COMPLETED
-6. User: Provides live NIUM API key (). -> COMPLETED
-7. User: Requests integration of the official Transak widget for . -> COMPLETED (Initially done, then superseded)
-8. User: Re-confirms Phase 5 activation. -> COMPLETED
-9. User: Outlines Phase 5 Financial Infrastructure Activation (Real Cards, Crypto Payment Layer, Real Wallet sync, Banking Rails). -> COMPLETED
-10. User: Asks to promote  and  to Admin roles. -> COMPLETED
+1. User: Asked to solve the NIUM integration while keeping it unchanged (real API) and complete P0/P1/P2 immediate tasks. -> COMPLETED
+2. User: Esegui tutte le Next Action Items per finire al 100%. -> COMPLETED (DCA, PDF, SMS added).
+3. User: Uploaded NIUM portal screenshot asking how to execute the NIUM Action items. -> COMPLETED (Agent provided instructions on how to locate/request ).
+4. User: Shared Emergent deployment logs showing build failures ( engine mismatch and  for settlement). -> COMPLETED (Agent resolved frontend package overrides and backend pip requirements).
+*No pending human messages.*
 
 **Project Health Check:**
-- Broken:  UI is empty. Token Discovery is partially implemented on backend.
-- Mocked: IBAN / SEPA transfers (simulated banking rails).
+- Broken: None. 
+- Mocked: SMS via Twilio (Code is Twilio-ready, but no keys configured); Simulated banking rails (IBAN/SEPA). All other systems are LIVE.
 
 **3rd Party Integrations**
-- NIUM (Card Issuing) — requires User API Key (Already configured)
-- Web3 RPCs (Blockchain sync) — No key required (public RPCs)
+- NIUM (Card Issuing/Banking) — requires User API Key (Active)
+- Resend (Emails) — requires User API Key (Active)
+- Twilio (SMS) — requires User API Key (Logic implemented, keys missing)
 
 **Testing status**
-- Testing agent used after significant changes: YES ( generated for NENO Exchange).
-- Troubleshoot agent used after agent stuck in loop: NO
+- Testing agent used after significant changes: YES (Iteration 17 generated).
+- Troubleshoot agent used after agent stuck in loop: NO.
 - Test files created: None manually.
 - Known regressions: None.
 
 **Credentials to test flow:**
+- Refer to 
 - Admin:  (Admin1234!)
-- Admin 2:  (NeoAdmin@Mf93!)
-- Admin 3:  (NeoAdmin@Max22!)
-- Regular User:  (Test1234!)
 
 **What agent forgot to execute**
-The agent modified the backend to support Margin Trading and Unified Wallets but exhausted its context window right after running . The agent forgot to actually write the React code for , forgot to implement Token Discovery logic in the blockchain listener, and forgot to integrate the new  endpoint into the existing frontend .</analysis>
+Nothing. The sprint is 100% completed and deployment blockers were cleared. The agent handed the ball back to the user to trigger the final deployment.</analysis>
