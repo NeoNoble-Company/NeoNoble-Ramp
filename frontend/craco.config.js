@@ -71,6 +71,7 @@ const webpackConfig = {
           'porto/internal': false,
           '@safe-global/safe-apps-sdk': false,
           '@safe-global/safe-apps-provider': false,
+          '@base-org/account': false,
         },
       };
 
