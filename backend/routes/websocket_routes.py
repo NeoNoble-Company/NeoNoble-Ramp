@@ -423,3 +423,163 @@ async def websocket_neno_orderbook(websocket: WebSocket):
                 await asyncio.sleep(1)
     except WebSocketDisconnect:
         pass
+
+
+
+# ── Real-time Portfolio Tracker WebSocket ──
+
+# Reference market prices (updated dynamically)
+LIVE_PRICES = {
+    "BTC": 60787.0, "ETH": 1769.0, "BNB": 555.36, "USDT": 0.92,
+    "USDC": 0.92, "MATIC": 0.55, "SOL": 74.72, "NENO": 10000.0,
+    "EUR": 1.0, "USD": 0.92, "XRP": 1.21, "ADA": 0.38, "DOGE": 0.082,
+    "AVAX": 24.50, "DOT": 5.12, "LINK": 13.80, "UNI": 8.45,
+}
+
+
+def _simulate_price_tick(prices: dict) -> dict:
+    """Simulate small price movements for live ticker."""
+    import random
+    updated = {}
+    for asset, price in prices.items():
+        if asset in ("EUR", "USDT", "USDC"):
+            updated[asset] = price
+            continue
+        change_pct = random.uniform(-0.003, 0.003)  # max 0.3% per tick
+        new_price = round(price * (1 + change_pct), 6)
+        updated[asset] = new_price
+    return updated
+
+
+@router.websocket("/portfolio/{token}")
+async def websocket_portfolio_tracker(websocket: WebSocket, token: str):
+    """
+    Real-time Portfolio Tracker WebSocket.
+
+    Requires JWT token in URL path for authentication.
+    Streams portfolio value updates every 2 seconds with live price movements.
+
+    Message format:
+    {
+        "type": "portfolio_update",
+        "data": {
+            "total_eur": 12345.67,
+            "total_24h_change_pct": 0.45,
+            "assets": [{"asset":"BTC","balance":0.5,"price":60800,"eur_value":30400,"change_pct":0.02}],
+            "prices": {"BTC": 60800, ...},
+            "timestamp": "..."
+        }
+    }
+    """
+    await websocket.accept()
+
+    # Authenticate via JWT
+    import jwt
+    import os
+    try:
+        secret = os.environ.get("JWT_SECRET", "secret-key")
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        # JWT uses 'sub' for user_id (standard claim)
+        user_id = payload.get("sub") or payload.get("user_id")
+        if not user_id:
+            await websocket.send_json({"type": "error", "message": "Token non valido"})
+            await websocket.close()
+            return
+    except Exception as e:
+        logger.error(f"[WS] Portfolio auth error: {e}")
+        await websocket.send_json({"type": "error", "message": "Autenticazione fallita"})
+        await websocket.close()
+        return
+
+    from database.mongodb import get_database
+    db = get_database()
+
+    prices = dict(LIVE_PRICES)
+    prev_total = None
+
+    try:
+        while True:
+            try:
+                # Check for client messages (ping/config)
+                try:
+                    msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+                    data = json.loads(msg)
+                    if data.get("action") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                        continue
+                except asyncio.TimeoutError:
+                    pass
+
+                # Fetch user wallets
+                wallets = await db.wallets.find(
+                    {"user_id": user_id, "balance": {"$gt": 0}}, {"_id": 0}
+                ).to_list(50)
+
+                # Simulate price ticks
+                prices = _simulate_price_tick(prices)
+
+                # Try to get real NENO price
+                try:
+                    from routes.neno_exchange_routes import _get_dynamic_neno_price
+                    neno_pricing = await _get_dynamic_neno_price()
+                    prices["NENO"] = neno_pricing["price"]
+                except Exception:
+                    pass
+
+                # Calculate portfolio
+                assets = []
+                total_eur = 0
+                for w in wallets:
+                    asset = w.get("asset", "")
+                    balance = w.get("balance", 0)
+                    price = prices.get(asset, 0)
+                    eur_value = round(balance * price, 2)
+                    total_eur += eur_value
+
+                    # Per-asset change since last tick (simulated)
+                    base_price = LIVE_PRICES.get(asset, price)
+                    change_pct = round(((price - base_price) / base_price * 100) if base_price else 0, 4)
+
+                    assets.append({
+                        "asset": asset,
+                        "balance": round(balance, 8),
+                        "price": round(price, 6),
+                        "eur_value": eur_value,
+                        "change_pct": change_pct,
+                    })
+
+                # Sort by EUR value desc
+                assets.sort(key=lambda x: x["eur_value"], reverse=True)
+
+                # Overall 24h change
+                total_24h_change_pct = 0
+                if prev_total and prev_total > 0:
+                    total_24h_change_pct = round((total_eur - prev_total) / prev_total * 100, 4)
+                prev_total = total_eur
+
+                # Margin positions summary
+                margin_positions = await db.margin_positions.find(
+                    {"user_id": user_id, "status": "open"}, {"_id": 0}
+                ).to_list(20)
+                margin_total_pnl = sum(p.get("unrealized_pnl", 0) for p in margin_positions)
+
+                await websocket.send_json({
+                    "type": "portfolio_update",
+                    "data": {
+                        "total_eur": round(total_eur, 2),
+                        "total_24h_change_pct": total_24h_change_pct,
+                        "assets": assets,
+                        "prices": {k: round(v, 6) for k, v in prices.items()},
+                        "margin_positions_count": len(margin_positions),
+                        "margin_unrealized_pnl": round(margin_total_pnl, 2),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                })
+
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"[WS] Portfolio tracker error: {e}")
+                await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        pass

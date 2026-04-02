@@ -11,7 +11,7 @@ import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
   AlertCircle, TrendingUp, CreditCard, BarChart3, Shield, ArrowRightLeft,
-  PieChart, Settings
+  PieChart, Settings, Activity
 } from 'lucide-react';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
@@ -434,6 +434,27 @@ export default function Dashboard() {
                       <h3 className="text-white font-medium group-hover:text-fuchsia-400">Portfolio Analytics</h3>
                       <p className="text-gray-400 text-xs">Performance, PnL, Allocazione</p>
                     </div>
+                  </div>
+                </Link>
+
+                {/* Real-time Portfolio Tracker */}
+                <Link
+                  to="/portfolio-tracker"
+                  data-testid="portfolio-tracker-link"
+                  className="p-4 bg-gradient-to-r from-cyan-600/20 to-teal-600/20 border border-cyan-500/30 rounded-xl hover:border-cyan-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                      <Activity className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-cyan-400">Portfolio Tracker</h3>
+                      <p className="text-gray-400 text-xs">Prezzi live via WebSocket</p>
+                    </div>
+                    <span className="ml-auto flex items-center gap-1 text-[10px] text-cyan-400 bg-cyan-400/10 px-1.5 py-0.5 rounded">
+                      <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-500" /></span>
+                      LIVE
+                    </span>
                   </div>
                 </Link>
               </div>

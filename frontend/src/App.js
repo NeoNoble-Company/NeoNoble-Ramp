@@ -31,6 +31,7 @@ import PortfolioAnalytics from "./pages/PortfolioAnalytics";
 import SettingsPage from "./pages/SettingsPage";
 import ApiDocs from "./pages/ApiDocs";
 import AuditLog from "./pages/AuditLog";
+import PortfolioTracker from "./pages/PortfolioTracker";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -287,6 +288,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AuditLog />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Real-time Portfolio Tracker */}
+      <Route
+        path="/portfolio-tracker"
+        element={
+          <ProtectedRoute>
+            <PortfolioTracker />
           </ProtectedRoute>
         }
       />
