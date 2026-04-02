@@ -4,6 +4,8 @@ import {
   ArrowLeft, Activity, TrendingUp, TrendingDown, Wifi, WifiOff,
   RefreshCw, DollarSign, BarChart3, Layers, Zap
 } from 'lucide-react';
+import PriceAlerts from '../components/PriceAlerts';
+import { useBrowserPush } from '../hooks/useBrowserPush';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -15,6 +17,9 @@ export default function PortfolioTracker() {
   const [history, setHistory] = useState([]);
   const [reconnecting, setReconnecting] = useState(false);
   const reconnectTimerRef = useRef(null);
+
+  // Activate browser push notifications
+  useBrowserPush();
 
   const connectWs = useCallback(() => {
     const token = localStorage.getItem('token');
@@ -184,6 +189,9 @@ export default function PortfolioTracker() {
                 ))}
               </div>
             </div>
+
+            {/* Price Alerts */}
+            <PriceAlerts />
 
             {/* Live Prices Ticker */}
             <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4" data-testid="live-prices-ticker">

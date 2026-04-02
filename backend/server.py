@@ -188,6 +188,9 @@ from routes.export_routes import router as export_router
 # Import NIUM Onboarding routes
 from routes.nium_onboarding_routes import router as nium_onboarding_router
 
+# Import Alert & Browser Push routes
+from routes.alert_routes import router as alert_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -624,6 +627,7 @@ api_router.include_router(totp_router)
 api_router.include_router(admin_audit_router)
 api_router.include_router(export_router)
 api_router.include_router(nium_onboarding_router)
+api_router.include_router(alert_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)

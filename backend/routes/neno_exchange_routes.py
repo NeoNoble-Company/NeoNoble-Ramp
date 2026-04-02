@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import uuid
+import asyncio
 
 from database.mongodb import get_database
 from routes.auth import get_current_user
@@ -268,6 +269,15 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
     new_pay = await _get_balance(db, uid, asset)
 
     tx["created_at"] = tx["created_at"].isoformat()
+
+    # Multi-channel notification dispatch
+    try:
+        from services.notification_dispatch import notify_trade_executed
+        eur_value = round(req.neno_amount * neno_eur_price, 2)
+        asyncio.ensure_future(notify_trade_executed(uid, "NENO", "buy", req.neno_amount, neno_eur_price, eur_value))
+    except Exception:
+        pass
+
     return {
         "message": f"Acquistati {req.neno_amount} NENO per {total_cost} {asset}",
         "transaction": tx,
@@ -325,6 +335,15 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     new_asset = await _get_balance(db, uid, asset)
 
     tx["created_at"] = tx["created_at"].isoformat()
+
+    # Multi-channel notification dispatch
+    try:
+        from services.notification_dispatch import notify_trade_executed
+        eur_value = round(req.neno_amount * neno_eur_price, 2)
+        asyncio.ensure_future(notify_trade_executed(uid, "NENO", "sell", req.neno_amount, neno_eur_price, eur_value))
+    except Exception:
+        pass
+
     return {
         "message": f"Venduti {req.neno_amount} NENO per {net} {asset}",
         "transaction": tx,

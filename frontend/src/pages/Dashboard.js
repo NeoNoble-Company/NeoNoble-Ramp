@@ -7,6 +7,7 @@ import NenoTradingWidget from '../components/NenoTradingWidget';
 import { WalletConnectButton, ChainSelector } from '../components/WalletConnect';
 import { useWeb3 } from '../context/Web3Context';
 import NotificationBell from '../components/NotificationBell';
+import { useBrowserPush } from '../hooks/useBrowserPush';
 import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
@@ -19,6 +20,7 @@ const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
 export default function Dashboard() {
   const { user, logout, isDeveloper } = useAuth();
   const navigate = useNavigate();
+  useBrowserPush();
   
   const [activeTab, setActiveTab] = useState('onramp');
   const [prices, setPrices] = useState({});
