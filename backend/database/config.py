@@ -73,7 +73,12 @@ class DatabaseConfig:
             echo=os.environ.get("SQL_ECHO", "false").lower() == "true",
             pool_size=5,
             max_overflow=10,
-            pool_pre_ping=True
+            pool_pre_ping=True,
+            connect_args={
+                "timeout": 10,
+                "command_timeout": 10,
+            },
+            pool_timeout=10,
         )
         
         self._pg_session_factory = async_sessionmaker(

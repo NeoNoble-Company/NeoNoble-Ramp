@@ -338,62 +338,106 @@ async def get_active_quotes_for_monitoring():
 async def lifespan(app: FastAPI):
     global blockchain_poll_task
     
-    # Startup
+    # Startup — keep this lightweight so health checks pass quickly
     logger.info("NeoNoble Ramp API starting up...")
     
-    # Create database indexes
-    await db.users.create_index("email", unique=True)
-    await db.users.create_index("id", unique=True)
-    await db.platform_api_keys.create_index("api_key", unique=True)
-    await db.platform_api_keys.create_index("id", unique=True)
-    await db.platform_api_keys.create_index("user_id")
-    await db.transactions.create_index("id", unique=True)
-    await db.transactions.create_index("user_id")
-    await db.transactions.create_index("reference", unique=True)
-    await db.transactions.create_index("metadata.quote_id")
+    # Launch heavy initialization in background
+    init_task = asyncio.create_task(_background_init())
     
-    # Token Infrastructure indexes
-    await db.tokens.create_index("id", unique=True)
-    await db.tokens.create_index("symbol", unique=True)
-    await db.tokens.create_index("creator_id")
-    await db.tokens.create_index([("chain", 1), ("status", 1)])
-    await db.token_listings.create_index("id", unique=True)
-    await db.token_listings.create_index("token_id")
-    await db.token_listings.create_index("status")
-    await db.trading_pairs.create_index("id", unique=True)
-    await db.trading_pairs.create_index("pair_symbol", unique=True)
-    await db.trading_pairs.create_index("base_token_id")
+    yield
     
-    # Subscription Infrastructure indexes
-    await db.subscription_plans.create_index("id", unique=True)
-    await db.subscription_plans.create_index("code", unique=True)
-    await db.subscriptions.create_index("id", unique=True)
-    await db.subscriptions.create_index([("user_id", 1), ("status", 1)])
-    await db.subscription_invoices.create_index("id", unique=True)
-    await db.subscription_invoices.create_index("subscription_id")
-    
-    logger.info("Token and Subscription infrastructure indexes created")
+    # Shutdown
+    init_task.cancel()
+    logger.info("NeoNoble Ramp API shutting down...")
+    try:
+        from services.background_scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception:
+        pass
+    if blockchain_poll_task:
+        blockchain_listener.stop_polling()
+        blockchain_poll_task.cancel()
+        try:
+            await blockchain_poll_task
+        except asyncio.CancelledError:
+            pass
+    if webhook_service:
+        await webhook_service.stop_worker()
+    await pricing_service.close()
+    client.close()
+    logger.info("NeoNoble Ramp API shutdown complete.")
 
-    # Alert and push indexes
-    await db.price_alerts.create_index([("user_id", 1), ("triggered", 1)])
-    await db.browser_push_queue.create_index([("user_id", 1), ("delivered", 1)])
+
+async def _background_init():
+    """Initialize all services in background so health checks pass immediately."""
+    global blockchain_poll_task
     
-    # DCA Bot indexes
-    await db.dca_plans.create_index([("user_id", 1), ("status", 1)])
-    await db.dca_plans.create_index("id", unique=True)
-    await db.dca_executions.create_index([("plan_id", 1), ("executed_at", -1)])
-    await db.dca_executions.create_index("id", unique=True)
-    await db.sms_log.create_index([("user_id", 1), ("sent_at", -1)])
-    
-    # Referral indexes
-    await db.referral_codes.create_index("code", unique=True)
-    await db.referral_codes.create_index("user_id", unique=True)
-    await db.referral_links.create_index("referred_user_id", unique=True)
-    await db.referral_links.create_index("referrer_user_id")
-    await db.referral_bonus_log.create_index([("user_id", 1), ("created_at", -1)])
-    
-    # KYC risk score indexes
-    await db.kyc_risk_scores.create_index("user_id", unique=True)
+    try:
+        # Small delay to let the server bind first
+        await asyncio.sleep(0.5)
+        
+        logger.info("[INIT] Starting background service initialization...")
+        
+        # Create database indexes
+        try:
+            await db.users.create_index("email", unique=True)
+            await db.users.create_index("id", unique=True)
+            await db.platform_api_keys.create_index("api_key", unique=True)
+            await db.platform_api_keys.create_index("id", unique=True)
+            await db.platform_api_keys.create_index("user_id")
+            await db.transactions.create_index("id", unique=True)
+            await db.transactions.create_index("user_id")
+            await db.transactions.create_index("reference", unique=True)
+            await db.transactions.create_index("metadata.quote_id")
+            
+            # Token Infrastructure indexes
+            await db.tokens.create_index("id", unique=True)
+            await db.tokens.create_index("symbol", unique=True)
+            await db.tokens.create_index("creator_id")
+            await db.tokens.create_index([("chain", 1), ("status", 1)])
+            await db.token_listings.create_index("id", unique=True)
+            await db.token_listings.create_index("token_id")
+            await db.token_listings.create_index("status")
+            await db.trading_pairs.create_index("id", unique=True)
+            await db.trading_pairs.create_index("pair_symbol", unique=True)
+            await db.trading_pairs.create_index("base_token_id")
+            
+            # Subscription Infrastructure indexes
+            await db.subscription_plans.create_index("id", unique=True)
+            await db.subscription_plans.create_index("code", unique=True)
+            await db.subscriptions.create_index("id", unique=True)
+            await db.subscriptions.create_index([("user_id", 1), ("status", 1)])
+            await db.subscription_invoices.create_index("id", unique=True)
+            await db.subscription_invoices.create_index("subscription_id")
+            
+            logger.info("[INIT] Token and Subscription infrastructure indexes created")
+        
+            # Alert and push indexes
+            await db.price_alerts.create_index([("user_id", 1), ("triggered", 1)])
+            await db.browser_push_queue.create_index([("user_id", 1), ("delivered", 1)])
+            
+            # DCA Bot indexes
+            await db.dca_plans.create_index([("user_id", 1), ("status", 1)])
+            await db.dca_plans.create_index("id", unique=True)
+            await db.dca_executions.create_index([("plan_id", 1), ("executed_at", -1)])
+            await db.dca_executions.create_index("id", unique=True)
+            await db.sms_log.create_index([("user_id", 1), ("sent_at", -1)])
+            
+            # Referral indexes
+            await db.referral_codes.create_index("code", unique=True)
+            await db.referral_codes.create_index("user_id", unique=True)
+            await db.referral_links.create_index("referred_user_id", unique=True)
+            await db.referral_links.create_index("referrer_user_id")
+            await db.referral_bonus_log.create_index([("user_id", 1), ("created_at", -1)])
+            
+            # KYC risk score indexes
+            await db.kyc_risk_scores.create_index("user_id", unique=True)
+            
+            logger.info("[INIT] Database indexes created")
+        except Exception as e:
+            logger.warning(f"[INIT] Index creation failed (non-fatal): {e}")
+    except Exception as e:
+        logger.error(f"[INIT] Critical initialization error: {e}")
     
     # Initialize wallet service
     try:
@@ -534,13 +578,22 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Audit Service initialization failed: {e}")
     
     # Initialize PostgreSQL and Dual Database Manager for migration
-    try:
-        pg_engine, pg_session_factory = await init_pg_engine()
-        dual_manager = get_dual_db_manager()
-        await dual_manager.initialize(mongo_db=db, pg_session_factory=pg_session_factory)
-        logger.info(f"Dual Database Manager initialized (mode: {dual_manager.state.mode.value})")
-    except Exception as e:
-        logger.warning(f"PostgreSQL/Dual Manager initialization failed: {e}")
+    # ONLY if DATABASE_MODE is not mongodb_only
+    database_mode = os.environ.get("DATABASE_MODE", "mongodb_only").lower()
+    if database_mode != "mongodb_only":
+        try:
+            pg_engine, pg_session_factory = await asyncio.wait_for(
+                init_pg_engine(), timeout=15
+            )
+            dual_manager = get_dual_db_manager()
+            await dual_manager.initialize(mongo_db=db, pg_session_factory=pg_session_factory)
+            logger.info(f"Dual Database Manager initialized (mode: {dual_manager.state.mode.value})")
+        except asyncio.TimeoutError:
+            logger.warning("PostgreSQL initialization timed out (15s) - skipping")
+        except Exception as e:
+            logger.warning(f"PostgreSQL/Dual Manager initialization failed: {e}")
+    else:
+        logger.info("DATABASE_MODE=mongodb_only - skipping PostgreSQL initialization")
     
     # Start blockchain monitoring if configured
     if os.environ.get('BSC_RPC_URL'):
@@ -575,33 +628,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to load NIUM_TEMPLATE_ID from DB: {e}")
     
-    yield
-    
-    # Shutdown
-    logger.info("NeoNoble Ramp API shutting down...")
-    
-    # Stop background scheduler
-    try:
-        from services.background_scheduler import stop_scheduler
-        await stop_scheduler()
-    except Exception:
-        pass
-    
-    # Stop webhook service worker
-    if webhook_service:
-        await webhook_service.stop_worker()
-    
-    # Stop blockchain monitoring
-    if blockchain_poll_task:
-        blockchain_listener.stop_polling()
-        blockchain_poll_task.cancel()
-        try:
-            await blockchain_poll_task
-        except asyncio.CancelledError:
-            pass
-    
-    await pricing_service.close()
-    client.close()
+    logger.info("[INIT] Background initialization complete - all services ready")
+
 
 # Create the main app
 app = FastAPI(
