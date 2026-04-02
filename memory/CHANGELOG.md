@@ -1,51 +1,69 @@
 # NeoNoble Ramp — Changelog
 
-## 2026-04-02 (Phase 6 — Current Session)
+## 2026-04-02 (Session — Phase 6 Complete)
 
-### Full Margin Trading (P0)
-- Implemented professional `MarginTrading.js` page at `/margin`
-- Professional candlestick charts with `lightweight-charts` v4.2.0
-- 4 chart types: Candlestick, Line, Area, Bar
-- 10 technical indicators: SMA 20/50/200, EMA 12/26/50, RSI 14, MACD, Bollinger Bands, Volume
-- Indicator selector panel with search and toggle
-- Oscillator panels (RSI, MACD) rendered as sub-charts
-- Margin account management: deposit/withdraw, leverage 2-20x
-- LONG/SHORT position opening with SL/TP
-- Position table with real-time PnL tracking
-- 8 trading pairs (BTC-EUR, ETH-EUR, BNB-EUR, NENO-EUR, SOL-EUR, XRP-EUR, ADA-EUR, DOGE-EUR)
-- 6 intervals (1m, 5m, 15m, 1H, 4H, 1D)
+### Margin Trading PRO (P0) - DONE
+- Professional candlestick charts, 4 chart types, 10 indicators
+- Margin account, LONG/SHORT, leverage 2-20x, SL/TP
 
-### Unified Wallet (P0)
-- Added "Unificato" tab to WalletPage showing internal + on-chain balances
-- Displays internal_balance, external_balance, total_balance, eur_value per asset
-- Source indicator (Piattaforma, On-Chain, Sync)
-- Automatic refresh on tab switch
+### Unified Wallet (P0) - DONE
+- Internal + on-chain balances synced in "Unificato" tab
 
-### Multi-chain Token Discovery (P0)
-- "Scopri Token" button on On-Chain tab
-- Chain selector for targeted discovery (Ethereum, BSC, Polygon)
-- Displays discovered tokens with balances and custom token indicator
+### Multi-chain Token Discovery (P0) - DONE
+- Auto-discover ERC-20/BEP-20 tokens
 
-### KYC/AML Compliance Layer (P1)
-- New KYC routes at `/api/kyc/*`
-- 4-tier KYC system: Tier 0 (Non Verificato, no trading) → Tier 1 (Base, 1000 EUR/day) → Tier 2 (Verificato, 50k/day) → Tier 3 (Premium, unlimited)
-- KYC form submission with personal info, address, document
-- Admin review workflow (approve, reject, request_info)
-- AML monitoring: large transaction alerts (>10k EUR), daily velocity alerts (>25k EUR), structuring detection (5+ tx/hour)
-- AML dashboard with statistics
-- KYC page at `/kyc` with status, submit, admin review, and AML tabs
+### KYC/AML Compliance (P1) - DONE
+- 4-tier KYC (0→3), admin review, AML monitoring
+- AI-powered document verification via GPT-4o OCR
+- Auto-approval for verified documents
 
-### Dynamic NENO Pricing (P2)
-- NENO price now adjusts based on 24h buy/sell volume pressure
-- Base price: €10,000, max deviation: ±5%
-- New endpoint `GET /api/neno-exchange/price` returns real-time price data
-- Quote and buy/sell endpoints updated to use dynamic pricing
-- NENO Exchange frontend updated to display price shift percentage
+### Dynamic NENO Pricing (P2) - DONE
+- Order book pressure-based, max ±5% deviation from €10,000 base
 
-### Dashboard Updates
-- Added "Margin Trading" link card (red gradient, "Leva fino a 20x, Grafici PRO")
-- Added "KYC / AML" link card (teal gradient, "Verifica identita e compliance")
+### Real NIUM IBAN/SEPA Banking - DONE
+- NIUM API integration for real IBAN creation
+- SEPA withdrawal processing
+- Webhook support for deposits
+- Automatic fallback to simulated mode
+
+### Advanced Orders - DONE
+- Limit orders (GTC, IOC, FOK)
+- Stop orders and Stop-Limit orders
+- Trailing Stop orders (amount or percentage)
+- Order management (cancel, history)
+- Fund reservation on order placement
+
+### 2FA TOTP Authentication - DONE
+- TOTP setup with QR code generation
+- Verification flow with backup codes (8 codes)
+- Enable/disable with code validation
+- Status endpoint
+
+### Push Notifications - DONE
+- In-app notification system
+- SSE real-time delivery
+- Read/unread tracking, mark all read
+- Notification types: trade, margin, kyc, security, system
+
+### Portfolio Analytics - DONE
+- PnL curve chart (lightweight-charts)
+- Portfolio allocation pie chart (SVG)
+- Summary cards: Total Value, Realized PnL, Unrealized PnL, Win Rate
+- Open margin positions table
+- Recent trades list
+
+### Settings Page - DONE
+- Security tab: 2FA TOTP setup/disable with QR code
+- Language tab: IT, EN, DE, FR selection
+- Notifications tab: Toggle preferences per category
+
+### Dashboard Updates - DONE
+- Notification bell with unread badge
+- Settings gear icon
+- Portfolio Analytics link
+- All navigation cards complete
 
 ### Testing
-- iteration_10.json: Margin Trading + Unified Wallet (19/19 backend, 100% frontend)
-- iteration_11.json: KYC/AML + Dynamic Pricing (15/15 backend, 100% frontend)
+- iteration_10: Margin + Unified (19/19, 100%)
+- iteration_11: KYC + Dynamic Pricing (15/15, 100%)
+- iteration_12: All new features (21/21, 100%)
