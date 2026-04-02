@@ -1,16 +1,19 @@
-# Test Credentials
+# Test Credentials — NeoNoble Ramp
 
 ## Admin Accounts
-- admin@neonobleramp.com / Admin1234!
-- mfornara93@gmail.com / NeoAdmin@Mf93!
-- massimo.fornara.2212@gmail.com / NeoAdmin@Max22!
+- **Primary Admin**: admin@neonobleramp.com / Admin1234!
+- **Admin 2**: mfornara93@gmail.com / NeoAdmin@Mf93!
+- **Admin 3**: massimo.fornara.2212@gmail.com / NeoAdmin@Max22!
 
 ## Regular User
-- testchart@example.com / Test1234!
+- **Test User**: testchart@example.com / Test1234!
 
-## NIUM
-- API Key: (in backend/.env as NIUM_API_KEY)
-- Client Hash: 24dba820-d8da-4ce6-b72f-d07f98ffa2fd
-- Working URL: https://gateway.nium.com (auto-discovered)
-- Auth Method: x-api-key header (auto-discovered)
-- Status: Auth OK, customer creation needs templateId in NIUM Portal
+## API
+- **Base URL**: https://neon-margin-trade.preview.emergentagent.com
+- **Auth Header**: Authorization: Bearer {token from POST /api/auth/login}
+
+## NIUM Integration
+- NIUM API Key: 9mgrmSgeIe77FHzOghCx4i92sLqLvqe5lwBMBzc1
+- NIUM Client Hash: 24dba820-d8da-4ce6-b72f-d07f98ffa2fd
+- Auth Strategy: x-api-key@gateway.nium.com (auto-discovered)
+- Customer creation: Requires templateId in NIUM admin portal
