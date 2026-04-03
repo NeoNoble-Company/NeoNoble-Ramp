@@ -157,21 +157,28 @@ export default function NenoExchange() {
       const { ok, data } = await safePost(`${BACKEND_URL}${url}`, body, token);
       if (!ok) throw new Error(data.detail || JSON.stringify(data) || 'Errore');
 
-      // Build result with settlement info
       const tx = data.transaction || {};
-      const settlementHash = tx.settlement_hash || data.settlement_hash || null;
-      const settlementMsg = settlementHash
-        ? `${data.message || 'Operazione completata'} | Settlement: ${settlementHash.slice(0, 10)}...${settlementHash.slice(-6)}`
-        : (data.message || 'Operazione completata');
+      const settlementHash = tx.settlement_hash || null;
+      const blockNum = tx.settlement_block_number || null;
+      const blockExplorer = tx.settlement_explorer || null;
+      const contractExplorer = tx.settlement_contract_explorer || null;
 
-      setResult({ ok: true, msg: settlementMsg, balances: data.balances, settlementHash });
+      setResult({
+        ok: true,
+        msg: data.message || 'Operazione completata',
+        balances: data.balances,
+        settlementHash,
+        blockNumber: blockNum,
+        blockExplorer,
+        contractExplorer,
+        network: tx.settlement_network || 'BSC Mainnet',
+      });
 
       // Sync wallet if connected
       if (isConnected && address) {
         safePost(`${BACKEND_URL}/api/neno-exchange/wallet-sync`, {
           external_address: address,
-          chain_id: currentChain?.id || 1,
-          on_chain_balances: onChainBalance ? { [onChainBalance.symbol]: parseFloat(onChainBalance.formatted) } : {},
+          chain_id: currentChain?.id || 56,
         }, token).catch(() => {});
       }
       fetchData();
@@ -245,16 +252,28 @@ export default function NenoExchange() {
 
         {/* Result banner */}
         {result && (
-          <div className={`rounded-lg px-4 py-3 text-sm ${result.ok ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`} data-testid="result-banner">
-            <div>{result.msg}</div>
+          <div className={`rounded-lg px-4 py-3 text-sm ${result.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`} data-testid="result-banner">
+            <div className="font-medium">{result.msg}</div>
             {result.settlementHash && (
-              <div className="flex items-center gap-2 mt-1.5">
-                <Link2 className="w-3 h-3 text-emerald-500/60" />
-                <span className="text-emerald-500/60 text-[10px] font-mono">{result.settlementHash}</span>
-                <button onClick={() => { navigator.clipboard.writeText(result.settlementHash); setCopiedHash(result.settlementHash); setTimeout(() => setCopiedHash(null), 2000); }}
-                  className="p-0.5 hover:bg-emerald-500/20 rounded" data-testid="copy-settlement-hash">
-                  {copiedHash === result.settlementHash ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-emerald-500/60" />}
-                </button>
+              <div className="mt-2 space-y-1 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">Settlement:</span>
+                  <span className="font-mono text-emerald-500/80">{result.settlementHash.slice(0, 14)}...{result.settlementHash.slice(-8)}</span>
+                  <button onClick={() => { navigator.clipboard.writeText(result.settlementHash); setCopiedHash(result.settlementHash); setTimeout(() => setCopiedHash(null), 2000); }}
+                    className="p-0.5 hover:bg-emerald-500/20 rounded" data-testid="copy-settlement-hash">
+                    {copiedHash === result.settlementHash ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 opacity-60" />}
+                  </button>
+                </div>
+                <div className="flex items-center gap-3 text-emerald-600/60">
+                  {result.network && <span>BSC Mainnet</span>}
+                  {result.blockNumber > 0 && <span>Block #{result.blockNumber.toLocaleString()}</span>}
+                  <span className="font-mono text-[9px]">0xeF3F...9974</span>
+                  {result.blockExplorer && (
+                    <a href={result.blockExplorer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400" data-testid="bscscan-link">
+                      <ExternalLink className="w-2.5 h-2.5" /> BSCScan
+                    </a>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -452,12 +471,39 @@ export default function NenoExchange() {
                   </div>
                 </div>
                 {t.settlement_hash && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-zinc-700 text-[9px] font-mono">{t.settlement_hash.slice(0, 18)}...</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-700 text-[9px] font-mono">{t.settlement_hash.slice(0, 14)}...{t.settlement_hash.slice(-6)}</span>
+                    {t.settlement_block_number > 0 && (
+                      <span className="text-zinc-700 text-[9px]">Block #{t.settlement_block_number?.toLocaleString()}</span>
+                    )}
+                    {t.settlement_explorer && (
+                      <a href={t.settlement_explorer} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-400">
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* On-Chain Contract Info Footer */}
+        <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3" data-testid="contract-info-footer">
+          <div className="flex items-center justify-between text-[10px]">
+            <div className="flex items-center gap-2 text-zinc-600">
+              <Wallet className="w-3 h-3" />
+              <span>$NENO Contract (BSC)</span>
+            </div>
+            <a href="https://bscscan.com/token/0xeF3F5C1892A8d7A3304E4A15959E124402d69974" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-zinc-500 hover:text-emerald-400 font-mono transition-colors" data-testid="contract-bscscan-link">
+              0xeF3F5C18...d69974 <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          </div>
+          <div className="flex items-center gap-3 mt-1 text-[9px] text-zinc-700">
+            <span>Settlement: keccak256(block_hash + tx_data)</span>
+            <span>Chain: BSC Mainnet (56)</span>
+            <span>Supply: 999.8M $NENO</span>
           </div>
         </div>
       </div>
