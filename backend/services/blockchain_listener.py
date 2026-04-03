@@ -83,26 +83,34 @@ class BlockchainListener:
         self._enabled = False
     
     def _get_web3(self) -> Optional[Web3]:
-        """Get or create Web3 instance."""
+        """Get or create Web3 instance with BSC POA middleware."""
         if self._web3 is not None:
-            return self._web3
-        
+            try:
+                if self._web3.is_connected():
+                    return self._web3
+            except Exception:
+                self._web3 = None
+
         rpc_url = os.environ.get('BSC_RPC_URL')
         if not rpc_url:
-            logger.warning("BSC_RPC_URL not configured - blockchain monitoring disabled")
             return None
-        
+
         try:
-            self._web3 = Web3(Web3.HTTPProvider(rpc_url))
-            
+            from web3.middleware import ExtraDataToPOAMiddleware
+            self._web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 10}))
+
             if not self._web3.is_connected():
-                logger.error(f"Failed to connect to BSC RPC: {rpc_url}")
+                logger.warning("BSC RPC not reachable")
+                self._web3 = None
                 return None
-            
-            logger.info("Connected to BSC RPC")
+
+            # BSC is a POA chain — inject the middleware
+            self._web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            logger.info(f"Connected to BSC RPC (block {self._web3.eth.block_number})")
             return self._web3
         except Exception as e:
-            logger.error(f"Error connecting to BSC RPC: {e}")
+            logger.warning(f"BSC RPC connection error: {e}")
+            self._web3 = None
             return None
     
     def is_enabled(self) -> bool:
@@ -183,72 +191,37 @@ class BlockchainListener:
         to_block: int
     ) -> List[Dict]:
         """
-        Check for NENO transfers to a specific address.
-        
-        Uses get_logs instead of create_filter for better RPC compatibility.
+        Check for NENO transfers to a specific address using get_logs.
+        Uses integer block numbers for Alchemy/BSC compatibility.
         """
         transfers = []
-        
+
         try:
             web3 = self._get_web3()
             if web3 is None:
                 return transfers
-            
-            # Use get_logs instead of create_filter (more reliable with various RPC providers)
-            # Transfer event topic: keccak256("Transfer(address,address,uint256)")
+
             transfer_topic = web3.keccak(text="Transfer(address,address,uint256)").hex()
-            
-            # Pad address to 32 bytes for topic filter
             padded_address = "0x" + address[2:].lower().zfill(64)
-            
-            try:
-                logs = web3.eth.get_logs({
-                    'fromBlock': hex(from_block),
-                    'toBlock': hex(to_block),
-                    'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
-                    'topics': [
-                        transfer_topic,
-                        None,  # from (any)
-                        padded_address  # to (our address)
-                    ]
-                })
-            except Exception as rpc_err:
-                err_str = str(rpc_err)
-                if "-32602" in err_str or "invalid argument" in err_str.lower():
-                    logger.debug(f"RPC parameter format issue for {address[:10]}..., retrying with int blocks")
-                    try:
-                        logs = web3.eth.get_logs({
-                            'fromBlock': from_block,
-                            'toBlock': to_block,
-                            'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
-                            'topics': [
-                                transfer_topic,
-                                None,
-                                padded_address
-                            ]
-                        })
-                    except Exception:
-                        logger.debug(f"RPC get_logs fallback also failed for {address[:10]}...")
-                        return transfers
-                else:
-                    raise
-            
+
+            logs = web3.eth.get_logs({
+                'fromBlock': from_block,
+                'toBlock': to_block,
+                'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
+                'topics': [transfer_topic, None, padded_address]
+            })
+
+            current_block = web3.eth.block_number
+
             for log in logs:
                 tx_hash = log['transactionHash'].hex()
                 block_number = log['blockNumber']
-                
-                # Decode the log data
-                # Transfer event: Transfer(address indexed from, address indexed to, uint256 value)
                 from_addr = "0x" + log['topics'][1].hex()[-40:]
                 to_addr = "0x" + log['topics'][2].hex()[-40:]
                 amount_wei = int(log['data'].hex(), 16)
-                
-                # Get confirmation count
-                current_block = web3.eth.block_number
                 confirmations = current_block - block_number
-                
                 amount = Decimal(amount_wei) / Decimal(10 ** self._token_decimals)
-                
+
                 transfer = {
                     'transaction_hash': tx_hash,
                     'from_address': from_addr.lower(),
@@ -260,15 +233,15 @@ class BlockchainListener:
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
                 transfers.append(transfer)
-                
+
                 logger.info(
-                    f"Found NENO transfer: {amount} NENO to {address} "
-                    f"(tx: {tx_hash[:16]}..., {confirmations} confirmations)"
+                    f"NENO transfer: {amount} to {address[:10]}... "
+                    f"(tx: {tx_hash[:16]}..., {confirmations} conf)"
                 )
-            
+
         except Exception as e:
-            logger.debug(f"Error checking transfers for {address}: {e}")
-        
+            logger.debug(f"get_logs for {address[:10]}...: {e}")
+
         return transfers
     
     async def process_transfer(
