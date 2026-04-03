@@ -8,9 +8,49 @@ import {
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
 
+/**
+ * Parse response safely — clones before reading to prevent "body stream already read".
+ * Tries .json() first on clone, falls back to .text() on second clone.
+ */
 async function safeJson(res) {
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return { detail: text }; }
+  try {
+    const c1 = res.clone();
+    return await c1.json();
+  } catch {
+    try {
+      const c2 = res.clone();
+      const txt = await c2.text();
+      try { return JSON.parse(txt); } catch { return { detail: txt || 'Errore sconosciuto' }; }
+    } catch {
+      return { detail: 'Errore di rete — impossibile leggere la risposta' };
+    }
+  }
+}
+
+/**
+ * Safe GET fetch that always returns parsed data, never throws on body read.
+ */
+async function safeGet(url, options = {}) {
+  try {
+    const res = await fetch(url, options);
+    return await safeJson(res);
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    return { detail: e.message };
+  }
+}
+
+/**
+ * Safe POST fetch that returns { ok, data } — never throws on body read.
+ */
+async function safePost(url, body, token) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = await safeJson(res);
+  return { ok: res.ok, status: res.status, data };
 }
 
 const BUILTIN_ASSETS = ['EUR', 'BNB', 'ETH', 'USDT', 'BTC', 'USDC', 'MATIC', 'USD'];
@@ -54,13 +94,15 @@ export default function NenoExchange() {
 
   const fetchData = useCallback(async () => {
     try {
+      const token = localStorage.getItem('token');
+      const authHdr = { Authorization: `Bearer ${token}` };
       const [mRes, pRes, tRes, bRes, cRes, iRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/neno-exchange/market`),
         fetch(`${BACKEND_URL}/api/neno-exchange/price`),
-        fetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: hdrs() }),
-        fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: hdrs() }),
-        fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: hdrs() }),
-        fetch(`${BACKEND_URL}/api/banking/iban`, { headers: hdrs() }),
+        fetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: authHdr }),
+        fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: authHdr }),
+        fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: authHdr }),
+        fetch(`${BACKEND_URL}/api/banking/iban`, { headers: authHdr }),
       ]);
       const [mData, pData, tData, bData, cData, iData] = await Promise.all([
         safeJson(mRes), safeJson(pRes), safeJson(tRes), safeJson(bRes), safeJson(cRes), safeJson(iRes),
@@ -76,7 +118,7 @@ export default function NenoExchange() {
       if (cData.cards?.length > 0) setSelectedCard(cData.cards[0].id);
       setCustomTokens(mData.custom_tokens || []);
       setAllAssets([...BUILTIN_ASSETS, ...(mData.custom_tokens || []).map(t => t.symbol)]);
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('fetchData error:', e); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -88,9 +130,8 @@ export default function NenoExchange() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const dir = tab === 'offramp' ? 'sell' : tab;
-    fetch(`${BACKEND_URL}/api/neno-exchange/quote?direction=${dir}&asset=${tab === 'offramp' ? 'EUR' : asset}&neno_amount=${nenoAmount}`, { signal: ctrl.signal })
-      .then(r => r.text())
-      .then(t => { try { setQuote(JSON.parse(t)); } catch { setQuote(null); } })
+    safeGet(`${BACKEND_URL}/api/neno-exchange/quote?direction=${dir}&asset=${tab === 'offramp' ? 'EUR' : asset}&neno_amount=${nenoAmount}`, { signal: ctrl.signal })
+      .then(data => { if (!ctrl.signal.aborted) setQuote(data.detail ? null : data); })
       .catch(() => {});
     return () => ctrl.abort();
   }, [tab, asset, nenoAmount]);
@@ -99,9 +140,8 @@ export default function NenoExchange() {
   useEffect(() => {
     if (tab !== 'swap' || !swapAmt || parseFloat(swapAmt) <= 0) { setSwapQuote(null); return; }
     const ctrl = new AbortController();
-    fetch(`${BACKEND_URL}/api/neno-exchange/swap-quote?from_asset=${swapFrom}&to_asset=${swapTo}&amount=${swapAmt}`, { signal: ctrl.signal })
-      .then(r => r.text())
-      .then(t => { try { setSwapQuote(JSON.parse(t)); } catch { setSwapQuote(null); } })
+    safeGet(`${BACKEND_URL}/api/neno-exchange/swap-quote?from_asset=${swapFrom}&to_asset=${swapTo}&amount=${swapAmt}`, { signal: ctrl.signal })
+      .then(data => { if (!ctrl.signal.aborted) setSwapQuote(data.detail ? null : data); })
       .catch(() => {});
     return () => ctrl.abort();
   }, [tab, swapFrom, swapTo, swapAmt]);
@@ -109,10 +149,10 @@ export default function NenoExchange() {
   const exec = async (url, body) => {
     setLoading(true); setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}${url}`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
-      const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || 'Errore');
-      setResult({ ok: true, msg: data.message, balances: data.balances });
+      const token = localStorage.getItem('token');
+      const { ok, data } = await safePost(`${BACKEND_URL}${url}`, body, token);
+      if (!ok) throw new Error(data.detail || JSON.stringify(data) || 'Errore');
+      setResult({ ok: true, msg: data.message || 'Operazione completata', balances: data.balances });
       fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
     finally { setLoading(false); }
