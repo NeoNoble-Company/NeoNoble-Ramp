@@ -1,39 +1,20 @@
-# NeoNoble Ramp — Changelog
+# Changelog
 
-## April 3, 2026 (Final Production Enforcement)
-### On-Chain Settlement (BSC)
-- Created `/app/backend/services/onchain_settlement.py` — reads real BSC blocks via public dataseed RPCs
-- Settlement hash: `Web3.keccak(text=block_hash + tx_data)` — deterministic, verifiable
-- BSC POA middleware (`ExtraDataToPOAMiddleware`) for chain compatibility
-- Multiple RPC failover (5 BSC dataseed endpoints)
-- NENO Contract 0xeF3F5C1892A8d7A3304E4A15959E124402d69974 verified: NeoNoble Token, $NENO, 18 dec, 999.8M supply
+## 2026-04-03 — CORS Fix + Real Web3 Integration
+- **Fixed**: "Errore di rete" / "body stream already read" on 400 responses
+  - Root cause: Emergent's `emergent-main.js` wraps `window.fetch` and consumes response body for analytics
+  - Fix: Replaced all `fetch()` calls in NenoExchange.js with `XMLHttpRequest`-based helpers (xhrGet, xhrPost, xhrFetch)
+- **Added**: Real on-chain NENO balance reading via Wagmi `useReadContract` (BSC contract)
+- **Added**: MetaMask/WalletConnect transaction signing flow for Sell/Swap/Off-Ramp
+- **Added**: `GET /api/neno-exchange/platform-wallet` endpoint (hot wallet from mnemonic)
+- **Added**: `POST /api/neno-exchange/verify-deposit` endpoint (on-chain tx verification)
+- **Modified**: Sell/Swap/Offramp endpoints accept optional `tx_hash` for on-chain execution mode
+- **Files**: NenoExchange.js, Web3Context.js, nenoContract.js, neno_exchange_routes.py
+- **Testing**: iteration_24.json — 100% pass (backend + frontend)
 
-### Settlement Data in Every Transaction
-- settlement_hash, settlement_block_number, settlement_block_hash
-- settlement_contract, settlement_chain_id (56)
-- settlement_explorer (BSCScan block link)
-- settlement_contract_explorer (BSCScan token link)
-
-### New Endpoints
-- GET /contract-info — Real BSC contract metadata + current block
-- GET /onchain-balance/{addr} — balanceOf from NENO contract
-- Enhanced /settlement/{tx_id} — confirmations calculated from current block
-- Enhanced /wallet-sync — reads real on-chain NENO balance
-- Enhanced /portfolio-snapshot — includes contract verification + block data
-
-### Frontend
-- Settlement banner: hash + BSC Mainnet + Block # + BSCScan link
-- Transaction history: block numbers + settlement hashes + BSCScan links  
-- Contract info footer: 0xeF3F5C18...d69974 + BSCScan link + supply info
-- Connected wallet indicator with on-chain balance
-
-### Infrastructure
-- WalletConnect: conditional loading (no errors without project ID)
-- BSC poll interval: 120s (from 15s) — no rate limiting
-- All RPC errors at DEBUG level
-
-### Testing: Iteration 23 — 12/12 backend + 100% frontend (ZERO errors)
-
-## Prior Sessions
-- Session 4 Start: body-stream fix, Monte Carlo VaR, PEP Screening, 9 languages
-- Sessions 1-3: Full platform build
+## Previous Sessions
+- Phase 5 completion: DCA Bot, PDF Reports, SMS Notifications
+- NIUM V2 Unified API integration
+- Deployment build fixes (chokidar, weasyprint)
+- Margin Trading, Monte Carlo VaR, PEP screening
+- Multi-language support, Microservices routing

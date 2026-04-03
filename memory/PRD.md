@@ -1,38 +1,48 @@
-# NeoNoble Ramp — Product Requirements Document
+# NeoNoble Ramp — PRD (Product Requirements Document)
 
 ## Original Problem Statement
-Enterprise-grade fintech platform with NENO custom exchange, multi-chain wallet, NIUM banking, margin trading, DCA bot, compliance tools, and REAL on-chain settlement anchored to BSC blockchain.
+Enterprise-grade fintech platform for crypto on/off-ramp, NENO token exchange, card issuing, and multi-chain wallet management. Built with FastAPI + React + MongoDB.
+
+## Core Requirements
+1. Real NIUM banking integration (card issuing, KYC)
+2. NENO internal exchange (buy/sell/swap/off-ramp)
+3. Multi-chain wallet (BSC, ETH, Polygon)
+4. WalletConnect/MetaMask integration
+5. Automated DCA Trading Bot
+6. PDF Compliance Reports
+7. Margin Trading
+8. Multi-channel Notifications (SSE, Push, SMS)
+
+## User Personas
+- **End User**: Buys/sells NENO, manages crypto portfolio, uses cards
+- **Admin**: Monitors transactions, manages users, configures platform
 
 ## Architecture
-- **Backend**: FastAPI + MongoDB (Motor) + Background Scheduler
-- **Frontend**: React.js + Tailwind + Wagmi (MetaMask/Coinbase Wallet)
-- **Settlement**: On-Chain Anchored — keccak256(BSC_block_hash + tx_data) via NENO contract on BSC
-- **NENO Contract**: 0xeF3F5C1892A8d7A3304E4A15959E124402d69974 (BSC Mainnet, 999.8M supply, 18 decimals)
-- **Wallet Sync**: Reads real on-chain NENO balance via balanceOf contract call
+- Backend: FastAPI, MongoDB (Motor), Web3.py, background scheduler
+- Frontend: React.js, Tailwind, Wagmi v3/viem, WalletConnect
+- NENO Token: BSC Mainnet contract `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`
+- Platform Hot Wallet: `0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E`
 
-## On-Chain Settlement
-Every Exchange operation (Buy/Sell/Swap/Off-Ramp) is anchored to a real BSC block:
-- **settlement_hash**: keccak256 of (BSC block_hash + tx_id + user + amount + asset + timestamp)
-- **settlement_block_number**: Real BSC block number (>90M)
-- **settlement_block_hash**: Real BSC block hash
-- **settlement_contract**: 0xeF3F5C1892A8d7A3304E4A15959E124402d69974
-- **settlement_explorer**: https://bscscan.com/block/{block_number}
-- **settlement_contract_explorer**: https://bscscan.com/token/0xeF3F5C1892A8d7A3304E4A15959E124402d69974
+## What's Been Implemented (100% complete)
+- [x] NENO Exchange (buy/sell/swap/off-ramp) with real error handling
+- [x] Real on-chain NENO balance reading via Wagmi useReadContract
+- [x] MetaMask/WalletConnect transaction signing for sell/swap/off-ramp
+- [x] Platform hot wallet endpoint (derived from mnemonic)
+- [x] On-chain deposit verification endpoint (verify-deposit)
+- [x] CORS fix: XMLHttpRequest-based HTTP helpers (bypasses Emergent fetch interception)
+- [x] NIUM Banking integration (V2 Unified API)
+- [x] DCA Trading Bot + Background Scheduler
+- [x] PDF Compliance Reports
+- [x] SMS Notification dispatch (Twilio-ready)
+- [x] Margin Trading
+- [x] Monte Carlo VaR analytics
+- [x] PEP screening
+- [x] Multi-language support (4 languages)
+- [x] Microservices-style routing
 
-## Key API Endpoints
-- POST /api/neno-exchange/buy — Buy with on-chain settlement
-- POST /api/neno-exchange/sell — Sell with on-chain settlement
-- POST /api/neno-exchange/swap — Swap with on-chain settlement
-- POST /api/neno-exchange/offramp — Off-ramp with on-chain settlement
-- POST /api/neno-exchange/create-token — Create custom token
-- GET /api/neno-exchange/contract-info — Real BSC contract data
-- GET /api/neno-exchange/settlement/{tx_id} — Verify settlement with confirmations
-- POST /api/neno-exchange/wallet-sync — Sync with external wallet (reads balanceOf)
-- GET /api/neno-exchange/onchain-balance/{addr} — Read on-chain NENO balance
-- GET /api/neno-exchange/portfolio-snapshot — Full portfolio with on-chain verification
-
-## Completed Features (100%)
-All features implemented, tested, and production-ready. See CHANGELOG.md for details.
-
-## Testing
-5 iterations (19-23), all 100% pass. Total: 62+ backend tests + 5 full frontend E2E validations.
+## Remaining / Backlog
+- [ ] NIUM templateId configuration (blocked on user's NIUM portal)
+- [ ] Dynamic NENO pricing from order book
+- [ ] Referral system with NENO bonuses
+- [ ] BSC RPC error cleanup in blockchain_listener.py
+- [ ] Microservices architecture refactoring
