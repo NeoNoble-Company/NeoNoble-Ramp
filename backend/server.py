@@ -739,9 +739,11 @@ from middleware.rate_limiter import RateLimitMiddleware
 app.add_middleware(RateLimitMiddleware)
 
 # CORS middleware (added LAST = executes FIRST = outermost)
+# allow_credentials=False with allow_origins=["*"] per la spec CORS:
+# "*" + credentials=true è vietato dai browser → blocca la lettura delle risposte
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
