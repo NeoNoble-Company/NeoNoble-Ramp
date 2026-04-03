@@ -19,22 +19,35 @@ from datetime import datetime, timezone, timedelta
 import uuid
 import hashlib
 import asyncio
+import os
+import logging
 
 from database.mongodb import get_database
 from routes.auth import get_current_user
 from services.onchain_settlement import OnChainSettlement
 
-
-def _generate_settlement_hash(tx_id: str, uid: str, amount: float) -> str:
-    """Legacy — now delegated to OnChainSettlement."""
-    raw = f"{tx_id}:{uid}:{amount}:{datetime.now(timezone.utc).isoformat()}"
-    return "0x" + hashlib.sha256(raw.encode()).hexdigest()
+logger = logging.getLogger(__name__)
 
 
 def _settlement_record(tx_id: str, tx_type: str, uid: str, amount: float, asset: str, details: dict) -> dict:
     """Create an on-chain anchored settlement record."""
     engine = OnChainSettlement.get_instance()
     return engine.generate_settlement(tx_id, tx_type, uid, amount, asset, details)
+
+
+def _get_platform_hot_wallet() -> str:
+    """Derive platform hot wallet address from mnemonic in .env."""
+    mnemonic = os.environ.get("NENO_WALLET_MNEMONIC", "")
+    if not mnemonic:
+        raise HTTPException(status_code=500, detail="Platform wallet non configurato")
+    try:
+        from eth_account import Account
+        Account.enable_unaudited_hdwallet_features()
+        acct = Account.from_mnemonic(mnemonic)
+        return acct.address
+    except Exception as e:
+        logger.error(f"Failed to derive hot wallet: {e}")
+        raise HTTPException(status_code=500, detail="Errore derivazione wallet")
 
 router = APIRouter(prefix="/neno-exchange", tags=["NENO Exchange"])
 
@@ -138,6 +151,7 @@ class BuyNenoRequest(BaseModel):
 class SellNenoRequest(BaseModel):
     receive_asset: str = Field(description="Asset to receive (BNB, ETH, EUR ...)")
     neno_amount: float = Field(gt=0, description="How many NENO to sell")
+    tx_hash: Optional[str] = Field(None, description="On-chain tx hash from MetaMask transfer to hot wallet")
 
 
 class OfframpRequest(BaseModel):
@@ -146,6 +160,7 @@ class OfframpRequest(BaseModel):
     card_id: Optional[str] = None
     destination_iban: Optional[str] = None
     beneficiary_name: Optional[str] = None
+    tx_hash: Optional[str] = Field(None, description="On-chain tx hash from MetaMask transfer to hot wallet")
 
 
 class CreateTokenRequest(BaseModel):
@@ -160,6 +175,7 @@ class SwapRequest(BaseModel):
     from_asset: str = Field(description="Asset to sell")
     to_asset: str = Field(description="Asset to receive")
     amount: float = Field(gt=0, description="Amount of from_asset to swap")
+    tx_hash: Optional[str] = Field(None, description="On-chain tx hash (for NENO-based swaps via MetaMask)")
 
 
 # ── helpers ──
@@ -323,12 +339,18 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    neno_balance = await _get_balance(db, uid, "NENO")
-    if neno_balance < req.neno_amount:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
-        )
+    # If tx_hash provided, this is a real on-chain sell (MetaMask signed)
+    onchain_tx = req.tx_hash or None
+
+    if not onchain_tx:
+        # Fallback: internal ledger sell (check internal balance)
+        neno_balance = await _get_balance(db, uid, "NENO")
+        if neno_balance < req.neno_amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
+            )
+        await _debit(db, uid, "NENO", req.neno_amount)
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
@@ -337,7 +359,6 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     fee = round(gross * PLATFORM_FEE, 8)
     net = round(gross - fee, 8)
 
-    await _debit(db, uid, "NENO", req.neno_amount)
     await _credit(db, uid, asset, net)
 
     tx_id = str(uuid.uuid4())
@@ -345,13 +366,17 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         "debit": {"asset": "NENO", "amount": req.neno_amount},
         "credit": {"asset": asset, "amount": net},
         "fee": {"asset": asset, "amount": fee},
+        "onchain_tx_hash": onchain_tx,
     })
 
     tx = {
         "id": tx_id, "user_id": uid, "type": "sell_neno",
         "neno_amount": req.neno_amount, "receive_asset": asset,
         "receive_amount": net, "rate": rate, "neno_eur_price": neno_eur_price,
-        "fee": fee, "fee_asset": asset, "status": "completed",
+        "fee": fee, "fee_asset": asset,
+        "status": "completed",
+        "execution_mode": "onchain" if onchain_tx else "internal",
+        "onchain_tx_hash": onchain_tx,
         "eur_value": round(req.neno_amount * neno_eur_price, 2),
         **settlement,
         "created_at": datetime.now(timezone.utc),
@@ -369,9 +394,10 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     new_neno = await _get_balance(db, uid, "NENO")
     new_asset = await _get_balance(db, uid, asset)
     return {
-        "message": f"Venduti {req.neno_amount} NENO per {net} {asset}",
+        "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "balances": {"NENO": round(new_neno, 8), asset: round(new_asset, 8)},
+        "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
     }
 
 
@@ -384,6 +410,7 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     uid = current_user["user_id"]
     from_asset = req.from_asset.upper()
     to_asset = req.to_asset.upper()
+    onchain_tx = req.tx_hash or None
 
     if from_asset == to_asset:
         raise HTTPException(status_code=400, detail="Non puoi swappare lo stesso asset")
@@ -395,12 +422,14 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     if to_price is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {to_asset}")
 
-    balance = await _get_balance(db, uid, from_asset)
-    if balance < req.amount:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
-        )
+    if not onchain_tx:
+        balance = await _get_balance(db, uid, from_asset)
+        if balance < req.amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
+            )
+        await _debit(db, uid, from_asset, req.amount)
 
     eur_value = req.amount * from_price
     fee_eur = round(eur_value * PLATFORM_FEE, 8)
@@ -408,7 +437,6 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     receive_amount = round(net_eur / to_price, 8)
     fee_in_to = round(fee_eur / to_price, 8)
 
-    await _debit(db, uid, from_asset, req.amount)
     await _credit(db, uid, to_asset, receive_amount)
 
     tx_id = str(uuid.uuid4())
@@ -416,6 +444,7 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         "debit": {"asset": from_asset, "amount": req.amount},
         "credit": {"asset": to_asset, "amount": receive_amount},
         "fee_eur": round(fee_eur, 4),
+        "onchain_tx_hash": onchain_tx,
     })
 
     tx = {
@@ -426,6 +455,8 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         "fee_in_to_asset": fee_in_to,
         "rate": round(from_price / to_price, 8),
         "status": "completed",
+        "execution_mode": "onchain" if onchain_tx else "internal",
+        "onchain_tx_hash": onchain_tx,
         **settlement,
         "created_at": datetime.now(timezone.utc),
     }
@@ -433,12 +464,13 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     tx["created_at"] = tx["created_at"].isoformat()
 
     return {
-        "message": f"Swappati {req.amount} {from_asset} per {receive_amount} {to_asset}",
+        "message": f"Swappati {req.amount} {from_asset} per {receive_amount} {to_asset}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "balances": {
             from_asset: round(await _get_balance(db, uid, from_asset), 8),
             to_asset: round(await _get_balance(db, uid, to_asset), 8),
         },
+        "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
     }
 
 
@@ -539,18 +571,19 @@ async def update_token_price(symbol: str, price_eur: float, current_user: dict =
 async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_current_user)):
     db = get_database()
     uid = current_user["user_id"]
+    onchain_tx = req.tx_hash or None
 
-    neno_balance = await _get_balance(db, uid, "NENO")
-    if neno_balance < req.neno_amount:
-        raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
+    if not onchain_tx:
+        neno_balance = await _get_balance(db, uid, "NENO")
+        if neno_balance < req.neno_amount:
+            raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
+        await _debit(db, uid, "NENO", req.neno_amount)
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
     eur_gross = round(req.neno_amount * neno_eur_price, 2)
     fee = round(eur_gross * PLATFORM_FEE, 2)
     eur_net = round(eur_gross - fee, 2)
-
-    await _debit(db, uid, "NENO", req.neno_amount)
 
     if req.destination == "card":
         if not req.card_id:
@@ -585,6 +618,7 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "debit": {"asset": "NENO", "amount": req.neno_amount},
         "credit": {"asset": "EUR", "amount": eur_net, "destination": req.destination},
         "fee": {"asset": "EUR", "amount": fee},
+        "onchain_tx_hash": onchain_tx,
     })
 
     tx = {
@@ -593,6 +627,8 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "eur_net": eur_net, "destination": req.destination,
         "destination_info": dest_info,
         "status": "completed" if req.destination == "card" else "processing",
+        "execution_mode": "onchain" if onchain_tx else "internal",
+        "onchain_tx_hash": onchain_tx,
         **settlement,
         "created_at": datetime.now(timezone.utc),
     }
@@ -600,9 +636,10 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     tx["created_at"] = tx["created_at"].isoformat()
 
     return {
-        "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}",
+        "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "neno_balance": round(await _get_balance(db, uid, "NENO"), 8),
+        "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
     }
 
 
@@ -648,6 +685,138 @@ async def neno_market_info():
         "custom_tokens": custom_tokens,
     }
 
+
+
+# ── Platform Hot Wallet (derived from mnemonic) ──
+
+@router.get("/platform-wallet")
+async def get_platform_wallet():
+    """Get the platform hot wallet address where users send NENO for sell/off-ramp."""
+    hot_wallet = _get_platform_hot_wallet()
+    return {
+        "address": hot_wallet,
+        "chain": "BSC Mainnet",
+        "chain_id": 56,
+        "contract": "0xeF3F5C1892A8d7A3304E4A15959E124402d69974",
+        "usage": "Inviare NENO a questo indirizzo per operazioni Sell / Off-Ramp / Swap",
+    }
+
+
+class VerifyDepositRequest(BaseModel):
+    tx_hash: str = Field(min_length=60, max_length=70, description="On-chain transaction hash (0x...)")
+    expected_amount: float = Field(gt=0, description="Expected NENO amount transferred")
+    operation: str = Field(description="sell, swap, or offramp")
+
+
+@router.post("/verify-deposit")
+async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Verify an on-chain NENO transfer to the platform hot wallet.
+    After verification, the backend credits the user's internal balance.
+    """
+    db = get_database()
+    uid = current_user["user_id"]
+    engine = OnChainSettlement.get_instance()
+    hot_wallet = _get_platform_hot_wallet()
+
+    # Check if tx_hash already processed
+    existing = await db.onchain_deposits.find_one({"tx_hash": req.tx_hash})
+    if existing:
+        raise HTTPException(status_code=400, detail="Transazione gia' processata")
+
+    # Verify on-chain
+    w3 = engine._get_web3()
+    if not w3:
+        raise HTTPException(status_code=503, detail="BSC RPC non disponibile. Riprova tra poco.")
+
+    try:
+        from web3 import Web3
+        tx_receipt = w3.eth.get_transaction_receipt(req.tx_hash)
+        if tx_receipt is None:
+            raise HTTPException(status_code=404, detail="Transazione non trovata on-chain. Attendi la conferma.")
+
+        if tx_receipt.status != 1:
+            raise HTTPException(status_code=400, detail="Transazione fallita on-chain (reverted)")
+
+        # Parse ERC-20 Transfer event logs
+        # Transfer(address from, address to, uint256 value)
+        transfer_topic = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+        neno_contract_lower = "0xeF3F5C1892A8d7A3304E4A15959E124402d69974".lower()
+        hot_wallet_padded = "0x" + hot_wallet.lower().replace("0x", "").zfill(64)
+
+        verified_amount = 0
+        sender_address = None
+        for log_entry in tx_receipt.logs:
+            log_address = log_entry.address.lower() if hasattr(log_entry.address, 'lower') else str(log_entry.address).lower()
+            if log_address != neno_contract_lower:
+                continue
+            topics = log_entry.topics
+            if len(topics) < 3:
+                continue
+            topic0 = topics[0].hex() if hasattr(topics[0], 'hex') else str(topics[0])
+            if topic0 != transfer_topic:
+                continue
+            # topics[1] = from, topics[2] = to
+            to_addr = "0x" + (topics[2].hex() if hasattr(topics[2], 'hex') else str(topics[2]))[-40:]
+            from_addr = "0x" + (topics[1].hex() if hasattr(topics[1], 'hex') else str(topics[1]))[-40:]
+            if to_addr.lower() == hot_wallet.lower().replace("0x", ""):
+                to_addr = hot_wallet.lower()
+            # Check if recipient is our hot wallet
+            if to_addr.lower() != hot_wallet.lower() and ("0x" + to_addr.lower()) != hot_wallet.lower():
+                # Normalize comparison
+                if to_addr.lower().replace("0x","") != hot_wallet.lower().replace("0x",""):
+                    continue
+            data_hex = log_entry.data.hex() if hasattr(log_entry.data, 'hex') else str(log_entry.data)
+            raw_amount = int(data_hex, 16)
+            from decimal import Decimal
+            verified_amount = float(Decimal(raw_amount) / Decimal(10 ** 18))
+            sender_address = Web3.to_checksum_address("0x" + from_addr.replace("0x","").zfill(40)[-40:])
+            break
+
+        if verified_amount <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nessun trasferimento NENO trovato verso il hot wallet ({hot_wallet}) in questa transazione"
+            )
+
+        # Allow 1% tolerance for amount matching
+        tolerance = req.expected_amount * 0.01
+        if abs(verified_amount - req.expected_amount) > tolerance:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Importo non corrispondente: atteso {req.expected_amount} NENO, trovato {verified_amount} NENO on-chain"
+            )
+
+        # Store the verified deposit
+        deposit_record = {
+            "id": str(uuid.uuid4()),
+            "tx_hash": req.tx_hash,
+            "user_id": uid,
+            "sender_address": sender_address,
+            "hot_wallet": hot_wallet,
+            "neno_amount": verified_amount,
+            "operation": req.operation,
+            "block_number": tx_receipt.blockNumber,
+            "status": "verified",
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.onchain_deposits.insert_one({**deposit_record, "_id": deposit_record["id"]})
+
+        return {
+            "verified": True,
+            "tx_hash": req.tx_hash,
+            "neno_amount": verified_amount,
+            "sender": sender_address,
+            "block_number": tx_receipt.blockNumber,
+            "explorer": f"https://bscscan.com/tx/{req.tx_hash}",
+            "message": f"Deposito verificato: {verified_amount} NENO da {sender_address}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Verify deposit error: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore verifica on-chain: {str(e)}")
 
 
 # ── NENO Contract On-Chain Info ──

@@ -1,79 +1,78 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building, ArrowRight,
-  Clock, ChevronDown, TrendingUp, TrendingDown, Plus, Repeat,
-  Wallet, CheckCircle, Link2, ExternalLink, Copy, Check
+  ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building,
+  Clock, TrendingUp, TrendingDown, Plus, Repeat,
+  Wallet, CheckCircle, ExternalLink, Copy, Check, AlertTriangle, Shield
 } from 'lucide-react';
 import { useWeb3 } from '../context/Web3Context';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
 
-/**
- * Parse response safely — clones before reading to prevent "body stream already read".
- * Uses multiple fallback strategies for maximum compatibility.
- */
-async function safeJson(res) {
-  // Strategy 1: clone + json
-  try {
-    return await res.clone().json();
-  } catch (e1) {
-    // Strategy 2: clone + text → parse
-    try {
-      const txt = await res.clone().text();
-      if (txt) {
-        try { return JSON.parse(txt); } catch { return { detail: txt }; }
-      }
-    } catch (e2) {
-      // Strategy 3: direct text (last resort)
-      try {
-        const txt = await res.text();
-        if (txt) return { detail: txt };
-      } catch (e3) {
-        // All strategies failed
-      }
+/* ── HTTP helpers using XMLHttpRequest (bypasses fetch body interception) ── */
+
+function xhrGet(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    if (options.headers) {
+      Object.entries(options.headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     }
-    return { detail: `Errore ${res.status || 'di rete'}: risposta non leggibile` };
-  }
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => { xhr.abort(); reject(new DOMException('Aborted', 'AbortError')); });
+    }
+    xhr.onload = () => {
+      try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({ detail: `Errore ${xhr.status}` }); }
+    };
+    xhr.onerror = () => resolve({ detail: 'Connessione di rete fallita' });
+    xhr.send();
+  });
 }
 
-/**
- * Safe GET fetch — never throws on body read.
- */
-async function safeGet(url, options = {}) {
-  try {
-    const res = await fetch(url, options);
-    return await safeJson(res);
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    return { detail: e.message };
-  }
+function xhrPost(url, body, token) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      let data;
+      try { data = JSON.parse(xhr.responseText); } catch { data = { detail: `Errore ${xhr.status}` }; }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+    };
+    xhr.onerror = () => resolve({ ok: false, status: 0, data: { detail: 'Connessione di rete fallita' } });
+    xhr.send(JSON.stringify(body));
+  });
 }
 
-/**
- * Safe POST fetch — returns { ok, data }.
- */
-async function safePost(url, body, token) {
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    return { ok: false, status: 0, data: { detail: `Connessione fallita: ${e.message}` } };
-  }
-  const data = await safeJson(res);
-  return { ok: res.ok, status: res.status, data };
+function xhrFetch(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    if (options.headers) {
+      Object.entries(options.headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    }
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => { xhr.abort(); reject(new DOMException('Aborted', 'AbortError')); });
+    }
+    xhr.onload = () => {
+      try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+    };
+    xhr.onerror = () => resolve({});
+    xhr.send(options.body || null);
+  });
 }
 
 const BUILTIN_ASSETS = ['EUR', 'BNB', 'ETH', 'USDT', 'BTC', 'USDC', 'MATIC', 'USD'];
 
 export default function NenoExchange() {
   const navigate = useNavigate();
-  const { address, isConnected, balance: onChainBalance, currentChain, formatAddress } = useWeb3();
+  const {
+    address, isConnected, balance: onChainBalance, currentChain, formatAddress,
+    nenoOnChainBalance, refetchNenoBalance,
+    transferNeno, isTxPending, isWaitingReceipt, txHash, resetTx,
+  } = useWeb3();
+
   const [tab, setTab] = useState('buy');
   const [asset, setAsset] = useState('EUR');
   const [nenoAmount, setNenoAmount] = useState('1');
@@ -89,6 +88,8 @@ export default function NenoExchange() {
   const [customTokens, setCustomTokens] = useState([]);
   const [allAssets, setAllAssets] = useState(BUILTIN_ASSETS);
   const [copiedHash, setCopiedHash] = useState(null);
+  const [platformWallet, setPlatformWallet] = useState(null);
+  const [txStep, setTxStep] = useState(null); // 'signing' | 'confirming' | 'verifying' | null
 
   // Off-ramp
   const [offrampDest, setOfframpDest] = useState('card');
@@ -114,16 +115,14 @@ export default function NenoExchange() {
     try {
       const token = localStorage.getItem('token');
       const authHdr = { Authorization: `Bearer ${token}` };
-      const [mRes, pRes, tRes, bRes, cRes, iRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/neno-exchange/market`),
-        fetch(`${BACKEND_URL}/api/neno-exchange/price`),
-        fetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: authHdr }),
-        fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: authHdr }),
-        fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: authHdr }),
-        fetch(`${BACKEND_URL}/api/banking/iban`, { headers: authHdr }),
-      ]);
-      const [mData, pData, tData, bData, cData, iData] = await Promise.all([
-        safeJson(mRes), safeJson(pRes), safeJson(tRes), safeJson(bRes), safeJson(cRes), safeJson(iRes),
+      const [mData, pData, tData, bData, cData, iData, pwData] = await Promise.all([
+        xhrFetch(`${BACKEND_URL}/api/neno-exchange/market`),
+        xhrFetch(`${BACKEND_URL}/api/neno-exchange/price`),
+        xhrFetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: authHdr }),
+        xhrFetch(`${BACKEND_URL}/api/wallet/balances`, { headers: authHdr }),
+        xhrFetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: authHdr }),
+        xhrFetch(`${BACKEND_URL}/api/banking/iban`, { headers: authHdr }),
+        xhrFetch(`${BACKEND_URL}/api/neno-exchange/platform-wallet`),
       ]);
       setMarketInfo(mData);
       setPriceData(pData);
@@ -136,19 +135,20 @@ export default function NenoExchange() {
       if (cData.cards?.length > 0) setSelectedCard(cData.cards[0].id);
       setCustomTokens(mData.custom_tokens || []);
       setAllAssets([...BUILTIN_ASSETS, ...(mData.custom_tokens || []).map(t => t.symbol)]);
+      if (pwData.address) setPlatformWallet(pwData.address);
     } catch (e) { console.error('fetchData error:', e); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Live NENO quote with AbortController
+  // Live NENO quote
   useEffect(() => {
     if (!nenoAmount || parseFloat(nenoAmount) <= 0 || tab === 'swap' || tab === 'create') { setQuote(null); return; }
     if (abortRef.current) abortRef.current.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const dir = tab === 'offramp' ? 'sell' : tab;
-    safeGet(`${BACKEND_URL}/api/neno-exchange/quote?direction=${dir}&asset=${tab === 'offramp' ? 'EUR' : asset}&neno_amount=${nenoAmount}`, { signal: ctrl.signal })
+    xhrGet(`${BACKEND_URL}/api/neno-exchange/quote?direction=${dir}&asset=${tab === 'offramp' ? 'EUR' : asset}&neno_amount=${nenoAmount}`, { signal: ctrl.signal })
       .then(data => { if (!ctrl.signal.aborted) setQuote(data.detail ? null : data); })
       .catch(() => {});
     return () => ctrl.abort();
@@ -158,56 +158,123 @@ export default function NenoExchange() {
   useEffect(() => {
     if (tab !== 'swap' || !swapAmt || parseFloat(swapAmt) <= 0) { setSwapQuote(null); return; }
     const ctrl = new AbortController();
-    safeGet(`${BACKEND_URL}/api/neno-exchange/swap-quote?from_asset=${swapFrom}&to_asset=${swapTo}&amount=${swapAmt}`, { signal: ctrl.signal })
+    xhrGet(`${BACKEND_URL}/api/neno-exchange/swap-quote?from_asset=${swapFrom}&to_asset=${swapTo}&amount=${swapAmt}`, { signal: ctrl.signal })
       .then(data => { if (!ctrl.signal.aborted) setSwapQuote(data.detail ? null : data); })
       .catch(() => {});
     return () => ctrl.abort();
   }, [tab, swapFrom, swapTo, swapAmt]);
 
-  const exec = async (url, body) => {
-    setLoading(true); setResult(null);
+  /* ── On-chain transaction flow (MetaMask signing) ─────────────── */
+  const executeOnChain = async (nenoAmt, backendUrl, backendBody) => {
+    if (!isConnected || !address || !platformWallet) {
+      throw new Error('Connetti il tuo wallet MetaMask per eseguire operazioni on-chain');
+    }
+    const amt = parseFloat(nenoAmt);
+    if (nenoOnChainBalance < amt) {
+      throw new Error(`Saldo NENO on-chain insufficiente: ${nenoOnChainBalance.toFixed(4)} disponibile, ${amt} necessario`);
+    }
+
+    // Step 1: Sign & send ERC-20 transfer via MetaMask
+    setTxStep('signing');
+    let hash;
     try {
-      const token = localStorage.getItem('token');
-      const { ok, data } = await safePost(`${BACKEND_URL}${url}`, body, token);
-      if (!ok) throw new Error(data.detail || JSON.stringify(data) || 'Errore');
+      hash = await transferNeno(platformWallet, amt);
+    } catch (e) {
+      const msg = e?.shortMessage || e?.message || 'Firma rifiutata';
+      throw new Error(`MetaMask: ${msg}`);
+    }
+
+    // Step 2: Wait for block confirmation
+    setTxStep('confirming');
+    const maxWait = 120000;
+    const start = Date.now();
+    let confirmed = false;
+    while (Date.now() - start < maxWait) {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const checkResult = await xhrPost(`${BACKEND_URL}/api/neno-exchange/verify-deposit`,
+          { tx_hash: hash, expected_amount: amt, operation: tab },
+          localStorage.getItem('token')
+        );
+        if (checkResult.ok && checkResult.data.verified) {
+          confirmed = true;
+          break;
+        }
+        if (checkResult.data.detail && checkResult.data.detail.includes('non trovata on-chain')) continue;
+        if (!checkResult.ok && !checkResult.data.detail?.includes('non trovata')) {
+          throw new Error(checkResult.data.detail || 'Verifica fallita');
+        }
+      } catch (e) {
+        if (e.message.includes('Verifica fallita')) throw e;
+      }
+    }
+    if (!confirmed) {
+      throw new Error('Timeout: la transazione non e\' stata confermata entro 120 secondi. Controlla su BscScan: ' + hash);
+    }
+
+    // Step 3: Execute backend operation with tx_hash
+    setTxStep('verifying');
+    const { ok, data } = await xhrPost(`${BACKEND_URL}${backendUrl}`, { ...backendBody, tx_hash: hash }, localStorage.getItem('token'));
+    if (!ok) throw new Error(data.detail || 'Errore backend');
+
+    // Refresh balances
+    if (refetchNenoBalance) refetchNenoBalance();
+    return { data, hash };
+  };
+
+  /* ── Standard execution (internal or on-chain) ────────────────── */
+  const exec = async (url, body, requiresNeno = false) => {
+    setLoading(true); setResult(null); setTxStep(null);
+    try {
+      let data, onchainHash;
+
+      if (requiresNeno && isConnected && platformWallet && nenoOnChainBalance > 0) {
+        // Real on-chain execution via MetaMask
+        const nenoAmt = body.neno_amount || body.amount || 0;
+        const res = await executeOnChain(nenoAmt, url, body);
+        data = res.data;
+        onchainHash = res.hash;
+      } else {
+        // Internal ledger execution
+        const token = localStorage.getItem('token');
+        const { ok, data: d } = await xhrPost(`${BACKEND_URL}${url}`, body, token);
+        if (!ok) throw new Error(d.detail || JSON.stringify(d));
+        data = d;
+      }
 
       const tx = data.transaction || {};
-      const settlementHash = tx.settlement_hash || null;
-      const blockNum = tx.settlement_block_number || null;
-      const blockExplorer = tx.settlement_explorer || null;
-      const contractExplorer = tx.settlement_contract_explorer || null;
-
       setResult({
         ok: true,
         msg: data.message || 'Operazione completata',
         balances: data.balances,
-        settlementHash,
-        blockNumber: blockNum,
-        blockExplorer,
-        contractExplorer,
+        settlementHash: onchainHash || tx.settlement_hash,
+        blockNumber: tx.settlement_block_number,
+        blockExplorer: onchainHash ? `https://bscscan.com/tx/${onchainHash}` : tx.settlement_explorer,
+        contractExplorer: tx.settlement_contract_explorer,
         network: tx.settlement_network || 'BSC Mainnet',
+        isOnChain: !!onchainHash,
+        onchainExplorer: data.onchain_explorer,
       });
-
-      // Sync wallet if connected
-      if (isConnected && address) {
-        safePost(`${BACKEND_URL}/api/neno-exchange/wallet-sync`, {
-          external_address: address,
-          chain_id: currentChain?.id || 56,
-        }, token).catch(() => {});
-      }
       fetchData();
-    } catch (e) { setResult({ ok: false, msg: e.message }); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setResult({ ok: false, msg: e.message });
+    } finally {
+      setLoading(false); setTxStep(null);
+      if (resetTx) resetTx();
+    }
   };
 
   const handleBuy = () => exec('/api/neno-exchange/buy', { pay_asset: asset, neno_amount: parseFloat(nenoAmount) });
-  const handleSell = () => exec('/api/neno-exchange/sell', { receive_asset: asset, neno_amount: parseFloat(nenoAmount) });
-  const handleSwap = () => exec('/api/neno-exchange/swap', { from_asset: swapFrom, to_asset: swapTo, amount: parseFloat(swapAmt) });
+  const handleSell = () => exec('/api/neno-exchange/sell', { receive_asset: asset, neno_amount: parseFloat(nenoAmount) }, true);
+  const handleSwap = () => {
+    const isFromNeno = swapFrom.toUpperCase() === 'NENO';
+    exec('/api/neno-exchange/swap', { from_asset: swapFrom, to_asset: swapTo, amount: parseFloat(swapAmt) }, isFromNeno);
+  };
   const handleOfframp = () => {
     const body = { neno_amount: parseFloat(nenoAmount), destination: offrampDest };
     if (offrampDest === 'card') body.card_id = selectedCard;
     if (offrampDest === 'bank') { body.destination_iban = offrampIban; body.beneficiary_name = offrampName; }
-    exec('/api/neno-exchange/offramp', body);
+    exec('/api/neno-exchange/offramp', body, true);
   };
   const handleCreateToken = () => exec('/api/neno-exchange/create-token', {
     symbol: newSym, name: newName, price_eur: parseFloat(newPrice), total_supply: parseFloat(newSupply) || 1000000,
@@ -220,6 +287,16 @@ export default function NenoExchange() {
     { id: 'offramp', label: 'Off-Ramp', icon: Building },
     { id: 'create', label: 'Crea Token', icon: Plus },
   ];
+
+  // Determine if current operation will use on-chain
+  const willUseOnChain = (requiresNeno) => requiresNeno && isConnected && platformWallet && nenoOnChainBalance > 0;
+  const showOnChainBadge = willUseOnChain(tab === 'sell' || tab === 'offramp' || (tab === 'swap' && swapFrom.toUpperCase() === 'NENO'));
+
+  // Transaction step labels
+  const stepLabel = txStep === 'signing' ? 'Firma con MetaMask...'
+    : txStep === 'confirming' ? 'Attesa conferma BSC...'
+    : txStep === 'verifying' ? 'Verifica on-chain...'
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-950" data-testid="neno-exchange-page">
@@ -245,9 +322,24 @@ export default function NenoExchange() {
                 {onChainBalance && <span className="text-zinc-500 text-[10px]">({parseFloat(onChainBalance.formatted).toFixed(4)} {onChainBalance.symbol})</span>}
               </div>
             )}
-            <div className="text-right">
-              <div className="text-zinc-500 text-[10px]">NENO Balance</div>
-              <div className="text-white font-mono font-bold" data-testid="neno-balance">{(balances.NENO || 0).toFixed(4)}</div>
+            <div className="text-right" data-testid="neno-balance-section">
+              {isConnected && nenoOnChainBalance > 0 ? (
+                <>
+                  <div className="text-zinc-500 text-[10px]">NENO On-Chain (BSC)</div>
+                  <div className="text-emerald-400 font-mono font-bold" data-testid="neno-onchain-balance">{nenoOnChainBalance.toFixed(4)}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-zinc-500 text-[10px]">NENO Balance</div>
+                  <div className="text-white font-mono font-bold" data-testid="neno-balance">{(balances.NENO || 0).toFixed(4)}</div>
+                </>
+              )}
+              {isConnected && (
+                <div className="text-zinc-600 text-[9px]">
+                  Interno: {(balances.NENO || 0).toFixed(4)}
+                  {nenoOnChainBalance > 0 && ` | On-chain: ${nenoOnChainBalance.toFixed(4)}`}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -264,14 +356,36 @@ export default function NenoExchange() {
           ))}
         </div>
 
+        {/* On-chain execution indicator */}
+        {showOnChainBadge && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg" data-testid="onchain-mode-badge">
+            <Shield className="w-4 h-4 text-emerald-400" />
+            <span className="text-emerald-400 text-xs font-medium">Esecuzione On-Chain</span>
+            <span className="text-emerald-500/60 text-[10px]">MetaMask firmera' il trasferimento NENO verso il hot wallet della piattaforma</span>
+          </div>
+        )}
+
+        {/* Transaction step progress */}
+        {stepLabel && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg animate-pulse" data-testid="tx-step-indicator">
+            <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+            <span className="text-amber-400 text-xs font-medium">{stepLabel}</span>
+            {txHash && <span className="text-amber-500/60 text-[10px] font-mono">{txHash.slice(0, 14)}...</span>}
+          </div>
+        )}
+
         {/* Result banner */}
         {result && (
           <div className={`rounded-lg px-4 py-3 text-sm ${result.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`} data-testid="result-banner">
             <div className="font-medium">{result.msg}</div>
-            {result.settlementHash && (
+            {result.isOnChain && result.settlementHash && (
               <div className="mt-2 space-y-1 text-[11px]">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-emerald-600">Settlement:</span>
+                  <Shield className="w-3 h-3 text-emerald-500" />
+                  <span className="text-emerald-500 font-bold">Transazione reale on-chain</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">TX Hash:</span>
                   <span className="font-mono text-emerald-500/80">{result.settlementHash.slice(0, 14)}...{result.settlementHash.slice(-8)}</span>
                   <button onClick={() => { navigator.clipboard.writeText(result.settlementHash); setCopiedHash(result.settlementHash); setTimeout(() => setCopiedHash(null), 2000); }}
                     className="p-0.5 hover:bg-emerald-500/20 rounded" data-testid="copy-settlement-hash">
@@ -279,11 +393,23 @@ export default function NenoExchange() {
                   </button>
                 </div>
                 <div className="flex items-center gap-3 text-emerald-600/60">
-                  {result.network && <span>BSC Mainnet</span>}
-                  {result.blockNumber > 0 && <span>Block #{result.blockNumber.toLocaleString()}</span>}
-                  <span className="font-mono text-[9px]">0xeF3F...9974</span>
+                  <span>BSC Mainnet</span>
+                  <a href={result.onchainExplorer || result.blockExplorer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400" data-testid="bscscan-link">
+                    <ExternalLink className="w-2.5 h-2.5" /> Verifica su BscScan
+                  </a>
+                </div>
+              </div>
+            )}
+            {!result.isOnChain && result.ok && result.settlementHash && (
+              <div className="mt-2 space-y-1 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">Settlement:</span>
+                  <span className="font-mono text-emerald-500/80">{result.settlementHash.slice(0, 14)}...{result.settlementHash.slice(-8)}</span>
+                </div>
+                <div className="flex items-center gap-3 text-emerald-600/60">
+                  {result.blockNumber > 0 && <span>Block #{result.blockNumber?.toLocaleString()}</span>}
                   {result.blockExplorer && (
-                    <a href={result.blockExplorer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400" data-testid="bscscan-link">
+                    <a href={result.blockExplorer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400">
                       <ExternalLink className="w-2.5 h-2.5" /> BSCScan
                     </a>
                   )}
@@ -318,6 +444,13 @@ export default function NenoExchange() {
                 <div className="flex justify-between font-bold"><span className="text-zinc-300">{tab === 'buy' ? 'Costo Totale' : 'Ricevi Netto'}</span>
                   <span className="text-emerald-400">{(tab === 'buy' ? quote.total_cost : quote.net_receive)?.toFixed(8)} {asset}</span>
                 </div>
+              </div>
+            )}
+            {/* Sell: warn if no on-chain balance but wallet connected */}
+            {tab === 'sell' && isConnected && nenoOnChainBalance === 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs" data-testid="no-onchain-balance-warning">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-amber-400">Nessun NENO on-chain nel wallet connesso. Verra' usato il saldo interno.</span>
               </div>
             )}
             <button onClick={tab === 'buy' ? handleBuy : handleSell} disabled={loading || !nenoAmount || parseFloat(nenoAmount) <= 0} data-testid={`${tab}-btn`}
@@ -478,19 +611,22 @@ export default function NenoExchange() {
                     </span>
                     <span className="text-zinc-300">{t.neno_amount ? `${t.neno_amount} NENO` : t.from_amount ? `${t.from_amount} ${t.from_asset}` : ''}</span>
                     {t.eur_value && <span className="text-zinc-600 text-[10px]">(EUR {t.eur_value})</span>}
+                    {t.execution_mode === 'onchain' && <Shield className="w-3 h-3 text-emerald-500" />}
                   </div>
                   <div className="flex items-center gap-2">
                     {t.settlement_status === 'settled' && <CheckCircle className="w-3 h-3 text-emerald-500" />}
                     <span className="text-zinc-500">{t.created_at?.slice(0, 16).replace('T', ' ')}</span>
                   </div>
                 </div>
-                {t.settlement_hash && (
+                {(t.onchain_tx_hash || t.settlement_hash) && (
                   <div className="flex items-center gap-2">
-                    <span className="text-zinc-700 text-[9px] font-mono">{t.settlement_hash.slice(0, 14)}...{t.settlement_hash.slice(-6)}</span>
-                    {t.settlement_block_number > 0 && (
-                      <span className="text-zinc-700 text-[9px]">Block #{t.settlement_block_number?.toLocaleString()}</span>
+                    <span className="text-zinc-700 text-[9px] font-mono">{(t.onchain_tx_hash || t.settlement_hash).slice(0, 14)}...{(t.onchain_tx_hash || t.settlement_hash).slice(-6)}</span>
+                    {t.onchain_tx_hash && (
+                      <a href={`https://bscscan.com/tx/${t.onchain_tx_hash}`} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:text-emerald-400">
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
                     )}
-                    {t.settlement_explorer && (
+                    {!t.onchain_tx_hash && t.settlement_explorer && (
                       <a href={t.settlement_explorer} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-400">
                         <ExternalLink className="w-2.5 h-2.5" />
                       </a>
@@ -502,7 +638,7 @@ export default function NenoExchange() {
           </div>
         </div>
 
-        {/* On-Chain Contract Info Footer */}
+        {/* Platform Wallet + Contract Info */}
         <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3" data-testid="contract-info-footer">
           <div className="flex items-center justify-between text-[10px]">
             <div className="flex items-center gap-2 text-zinc-600">
@@ -514,10 +650,16 @@ export default function NenoExchange() {
               0xeF3F5C18...d69974 <ExternalLink className="w-2.5 h-2.5" />
             </a>
           </div>
+          {platformWallet && (
+            <div className="flex items-center justify-between text-[10px] mt-1">
+              <span className="text-zinc-600">Hot Wallet (depositi)</span>
+              <span className="text-zinc-500 font-mono" data-testid="platform-wallet-address">{platformWallet.slice(0, 8)}...{platformWallet.slice(-6)}</span>
+            </div>
+          )}
           <div className="flex items-center gap-3 mt-1 text-[9px] text-zinc-700">
-            <span>Settlement: keccak256(block_hash + tx_data)</span>
             <span>Chain: BSC Mainnet (56)</span>
             <span>Supply: 999.8M $NENO</span>
+            <span>Decimals: 18</span>
           </div>
         </div>
       </div>
