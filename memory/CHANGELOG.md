@@ -1,38 +1,45 @@
 # Changelog
 
+## 2026-04-06 - CRITICAL BUG FIX: Balance Sync After On-Chain Transactions
+
+### Problem
+On-chain transactions (sell, swap, offramp) via MetaMask executed successfully on BSC Mainnet but internal wallet balances in the app did not update. NENO was not debited after sell/swap/offramp operations.
+
+### Root Cause
+The `verify-deposit` endpoint credits NENO to internal wallet when on-chain tx is confirmed. But sell/swap/offramp endpoints had an `if not onchain_tx:` guard around `_debit()` calls, which skipped the debit when `tx_hash` was provided.
+
+### Fix
+- Removed `if not onchain_tx:` guard in `sell_neno()` (line 360)
+- Removed `if not onchain_tx:` guard in `swap_tokens()` (line 440)
+- Removed `if not onchain_tx:` guard in `offramp_neno()` (line 804)
+- Added 5s balance polling to `NenoExchange.js` for real-time sync
+- Added immediate balance update from transaction response in `exec()`
+- Fixed `handleCreateToken` to use `price_usd` instead of `price_eur`
+
+### Test Results
+- Iteration 28: 14/14 backend tests passed, all frontend UI verified
+- Balance correctly debited on sell, swap, and offramp
+- Balance persistence confirmed after refetch
+
 ## 2026-04-06 - Phase 1-4 Custom Token System (Complete)
 
 ### Phase 1: Custom Token Creation
-- Updated `POST /api/neno-exchange/create-token`: Symbol max 8 chars, price_usd with 2 decimals
-- Added `GET /api/neno-exchange/my-tokens`: User's tokens with balances
-- Rewrote `TokenCreation.js` with simplified form (Name, Symbol, Supply, Price USD) using XHR
-- Added "Crea Token Personalizzato" button and "I Miei Token Personalizzati" section to Dashboard
+- `POST /api/neno-exchange/create-token`: Symbol max 8 chars, price_usd 2 decimals
+- `GET /api/neno-exchange/my-tokens`: User's tokens with balances
+- Rewrote `TokenCreation.js` with XHR
+- Added "Crea Token Personalizzato" button + "I Miei Token" section to Dashboard
 
 ### Phase 2: Buy/Sell Custom Tokens
-- Added `POST /api/neno-exchange/buy-custom-token`: Buy any custom token with EUR/USDT/BTC/ETH/BNB/NENO
-- Added `POST /api/neno-exchange/sell-custom-token`: Sell custom tokens for any asset
-- Created `CustomTokenTrade.js` page with Buy/Sell tabs
+- `POST /api/neno-exchange/buy-custom-token` and `sell-custom-token`
+- Created `CustomTokenTrade.js` with Buy/Sell tabs
 
 ### Phase 3: Swap Logic
-- Enhanced existing `POST /api/neno-exchange/swap` to handle custom tokens via NENO bridge
-- Swap tab added to CustomTokenTrade page with real-time quotes
-- Swap direction toggle for convenience
+- Enhanced swap endpoint for custom tokens via NENO bridge
+- Swap tab in CustomTokenTrade page
 
 ### Phase 4: Real-Time Balance Sync
-- Added `GET /api/neno-exchange/live-balances`: Polling endpoint for real-time balance updates
-- Dashboard shows live balances widget with auto-refresh (5s polling)
-- CustomTokenTrade sidebar shows live balances with LIVE indicator
-
-### Backend changes
-- `neno_exchange_routes.py`: Added USD_EUR_RATE, BuyCustomTokenRequest, SellCustomTokenRequest models
-- Updated CreateTokenRequest: symbol max 8 chars, price_usd field
-- Backward compatible: old tokens without price_usd get it computed from price_eur
-
-### Frontend changes
-- `TokenCreation.js`: Complete rewrite with XHR, dark theme, simplified form
-- `Dashboard.js`: Added xhrGet helper, myTokens/liveBalances state, token section + balances widget
-- `CustomTokenTrade.js`: New page with Buy/Sell/Swap tabs, live balances sidebar
-- `App.js`: Added /custom-tokens route
+- `GET /api/neno-exchange/live-balances` polling endpoint
+- Dashboard live balances widget
 
 ### Test Results
-- Iteration 27: 18/18 backend tests passed, all frontend UI elements verified
+- Iteration 27: 18/18 backend tests passed, all frontend UI verified
