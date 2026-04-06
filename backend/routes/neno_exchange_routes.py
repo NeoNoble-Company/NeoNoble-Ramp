@@ -128,7 +128,10 @@ async def _get_custom_token_price(db, symbol: str) -> Optional[float]:
     """Get price in EUR for a custom token from DB."""
     token = await db.custom_tokens.find_one({"symbol": symbol.upper()}, {"_id": 0})
     if token:
-        return token.get("price_eur", 0)
+        if "price_eur" in token and token["price_eur"] > 0:
+            return token["price_eur"]
+        if "price_usd" in token and token["price_usd"] > 0:
+            return token["price_usd"] * 0.92
     return None
 
 
@@ -164,11 +167,23 @@ class OfframpRequest(BaseModel):
 
 
 class CreateTokenRequest(BaseModel):
-    symbol: str = Field(min_length=2, max_length=10, description="Token ticker (e.g. MYTOKEN)")
+    symbol: str = Field(min_length=2, max_length=8, description="Token ticker max 8 chars (e.g. MYTKN)")
     name: str = Field(min_length=1, max_length=50, description="Token display name")
-    price_eur: float = Field(gt=0, description="Price in EUR per token")
+    price_usd: float = Field(gt=0, description="Price in USD per token (2 decimals)")
     total_supply: float = Field(gt=0, default=1_000_000, description="Total supply to mint")
     description: Optional[str] = None
+
+
+class BuyCustomTokenRequest(BaseModel):
+    symbol: str = Field(description="Custom token symbol to buy")
+    amount: float = Field(gt=0, description="Amount of tokens to buy")
+    pay_asset: str = Field(default="EUR", description="Asset to pay with (EUR, USDT, BTC, etc.)")
+
+
+class SellCustomTokenRequest(BaseModel):
+    symbol: str = Field(description="Custom token symbol to sell")
+    amount: float = Field(gt=0, description="Amount of tokens to sell")
+    receive_asset: str = Field(default="EUR", description="Asset to receive (EUR, USDT, BTC, etc.)")
 
 
 class SwapRequest(BaseModel):
@@ -500,14 +515,21 @@ async def swap_quote(from_asset: str = "NENO", to_asset: str = "ETH", amount: fl
     }
 
 
+# ── USD to EUR conversion rate ──
+USD_EUR_RATE = 0.92
+
+
 # ── Create Custom Token ──
 
 @router.post("/create-token")
 async def create_custom_token(req: CreateTokenRequest, current_user: dict = Depends(get_current_user)):
-    """Create a new custom token with a specified EUR price and mint supply to creator."""
+    """Create a new custom token with a specified USD price and mint supply to creator."""
     db = get_database()
     uid = current_user["user_id"]
     symbol = req.symbol.upper().strip()
+
+    if len(symbol) > 8:
+        raise HTTPException(status_code=400, detail="Il simbolo non puo' superare 8 caratteri")
 
     if symbol in MARKET_PRICES_EUR or symbol == "NENO":
         raise HTTPException(status_code=400, detail=f"{symbol} e' un asset di sistema, scegli un altro nome")
@@ -516,11 +538,15 @@ async def create_custom_token(req: CreateTokenRequest, current_user: dict = Depe
     if existing:
         raise HTTPException(status_code=400, detail=f"Il token {symbol} esiste gia'")
 
+    price_usd = round(req.price_usd, 2)
+    price_eur = round(price_usd * USD_EUR_RATE, 4)
+
     token = {
         "id": str(uuid.uuid4()),
         "symbol": symbol,
         "name": req.name,
-        "price_eur": req.price_eur,
+        "price_usd": price_usd,
+        "price_eur": price_eur,
         "total_supply": req.total_supply,
         "circulating_supply": req.total_supply,
         "creator_id": uid,
@@ -532,7 +558,7 @@ async def create_custom_token(req: CreateTokenRequest, current_user: dict = Depe
     await _credit(db, uid, symbol, req.total_supply)
 
     return {
-        "message": f"Token {symbol} creato! {req.total_supply} {symbol} @ EUR {req.price_eur} accreditati al wallet",
+        "message": f"Token {symbol} creato! {req.total_supply} {symbol} @ ${price_usd} accreditati al wallet",
         "token": token,
         "balance": req.total_supply,
     }
@@ -544,13 +570,167 @@ async def create_custom_token(req: CreateTokenRequest, current_user: dict = Depe
 async def list_custom_tokens():
     db = get_database()
     tokens = await db.custom_tokens.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for t in tokens:
+        if "price_usd" not in t and "price_eur" in t:
+            t["price_usd"] = round(t["price_eur"] / USD_EUR_RATE, 2)
     return {"tokens": tokens}
+
+
+# ── My Custom Tokens (created by current user) ──
+
+@router.get("/my-tokens")
+async def my_custom_tokens(current_user: dict = Depends(get_current_user)):
+    """Get all custom tokens created by the current user with their balances."""
+    db = get_database()
+    uid = current_user["user_id"]
+    tokens = await db.custom_tokens.find({"creator_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+    for t in tokens:
+        w = await db.wallets.find_one({"user_id": uid, "asset": t["symbol"]}, {"_id": 0})
+        t["balance"] = w.get("balance", 0) if w else 0
+        if "price_usd" not in t and "price_eur" in t:
+            t["price_usd"] = round(t["price_eur"] / USD_EUR_RATE, 2)
+        t["market_cap_usd"] = round(t.get("price_usd", 0) * t.get("total_supply", 0), 2)
+
+    return {"tokens": tokens, "total": len(tokens)}
+
+
+# ── Buy Custom Token ──
+
+@router.post("/buy-custom-token")
+async def buy_custom_token(req: BuyCustomTokenRequest, current_user: dict = Depends(get_current_user)):
+    """Buy a custom token paying with any supported asset."""
+    db = get_database()
+    uid = current_user["user_id"]
+    symbol = req.symbol.upper()
+    pay_asset = req.pay_asset.upper()
+
+    token = await db.custom_tokens.find_one({"symbol": symbol}, {"_id": 0})
+    if not token:
+        raise HTTPException(status_code=404, detail=f"Token {symbol} non trovato")
+
+    token_price_eur = token.get("price_eur", 0)
+    if token_price_eur <= 0:
+        raise HTTPException(status_code=400, detail="Prezzo token non valido")
+
+    pay_price_eur = await _get_any_price_eur(db, pay_asset)
+    if pay_price_eur is None:
+        raise HTTPException(status_code=400, detail=f"Asset di pagamento non supportato: {pay_asset}")
+
+    total_eur = req.amount * token_price_eur
+    fee_eur = round(total_eur * PLATFORM_FEE, 8)
+    gross_eur = total_eur + fee_eur
+    pay_amount = round(gross_eur / pay_price_eur, 8)
+
+    balance = await _get_balance(db, uid, pay_asset)
+    if balance < pay_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo {pay_asset} insufficiente: {balance:.8g} disponibile, {pay_amount:.8g} necessario",
+        )
+
+    await _debit(db, uid, pay_asset, pay_amount)
+    await _credit(db, uid, symbol, req.amount)
+
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "buy_custom_token", uid, req.amount, symbol, {
+        "debit": {"asset": pay_asset, "amount": pay_amount},
+        "credit": {"asset": symbol, "amount": req.amount},
+        "fee_eur": round(fee_eur, 4),
+    })
+
+    tx = {
+        "id": tx_id, "user_id": uid, "type": "buy_custom_token",
+        "token_symbol": symbol, "token_amount": req.amount,
+        "pay_asset": pay_asset, "pay_amount": pay_amount,
+        "price_eur": token_price_eur, "price_usd": token.get("price_usd", 0),
+        "fee_eur": round(fee_eur, 4), "status": "completed",
+        **settlement,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await _log_tx(db, tx)
+    tx["created_at"] = tx["created_at"].isoformat()
+
+    return {
+        "message": f"Acquistati {req.amount} {symbol} per {pay_amount} {pay_asset}",
+        "transaction": tx,
+        "balances": {
+            symbol: round(await _get_balance(db, uid, symbol), 8),
+            pay_asset: round(await _get_balance(db, uid, pay_asset), 8),
+        },
+    }
+
+
+# ── Sell Custom Token ──
+
+@router.post("/sell-custom-token")
+async def sell_custom_token(req: SellCustomTokenRequest, current_user: dict = Depends(get_current_user)):
+    """Sell a custom token and receive any supported asset."""
+    db = get_database()
+    uid = current_user["user_id"]
+    symbol = req.symbol.upper()
+    receive_asset = req.receive_asset.upper()
+
+    token = await db.custom_tokens.find_one({"symbol": symbol}, {"_id": 0})
+    if not token:
+        raise HTTPException(status_code=404, detail=f"Token {symbol} non trovato")
+
+    token_price_eur = token.get("price_eur", 0)
+    if token_price_eur <= 0:
+        raise HTTPException(status_code=400, detail="Prezzo token non valido")
+
+    balance = await _get_balance(db, uid, symbol)
+    if balance < req.amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo {symbol} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
+        )
+
+    receive_price_eur = await _get_any_price_eur(db, receive_asset)
+    if receive_price_eur is None:
+        raise HTTPException(status_code=400, detail=f"Asset di ricezione non supportato: {receive_asset}")
+
+    total_eur = req.amount * token_price_eur
+    fee_eur = round(total_eur * PLATFORM_FEE, 8)
+    net_eur = total_eur - fee_eur
+    receive_amount = round(net_eur / receive_price_eur, 8)
+
+    await _debit(db, uid, symbol, req.amount)
+    await _credit(db, uid, receive_asset, receive_amount)
+
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "sell_custom_token", uid, req.amount, symbol, {
+        "debit": {"asset": symbol, "amount": req.amount},
+        "credit": {"asset": receive_asset, "amount": receive_amount},
+        "fee_eur": round(fee_eur, 4),
+    })
+
+    tx = {
+        "id": tx_id, "user_id": uid, "type": "sell_custom_token",
+        "token_symbol": symbol, "token_amount": req.amount,
+        "receive_asset": receive_asset, "receive_amount": receive_amount,
+        "price_eur": token_price_eur, "price_usd": token.get("price_usd", 0),
+        "fee_eur": round(fee_eur, 4), "status": "completed",
+        **settlement,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await _log_tx(db, tx)
+    tx["created_at"] = tx["created_at"].isoformat()
+
+    return {
+        "message": f"Venduti {req.amount} {symbol} per {receive_amount} {receive_asset}",
+        "transaction": tx,
+        "balances": {
+            symbol: round(await _get_balance(db, uid, symbol), 8),
+            receive_asset: round(await _get_balance(db, uid, receive_asset), 8),
+        },
+    }
 
 
 # ── Update Token Price ──
 
 @router.put("/custom-tokens/{symbol}/price")
-async def update_token_price(symbol: str, price_eur: float, current_user: dict = Depends(get_current_user)):
+async def update_token_price(symbol: str, price_usd: float, current_user: dict = Depends(get_current_user)):
     db = get_database()
     symbol = symbol.upper()
     token = await db.custom_tokens.find_one({"symbol": symbol})
@@ -558,11 +738,59 @@ async def update_token_price(symbol: str, price_eur: float, current_user: dict =
         raise HTTPException(status_code=404, detail="Token non trovato")
     if token["creator_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Solo il creatore puo' modificare il prezzo")
-    if price_eur <= 0:
+    if price_usd <= 0:
         raise HTTPException(status_code=400, detail="Il prezzo deve essere > 0")
 
-    await db.custom_tokens.update_one({"symbol": symbol}, {"$set": {"price_eur": price_eur}})
-    return {"message": f"Prezzo di {symbol} aggiornato a EUR {price_eur}", "symbol": symbol, "price_eur": price_eur}
+    price_eur = round(price_usd * USD_EUR_RATE, 4)
+    await db.custom_tokens.update_one({"symbol": symbol}, {"$set": {"price_usd": round(price_usd, 2), "price_eur": price_eur}})
+    return {"message": f"Prezzo di {symbol} aggiornato a ${price_usd}", "symbol": symbol, "price_usd": round(price_usd, 2), "price_eur": price_eur}
+
+
+# ── Real-Time Balance Polling ──
+
+@router.get("/live-balances")
+async def live_balances(current_user: dict = Depends(get_current_user)):
+    """Get all wallet balances for real-time polling updates."""
+    db = get_database()
+    uid = current_user["user_id"]
+    wallets = await db.wallets.find({"user_id": uid, "balance": {"$gt": 0}}, {"_id": 0}).to_list(100)
+
+    custom_tokens = await db.custom_tokens.find({}, {"_id": 0}).to_list(100)
+    custom_prices = {t["symbol"]: {"usd": t.get("price_usd", 0), "eur": t.get("price_eur", 0)} for t in custom_tokens}
+
+    pricing = await _get_dynamic_neno_price()
+    neno_price = pricing["price"]
+
+    balances = {}
+    total_usd = 0
+    for w in wallets:
+        asset = w["asset"]
+        bal = w["balance"]
+        if asset == "NENO":
+            price_eur = neno_price
+        elif asset in MARKET_PRICES_EUR:
+            price_eur = MARKET_PRICES_EUR[asset]
+        elif asset in custom_prices:
+            price_eur = custom_prices[asset]["eur"]
+        else:
+            price_eur = 0
+
+        price_usd = round(price_eur / USD_EUR_RATE, 2) if price_eur > 0 else 0
+        value_usd = round(bal * price_usd, 2)
+        total_usd += value_usd
+        balances[asset] = {
+            "balance": round(bal, 8),
+            "price_usd": price_usd,
+            "value_usd": value_usd,
+            "is_custom": asset in custom_prices,
+        }
+
+    return {
+        "balances": balances,
+        "total_value_usd": round(total_usd, 2),
+        "neno_price": pricing,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # ── Off-Ramp: NENO -> EUR -> Card or Bank ──

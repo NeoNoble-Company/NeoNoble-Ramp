@@ -34,6 +34,7 @@ import AuditLog from "./pages/AuditLog";
 import PortfolioTracker from "./pages/PortfolioTracker";
 import DCABot from "./pages/DCABot";
 import ReferralPage from "./pages/ReferralPage";
+import CustomTokenTrade from "./pages/CustomTokenTrade";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -320,6 +321,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ReferralPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Custom Token Trade (Buy/Sell/Swap) */}
+      <Route
+        path="/custom-tokens"
+        element={
+          <ProtectedRoute>
+            <CustomTokenTrade />
           </ProtectedRoute>
         }
       />

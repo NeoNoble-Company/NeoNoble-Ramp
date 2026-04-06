@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { rampApi } from '../api';
@@ -12,8 +12,25 @@ import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
   AlertCircle, TrendingUp, CreditCard, BarChart3, Shield, ArrowRightLeft,
-  PieChart, Settings, Activity
+  PieChart, Settings, Activity, Plus
 } from 'lucide-react';
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+function xhrGet(url) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    const token = localStorage.getItem('token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      try { resolve({ ok: xhr.status >= 200 && xhr.status < 300, data: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, data: {} }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, data: {} });
+    xhr.send();
+  });
+}
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
 
@@ -26,6 +43,12 @@ export default function Dashboard() {
   const [prices, setPrices] = useState({});
   const [transactions, setTransactions] = useState([]);
   const [loadingPrices, setLoadingPrices] = useState(true);
+  
+  // Custom tokens state
+  const [myTokens, setMyTokens] = useState([]);
+  const [loadingMyTokens, setLoadingMyTokens] = useState(true);
+  const [liveBalances, setLiveBalances] = useState({});
+  const balancePollRef = useRef(null);
   
   // Form states
   const [fiatAmount, setFiatAmount] = useState('');
@@ -51,7 +74,23 @@ export default function Dashboard() {
   useEffect(() => {
     loadPrices();
     loadTransactions();
+    loadMyTokens();
+    loadLiveBalances();
+    balancePollRef.current = setInterval(loadLiveBalances, 5000);
+    return () => clearInterval(balancePollRef.current);
   }, []);
+
+  const loadMyTokens = async () => {
+    setLoadingMyTokens(true);
+    const res = await xhrGet(`${BACKEND_URL}/api/neno-exchange/my-tokens`);
+    if (res.ok) setMyTokens(res.data.tokens || []);
+    setLoadingMyTokens(false);
+  };
+
+  const loadLiveBalances = async () => {
+    const res = await xhrGet(`${BACKEND_URL}/api/neno-exchange/live-balances`);
+    if (res.ok) setLiveBalances(res.data.balances || {});
+  };
 
   const loadPrices = async () => {
     try {
@@ -292,15 +331,31 @@ export default function Dashboard() {
               <div className="mb-6 grid grid-cols-2 gap-4">
                 <Link
                   to="/tokens/create"
-                  className="p-4 bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl hover:border-green-400/50 transition-all group"
+                  className="p-4 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 border border-cyan-500/30 rounded-xl hover:border-cyan-400/50 transition-all group"
+                  data-testid="create-custom-token-btn"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-                      <Coins className="h-5 w-5 text-green-400" />
+                    <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                      <Plus className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
-                      <h3 className="text-white font-medium group-hover:text-green-400">Crea Token</h3>
-                      <p className="text-gray-400 text-xs">Lancia il tuo token</p>
+                      <h3 className="text-white font-medium group-hover:text-cyan-400">Crea Token Personalizzato</h3>
+                      <p className="text-gray-400 text-xs">Lancia il tuo token custom</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  to="/custom-tokens"
+                  className="p-4 bg-gradient-to-r from-emerald-600/20 to-green-600/20 border border-emerald-500/30 rounded-xl hover:border-emerald-400/50 transition-all group"
+                  data-testid="custom-token-market-btn"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                      <ArrowRightLeft className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-emerald-400">Token Market</h3>
+                      <p className="text-gray-400 text-xs">Compra, Vendi, Swap token</p>
                     </div>
                   </div>
                 </Link>
@@ -496,6 +551,87 @@ export default function Dashboard() {
                   </div>
                 </Link>
               </div>
+
+              {/* My Custom Tokens Section */}
+              <div className="mb-6 bg-white/5 border border-white/10 rounded-xl p-5" data-testid="my-custom-tokens-section">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Coins className="h-5 w-5 text-cyan-400" />
+                    I Miei Token Personalizzati
+                  </h3>
+                  <Link
+                    to="/tokens/create"
+                    className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                    data-testid="create-new-token-link"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nuovo
+                  </Link>
+                </div>
+                {loadingMyTokens ? (
+                  <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-cyan-400" /></div>
+                ) : myTokens.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-gray-500 text-sm mb-2">Non hai ancora creato token personalizzati.</p>
+                    <Link to="/tokens/create" className="text-cyan-400 hover:underline text-sm font-medium" data-testid="create-first-token-link">
+                      Crea il tuo primo token
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {myTokens.map(token => (
+                      <div
+                        key={token.symbol}
+                        className="flex items-center justify-between py-3 px-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => navigate('/custom-tokens')}
+                        data-testid={`my-token-${token.symbol}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                            <span className="text-cyan-400 font-mono text-xs font-bold">{token.symbol.slice(0, 3)}</span>
+                          </div>
+                          <div>
+                            <p className="text-white text-sm font-medium">{token.name}</p>
+                            <p className="text-gray-500 text-xs">{token.symbol} - Supply: {Number(token.total_supply).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white text-sm font-medium">${token.price_usd || (token.price_eur / 0.92).toFixed(2)}</p>
+                          <p className="text-gray-500 text-xs">Saldo: {(token.balance || 0).toFixed(2)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Live Balances Widget */}
+              {Object.keys(liveBalances).length > 0 && (
+                <div className="mb-6 bg-white/5 border border-white/10 rounded-xl p-5" data-testid="live-balances-dashboard">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-emerald-400" />
+                      Bilanci in Tempo Reale
+                    </h3>
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                      </span>
+                      LIVE
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Object.entries(liveBalances).slice(0, 6).map(([asset, info]) => (
+                      <div key={asset} className="bg-white/5 rounded-lg p-3">
+                        <div className="text-gray-400 text-xs">{asset}</div>
+                        <div className="text-white font-medium text-sm">{info.balance.toFixed(4)}</div>
+                        <div className="text-gray-600 text-[10px]">${info.value_usd.toLocaleString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Error/Success Messages */}
               {error && (
