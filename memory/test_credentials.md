@@ -12,3 +12,8 @@
 
 ## Hot Wallet
 - Address: 0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E
+- NENO Balance: 397
+- BNB Balance: 0.00484
+
+## User Test Wallet
+- Address: 0xf44C81dbab89941173d0d49C1CEA876950eDCfd3
