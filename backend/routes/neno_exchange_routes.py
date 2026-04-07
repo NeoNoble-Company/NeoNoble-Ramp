@@ -33,6 +33,7 @@ from services.settlement_ledger import (
 )
 from services.execution_engine import ExecutionEngine, TreasuryEngine, LiquidityEngine
 from services.market_maker_service import MarketMakerService
+from services.audit_logger import log_pre_operation, log_post_operation
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +406,15 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     uid = current_user["user_id"]
     asset = req.receive_asset.upper()
 
+    # ── AUDIT PRE: snapshot saldi ──
+    audit_pre = await log_pre_operation(
+        op_type="SELL_NENO", user_id=uid,
+        user_email=current_user.get("email", ""),
+        assets_involved=["NENO", asset],
+        neno_amount=req.neno_amount,
+        extra={"receive_asset": asset, "tx_hash": req.tx_hash}
+    )
+
     price_eur = await _get_any_price_eur(db, asset)
     if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
@@ -493,7 +503,7 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     _treasury = TreasuryEngine()
     await _treasury.record_fee(db, tx_id, fee, asset, "sell_neno")
 
-    return {
+    result = {
         "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "balances": {"NENO": round(new_neno, 8), asset: round(new_asset, 8)},
@@ -509,6 +519,14 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         },
     }
 
+    # ── AUDIT POST: snapshot saldi + deltas ──
+    await log_post_operation(
+        pre_snapshot=audit_pre, result=result,
+        assets_involved=["NENO", asset], tx_id=tx_id
+    )
+
+    return result
+
 
 # ── Swap: Any Token ↔ Any Token (via NENO bridge) ──
 
@@ -520,6 +538,15 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     from_asset = req.from_asset.upper()
     to_asset = req.to_asset.upper()
     onchain_tx = req.tx_hash or None
+
+    # ── AUDIT PRE ──
+    audit_pre = await log_pre_operation(
+        op_type="SWAP", user_id=uid,
+        user_email=current_user.get("email", ""),
+        assets_involved=[from_asset, to_asset, "NENO"],
+        neno_amount=req.amount if from_asset == "NENO" else 0,
+        extra={"from": from_asset, "to": to_asset, "amount": req.amount}
+    )
 
     if from_asset == to_asset:
         raise HTTPException(status_code=400, detail="Non puoi swappare lo stesso asset")
@@ -604,7 +631,7 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     await _log_tx(db, tx)
     tx["created_at"] = tx["created_at"].isoformat()
 
-    return {
+    swap_result = {
         "message": f"Swappati {req.amount} {from_asset} per {receive_amount} {to_asset}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "balances": {
@@ -618,6 +645,14 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
             "spread_bps": mm_pricing["spread_bps"],
         },
     }
+
+    # ── AUDIT POST ──
+    await log_post_operation(
+        pre_snapshot=audit_pre, result=swap_result,
+        assets_involved=[from_asset, to_asset, "NENO"], tx_id=tx_id
+    )
+
+    return swap_result
 
 
 # ── Swap Quote ──
@@ -942,6 +977,15 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     uid = current_user["user_id"]
     onchain_tx = req.tx_hash or None
 
+    # ── AUDIT PRE ──
+    audit_pre = await log_pre_operation(
+        op_type="OFFRAMP", user_id=uid,
+        user_email=current_user.get("email", ""),
+        assets_involved=["NENO", "EUR", "USDT", "USDC"],
+        neno_amount=req.neno_amount,
+        extra={"destination": req.destination, "wallet": req.destination_wallet, "stable": req.preferred_stable}
+    )
+
     neno_balance = await _get_balance(db, uid, "NENO")
     if neno_balance < req.neno_amount:
         raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
@@ -1110,7 +1154,7 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    return {
+    offramp_result = {
         "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "neno_balance": round(await _get_balance(db, uid, "NENO"), 8),
@@ -1128,6 +1172,14 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
             "mid_price": mm_pricing["mid_price"], "spread_bps": mm_pricing["spread_bps"],
         },
     }
+
+    # ── AUDIT POST ──
+    await log_post_operation(
+        pre_snapshot=audit_pre, result=offramp_result,
+        assets_involved=["NENO", "EUR", "USDT", "USDC"], tx_id=tx_id
+    )
+
+    return offramp_result
 
 
 # ── Transaction History ──

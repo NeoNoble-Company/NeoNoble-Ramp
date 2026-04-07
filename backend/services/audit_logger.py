@@ -282,3 +282,190 @@ def set_audit_logger(logger: AuditLogger):
     """Set the global audit logger instance."""
     global audit_logger
     audit_logger = logger
+
+
+
+# ────────────────────────────────────────────────────────────
+#  AGGRESSIVE TRADE AUDIT — Sell/Swap/Off-Ramp
+# ────────────────────────────────────────────────────────────
+
+import uuid as _uuid
+from decimal import Decimal as _Decimal
+from database.mongodb import get_database as _get_db
+
+_agg_logger = logging.getLogger("audit.aggressive")
+_agg_logger.setLevel(logging.INFO)
+
+NENO_CONTRACT = "0xeF3F5C1892A8d7A3304E4A15959E124402d69974"
+_TREASURY_USER_ID = os.environ.get("TREASURY_USER_ID", "")
+
+
+async def _read_onchain_neno(wallet_address: str) -> float:
+    try:
+        from services.execution_engine import ExecutionEngine, ERC20_ABI
+        from web3 import Web3
+        engine = ExecutionEngine.get_instance()
+        w3 = engine._get_web3()
+        if not w3:
+            return -1
+        contract = w3.eth.contract(
+            address=Web3.to_checksum_address(NENO_CONTRACT), abi=ERC20_ABI
+        )
+        raw = contract.functions.balanceOf(Web3.to_checksum_address(wallet_address)).call()
+        return float(_Decimal(raw) / _Decimal(10 ** 18))
+    except Exception as e:
+        _agg_logger.warning(f"[AUDIT] On-chain NENO read failed: {e}")
+        return -1
+
+
+async def _read_onchain_bnb(wallet_address: str) -> float:
+    try:
+        from services.execution_engine import ExecutionEngine
+        from web3 import Web3
+        engine = ExecutionEngine.get_instance()
+        w3 = engine._get_web3()
+        if not w3:
+            return -1
+        raw = w3.eth.get_balance(Web3.to_checksum_address(wallet_address))
+        return float(_Decimal(raw) / _Decimal(10 ** 18))
+    except Exception as e:
+        _agg_logger.warning(f"[AUDIT] On-chain BNB read failed: {e}")
+        return -1
+
+
+async def log_pre_operation(
+    op_type: str, user_id: str, user_email: str,
+    assets_involved: list, neno_amount: float = 0,
+    extra: dict = None
+) -> dict:
+    """PRE-OPERATION audit snapshot: balances, on-chain state, timestamp."""
+    db = _get_db()
+    ts = datetime.now(timezone.utc)
+    snapshot = {
+        "timestamp": ts.isoformat(),
+        "timestamp_unix": ts.timestamp(),
+        "operation": op_type,
+        "user_id": user_id,
+        "user_email": user_email,
+        "neno_amount": neno_amount,
+        "balances_pre": {},
+        "treasury_pre": {},
+        "onchain_pre": {},
+    }
+
+    for asset in assets_involved:
+        w = await db.wallets.find_one({"user_id": user_id, "asset": asset.upper()}, {"_id": 0})
+        snapshot["balances_pre"][asset] = round(w.get("balance", 0), 8) if w else 0
+
+    if _TREASURY_USER_ID:
+        for asset in assets_involved:
+            w = await db.wallets.find_one({"user_id": _TREASURY_USER_ID, "asset": asset.upper()}, {"_id": 0})
+            snapshot["treasury_pre"][asset] = round(w.get("balance", 0), 8) if w else 0
+
+    try:
+        from services.execution_engine import ExecutionEngine
+        engine = ExecutionEngine.get_instance()
+        if engine.hot_wallet:
+            snapshot["onchain_pre"] = {
+                "hot_wallet": engine.hot_wallet,
+                "NENO": round(await _read_onchain_neno(engine.hot_wallet), 8),
+                "BNB": round(await _read_onchain_bnb(engine.hot_wallet), 8),
+            }
+    except Exception:
+        pass
+
+    if extra:
+        snapshot["extra"] = extra
+
+    _agg_logger.info(
+        f"[AUDIT PRE] {op_type} | user={user_email} | ts={ts.isoformat()} | "
+        f"user_bal={snapshot['balances_pre']} | treasury_bal={snapshot['treasury_pre']} | "
+        f"onchain={snapshot['onchain_pre']}"
+    )
+    return snapshot
+
+
+async def log_post_operation(
+    pre_snapshot: dict, result: dict,
+    assets_involved: list, tx_id: str = "",
+    error: str = None
+) -> dict:
+    """POST-OPERATION audit: deltas, consistency check, persist to DB."""
+    db = _get_db()
+    ts = datetime.now(timezone.utc)
+    user_id = pre_snapshot["user_id"]
+    op_type = pre_snapshot["operation"]
+
+    post = {
+        "timestamp": ts.isoformat(),
+        "timestamp_unix": ts.timestamp(),
+        "duration_ms": round((ts.timestamp() - pre_snapshot["timestamp_unix"]) * 1000, 1),
+        "tx_id": tx_id, "operation": op_type,
+        "user_id": user_id, "user_email": pre_snapshot.get("user_email", ""),
+        "error": error,
+        "balances_post": {}, "treasury_post": {}, "onchain_post": {},
+        "deltas_user": {}, "deltas_treasury": {}, "deltas_onchain": {},
+        "consistency_ok": True, "consistency_issues": [],
+    }
+
+    for asset in assets_involved:
+        w = await db.wallets.find_one({"user_id": user_id, "asset": asset.upper()}, {"_id": 0})
+        bal = round(w.get("balance", 0), 8) if w else 0
+        post["balances_post"][asset] = bal
+        post["deltas_user"][asset] = round(bal - pre_snapshot["balances_pre"].get(asset, 0), 8)
+
+    if _TREASURY_USER_ID:
+        for asset in assets_involved:
+            w = await db.wallets.find_one({"user_id": _TREASURY_USER_ID, "asset": asset.upper()}, {"_id": 0})
+            bal = round(w.get("balance", 0), 8) if w else 0
+            post["treasury_post"][asset] = bal
+            post["deltas_treasury"][asset] = round(bal - pre_snapshot["treasury_pre"].get(asset, 0), 8)
+
+    try:
+        from services.execution_engine import ExecutionEngine
+        engine = ExecutionEngine.get_instance()
+        if engine.hot_wallet:
+            neno_oc = await _read_onchain_neno(engine.hot_wallet)
+            bnb_oc = await _read_onchain_bnb(engine.hot_wallet)
+            post["onchain_post"] = {"NENO": round(neno_oc, 8), "BNB": round(bnb_oc, 8)}
+            pre_neno = pre_snapshot.get("onchain_pre", {}).get("NENO", 0)
+            pre_bnb = pre_snapshot.get("onchain_pre", {}).get("BNB", 0)
+            post["deltas_onchain"] = {
+                "NENO": round(neno_oc - pre_neno, 8) if pre_neno >= 0 else 0,
+                "BNB": round(bnb_oc - pre_bnb, 8) if pre_bnb >= 0 else 0,
+            }
+    except Exception:
+        pass
+
+    for asset in assets_involved:
+        ud = post["deltas_user"].get(asset, 0)
+        td = post["deltas_treasury"].get(asset, 0)
+        if abs(ud + td) > 0.01 and not error and asset in ("NENO", "EUR", "ETH", "BTC"):
+            issue = f"MISMATCH {asset}: user={ud:+.8f} treasury={td:+.8f} net={ud + td:+.8f}"
+            post["consistency_issues"].append(issue)
+            post["consistency_ok"] = False
+
+    await db.audit_aggressive_log.insert_one({
+        "_id": tx_id or f"audit_{ts.timestamp()}",
+        "pre": pre_snapshot, "post": post,
+        "result_summary": {
+            "status": "error" if error else "success",
+            "message": result.get("message", "") if isinstance(result, dict) else str(result),
+        },
+        "created_at": ts.isoformat(),
+    })
+
+    status = "ERROR" if error else ("WARN" if not post["consistency_ok"] else "OK")
+    _agg_logger.info(
+        f"[AUDIT POST] {op_type} | {status} | tx={tx_id[:12]}... | "
+        f"duration={post['duration_ms']}ms | "
+        f"user_deltas={post['deltas_user']} | "
+        f"treasury_deltas={post['deltas_treasury']} | "
+        f"onchain_deltas={post['deltas_onchain']} | "
+        f"consistency={'OK' if post['consistency_ok'] else 'FAIL: ' + str(post['consistency_issues'])}"
+    )
+
+    if not post["consistency_ok"]:
+        _agg_logger.error(f"[AUDIT ALERT] CONSISTENCY FAILURE tx={tx_id}: {post['consistency_issues']}")
+
+    return post

@@ -1,23 +1,23 @@
 # NeoNoble Ramp - Changelog
 
+## [2026-04-07] Aggressive Audit Logging + Mass Trading Test
+- Added aggressive audit logger to Sell/Swap/Off-Ramp endpoints
+- Each operation logs: timestamp, user balances PRE/POST, treasury balances PRE/POST, on-chain state PRE/POST, deltas, consistency check
+- Persisted to `audit_aggressive_log` MongoDB collection
+- Mass test: 28 operations executed (10 SELL + 10 SWAP + 5 OFFRAMP card + 3 OFFRAMP crypto)
+- Results: 20/20 real trades PASSED (100%), 8 expected failures (no card, no USDT on-chain)
+- Consistency: 0 issues across all 20 trades
+- Treasury deltas verified: NENO +0.0448, EUR -261.60, ETH -0.011, BTC -0.001
+- PnL from 20 trades: EUR 7.26 total revenue (EUR 6.09 spread + EUR 1.16 fees)
+
 ## [2026-04-07] Phase 5b: Treasury = Account Massimo
-- Configured TREASURY_USER_ID pointing to massimo.fornara.2212@gmail.com
-- Treasury now reads combined internal wallets + on-chain hot wallet balances
+- TREASURY_USER_ID configured to massimo.fornara.2212@gmail.com
+- Treasury reads combined internal wallets + on-chain hot wallet
 - Every MM trade debits/credits Massimo's real wallet balances
-- Treasury shows per-asset breakdown: internal_balance + onchain_balance
-- NENO=397 (on-chain), EUR=29640 (internal), ETH=884 (internal), BTC=0.35 (internal)
-- PnL tracking with treasury_owner attribution
-- Off-ramp crypto fallback correctly handles insufficient stablecoin balances
-- BSC RPC error cleanup (non-critical logs moved to debug level)
-- Refactored exchange_utils.py for shared constants
 - Test: 16/16 backend + frontend 100% (iteration_32.json)
 
 ## [2026-04-07] Phase 5a: Market Maker Pricing Engine
-- Created market_maker_service.py: Dynamic bid/ask, spread, matching, PnL
-- Created market_maker_routes.py: API endpoints for treasury/pricing/pnl/risk
-- Updated all exchange endpoints with MM bid/ask pricing
-- Added crypto off-ramp fallback (USDT/USDC)
-- Frontend MM pricing strip with bid/ask/spread/skew/treasury
+- Dynamic bid/ask, spread, matching, PnL
 - Test: 17/17 (iteration_31.json)
 
 ## [Previous] Phase 1-4: Core Platform
