@@ -1,74 +1,57 @@
 # NeoNoble Ramp - PRD (Product Requirements Document)
 
 ## Original Problem Statement
-Enterprise-grade fintech platform for crypto/fiat bridge. Multi-chain wallet with custom token creation, internal exchange (NENO), real on-chain execution, NIUM banking integration, DCA trading, PDF compliance exports, and Market Maker activation.
+Enterprise-grade fintech platform for crypto/fiat bridge. Multi-chain wallet with custom token creation, internal exchange (NENO), real on-chain execution, NIUM banking integration, DCA trading, PDF compliance exports, and Internal Market Maker with Treasury as real counterparty.
 
 ## Core Architecture
 - **Backend**: FastAPI + MongoDB (Motor) + Web3.py (BSC Mainnet)
 - **Frontend**: React + Tailwind + Wagmi/WalletConnect
 - **Blockchain**: BSC Mainnet, Alchemy RPC, real on-chain execution
-- **Market Maker**: Treasury-backed counterparty, dynamic bid/ask pricing
+- **Market Maker**: Treasury-backed by Massimo's account (TREASURY_USER_ID)
+
+## Treasury Architecture
+- **Owner**: massimo.fornara.2212@gmail.com (TREASURY_USER_ID in .env)
+- **Source of Truth**: Combined internal wallets + on-chain hot wallet
+- **Assets tracked**: EUR, ETH, BTC, NENO (on-chain), BNB (on-chain), USDT, USDC
+- **Per-asset**: amount, internal_balance, onchain_balance, locked_amount, available_amount
+- **Every trade**: Debits/credits Massimo's real wallet balances
 
 ## Implemented Features
 
 ### Phase 1-4 (Complete)
-- Custom Token Creation with on-chain deployment
-- NENO Buy/Sell/Swap with dynamic pricing
-- Multi-chain wallet with deposit/withdrawal
-- Off-ramp to card/bank/crypto
-- Settlement Ledger with state machine
-- Real on-chain execution engine
-- WebSocket real-time balance updates
-- Force balance sync
-- DCA Trading Bot
-- PDF Compliance Reports
-- SMS Notifications (Twilio-ready)
+- Custom Token Creation, Buy/Sell/Swap, Multi-chain wallet
+- Settlement Ledger, Execution Engine, WebSocket updates
+- DCA Trading Bot, PDF Compliance, SMS Notifications
 
 ### Phase 5 - Market Maker (Complete - April 2026)
-- **Market Maker Pricing Engine**: Dynamic bid/ask with spread based on inventory skew + volatility
-  - Base spread: 50 bps (0.5%)
-  - Skew adjustment: +/- based on treasury NENO inventory vs target (500)
-  - Volatility adjustment: based on 24h trading volume
-  - Total spread: 20-200 bps range
-- **Treasury as Real Counterparty**: Single source of truth for platform finances
-  - Per-asset tracking: NENO, EUR, USDT, USDC, BNB
-  - Available vs locked amounts
-  - On-chain sync from hot wallet (BSC)
-  - Source tracking: on_chain / provider / internal
+- **Market Maker Pricing Engine**: Dynamic bid/ask, spread 20-200 bps
+- **Treasury = Massimo's Account**: Real counterparty, combined internal+on-chain
 - **Internal Matching Engine**: Netting before treasury
-  - Order book with pending/filled states
-  - Gas savings on matched orders
 - **PnL Accounting**: Revenue separated from inventory changes
-  - Spread revenue (bid/ask difference)
-  - Fee revenue (0.3% platform fee)
-  - Legacy fee tracking maintained
 - **Off-Ramp Fallback**: USDT/USDC crypto when NIUM not configured
-  - Sends stablecoin to user's BSC wallet
-  - State: payout_executed_external
 - **Risk Dashboard**: risk_level, inventory_ratio, spread monitoring
-- **API Endpoints**:
-  - GET /api/market-maker/pricing (public)
-  - GET /api/market-maker/treasury (auth)
-  - GET /api/market-maker/pnl (auth)
-  - GET /api/market-maker/risk (auth)
-  - GET /api/market-maker/order-book (auth)
+- **API**: /api/market-maker/pricing (public), /treasury, /pnl, /risk, /order-book (auth)
 
 ## Key DB Collections
-- `treasury_inventory`: {asset, amount, locked_amount, available_amount, source, last_synced}
-- `mm_pnl_ledger`: {tx_id, direction, spread_revenue_eur, fee_revenue_eur, inventory_change_neno}
-- `mm_order_book`: {type, asset, amount, remaining_amount, status, price_eur}
-- `settlement_ledger`: {tx_id, state, debit_asset, credit_asset, fee_amount}
+- `wallets`: User balances (Treasury reads from owner's wallets)
+- `treasury_inventory`: Synced from owner wallets + on-chain (cached view)
+- `mm_pnl_ledger`: PnL entries per trade
+- `mm_order_book`: Internal order book for netting
+- `settlement_ledger`: State machine for trade settlements
 
-## Current State
-- Treasury: NENO=397 (on-chain), BNB=0.00484, EUR=0, USDT=0, USDC=0
-- Pricing: Bid ~9815, Ask ~9985, Mid 10000, Spread ~170 bps
-- Risk: Low (inventory_ratio=0.794)
+## Current Treasury State
+- NENO: 397 (on-chain hot wallet)
+- EUR: ~29,640 (Massimo's internal wallet)
+- ETH: ~884 (Massimo's internal wallet)
+- BTC: ~0.35 (Massimo's internal wallet)
+- Total: ~EUR 6.8M
 
 ## Pending / Blocked
 - NIUM Integration: Awaiting templateId from user portal
-- BSC RPC Error: Non-critical background log noise (P2)
+- BSC RPC Error: Cleaned up, using logger.debug for non-critical errors
 
 ## Backlog
 - Microservices architecture split (P1)
 - Dynamic NENO pricing from real order book (P2)
 - Referral system with NENO bonuses (P2)
+- Admin Treasury dashboard with PnL charts (P2)

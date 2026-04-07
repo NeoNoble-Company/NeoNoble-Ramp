@@ -1,19 +1,16 @@
 # Test Credentials
 
-## Admin Account
+## Platform Admin
 - Email: admin@neonobleramp.com
 - Password: Admin1234!
 
-## WalletConnect
-- Project ID: 7a6b04e9e23e518e7a7e098cabffee28
+## Treasury Owner (Market Maker)
+- Email: massimo.fornara.2212@gmail.com
+- TREASURY_USER_ID: de9a3781-b9d2-4b37-922d-2f6959e0f529
+- Role: ADMIN
 
-## API URL
-- Preview: https://multi-chain-wallet-14.preview.emergentagent.com
-
-## Hot Wallet
+## Hot Wallet (BSC)
 - Address: 0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E
-- NENO Balance: 397
-- BNB Balance: 0.00484
 
-## User Test Wallet
+## Test Wallet
 - Address: 0xf44C81dbab89941173d0d49C1CEA876950eDCfd3
