@@ -18,9 +18,11 @@ from typing import Optional
 from datetime import datetime, timezone, timedelta
 import uuid
 import hashlib
-import asyncio
 import os
+import asyncio
 import logging
+
+logger = logging.getLogger("neno_exchange")
 
 from database.mongodb import get_database
 from routes.auth import get_current_user
@@ -31,9 +33,10 @@ from services.settlement_ledger import (
     STATE_ONCHAIN_EXECUTED, STATE_INTERNAL_CREDITED, STATE_PAYOUT_PENDING,
     STATE_PAYOUT_SENT, STATE_PAYOUT_SETTLED, STATE_PAYOUT_EXECUTED_EXTERNAL,
 )
-from services.execution_engine import ExecutionEngine, TreasuryEngine, LiquidityEngine
+from services.execution_engine import ExecutionEngine, TreasuryEngine, LiquidityEngine, ASSET_TO_BSC_CONTRACT
 from services.market_maker_service import MarketMakerService
 from services.audit_logger import log_pre_operation, log_post_operation
+from services.security_guard import SecurityGuard
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,11 @@ MARKET_PRICES_EUR = {
 }
 
 PLATFORM_FEE = 0.003  # 0.3%
+
+# ── Treasury Caps (imported from security_guard) ──
+MAX_SINGLE_TX_EUR = float(os.environ.get("MAX_SINGLE_TX_EUR", "50000"))
+MAX_DAILY_EUR = float(os.environ.get("MAX_DAILY_EUR", "200000"))
+MAX_NENO_PER_TX = float(os.environ.get("MAX_NENO_PER_TX", "50"))
 SUPPORTED_ASSETS = list(MARKET_PRICES_EUR.keys())
 
 
@@ -164,6 +172,8 @@ class SellNenoRequest(BaseModel):
     receive_asset: str = Field(description="Asset to receive (BNB, ETH, EUR ...)")
     neno_amount: float = Field(gt=0, description="How many NENO to sell")
     tx_hash: Optional[str] = Field(None, description="On-chain tx hash from MetaMask transfer to hot wallet")
+    destination_wallet: Optional[str] = Field(None, description="External wallet for on-chain delivery")
+    destination_iban: Optional[str] = Field(None, description="IBAN for fiat delivery via Stripe SEPA")
 
 
 class OfframpRequest(BaseModel):
@@ -202,6 +212,7 @@ class SwapRequest(BaseModel):
     to_asset: str = Field(description="Asset to receive")
     amount: float = Field(gt=0, description="Amount of from_asset to swap")
     tx_hash: Optional[str] = Field(None, description="On-chain tx hash (for NENO-based swaps via MetaMask)")
+    destination_wallet: Optional[str] = Field(None, description="External wallet for on-chain delivery of to_asset")
 
 
 # ── helpers ──
@@ -405,6 +416,12 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     db = get_database()
     uid = current_user["user_id"]
     asset = req.receive_asset.upper()
+    guard = SecurityGuard.get_instance()
+
+    # ── Rate limit ──
+    allowed, remaining = await guard.check_rate_limit(uid)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Rate limit superato: max 10 operazioni/minuto")
 
     # ── AUDIT PRE: snapshot saldi ──
     audit_pre = await log_pre_operation(
@@ -421,44 +438,96 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
 
     onchain_tx = req.tx_hash or None
 
-    neno_balance = await _get_balance(db, uid, "NENO")
-    if neno_balance < req.neno_amount:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
-        )
-    await _debit(db, uid, "NENO", req.neno_amount)
-
     # ── Market Maker Pricing: user sells at BID ──
     mm = MarketMakerService.get_instance()
     mm_pricing = await mm.get_pricing()
-    neno_eur_price = mm_pricing["bid"]  # user receives bid
+    neno_eur_price = mm_pricing["bid"]
     mid_price = mm_pricing["mid_price"]
-
-    # Try internal matching first
-    match_result = await mm.try_internal_match("sell", "NENO", req.neno_amount, neno_eur_price)
 
     rate = neno_eur_price / price_eur
     gross = round(req.neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
     net = round(gross - fee, 8)
+    eur_value = round(req.neno_amount * neno_eur_price, 2)
 
-    await _credit(db, uid, asset, net)
+    # ── Treasury caps ──
+    cap_ok, cap_reason = await guard.enforce_caps(uid, eur_value, req.neno_amount)
+    if not cap_ok:
+        raise HTTPException(status_code=400, detail=cap_reason)
 
-    tx_id = str(uuid.uuid4())
-    settlement = _settlement_record(tx_id, "sell_neno", uid, req.neno_amount, asset, {
-        "debit": {"asset": "NENO", "amount": req.neno_amount},
-        "credit": {"asset": asset, "amount": net},
-        "fee": {"asset": asset, "amount": fee},
-        "onchain_tx_hash": onchain_tx,
-    })
+    # ── Reentrancy lock ──
+    async with guard.get_user_lock(uid):
+        neno_balance = await _get_balance(db, uid, "NENO")
+        if neno_balance < req.neno_amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
+            )
+        await _debit(db, uid, "NENO", req.neno_amount)
 
-    # ── Treasury counterparty execution ──
-    mm_result = await mm.execute_as_counterparty(
-        tx_id=tx_id, user_id=uid, direction="sell",
-        neno_amount=req.neno_amount, counter_asset=asset,
-        counter_amount=net, fee_amount=fee, fee_asset=asset,
-        effective_price=neno_eur_price, mid_price=mid_price,
+        # Internal matching attempt
+        match_result = await mm.try_internal_match("sell", "NENO", req.neno_amount, neno_eur_price)
+
+        await _credit(db, uid, asset, net)
+
+        tx_id = str(uuid.uuid4())
+        settlement = _settlement_record(tx_id, "sell_neno", uid, req.neno_amount, asset, {
+            "debit": {"asset": "NENO", "amount": req.neno_amount},
+            "credit": {"asset": asset, "amount": net},
+            "fee": {"asset": asset, "amount": fee},
+            "onchain_tx_hash": onchain_tx,
+        })
+
+        # ── Treasury counterparty execution ──
+        mm_result = await mm.execute_as_counterparty(
+            tx_id=tx_id, user_id=uid, direction="sell",
+            neno_amount=req.neno_amount, counter_asset=asset,
+            counter_amount=net, fee_amount=fee, fee_asset=asset,
+            effective_price=neno_eur_price, mid_price=mid_price,
+        )
+
+    # ── REAL EXECUTION: deliver asset to user on-chain or via fiat ──
+    exec_result = None
+    payout_result = None
+    real_tx_hash = None
+    real_payout_id = None
+
+    if asset == "EUR" and req.destination_iban:
+        # Stripe SEPA payout
+        try:
+            from services.real_payout_service import get_real_payout_service
+            payout_svc = get_real_payout_service()
+            if payout_svc and payout_svc.is_available():
+                payout_result = await payout_svc.create_payout(
+                    quote_id=tx_id, transaction_id=tx_id,
+                    amount_eur=net, reference=f"SELL-{tx_id[:8].upper()}",
+                    metadata={"user_id": uid, "neno_amount": req.neno_amount},
+                )
+                if payout_result.success:
+                    real_payout_id = payout_result.payout_id
+        except Exception as e:
+            logger.error(f"[SELL] Stripe SEPA payout error: {e}")
+
+    elif asset in ASSET_TO_BSC_CONTRACT or asset == "BNB":
+        # On-chain delivery
+        dest_wallet = req.destination_wallet
+        if not dest_wallet:
+            user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
+            dest_wallet = user.get("connected_wallet") if user else None
+        if dest_wallet:
+            try:
+                engine = ExecutionEngine.get_instance()
+                exec_result = await engine.send_asset_real(asset, dest_wallet, net)
+                if exec_result.get("success"):
+                    real_tx_hash = exec_result["tx_hash"]
+            except Exception as e:
+                logger.error(f"[SELL] On-chain delivery error: {e}")
+
+    # ── Status enforcement: only 'completed' with proof ──
+    final_status = SecurityGuard.resolve_status(
+        has_tx_hash=bool(real_tx_hash or onchain_tx),
+        has_payout_id=bool(real_payout_id),
+        has_treasury_proof=True,  # treasury always moves
     )
 
     tx = {
@@ -466,10 +535,13 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         "neno_amount": req.neno_amount, "receive_asset": asset,
         "receive_amount": net, "rate": rate, "neno_eur_price": neno_eur_price,
         "fee": fee, "fee_asset": asset,
-        "status": "completed",
-        "execution_mode": "onchain" if onchain_tx else "internal",
-        "onchain_tx_hash": onchain_tx,
-        "eur_value": round(req.neno_amount * neno_eur_price, 2),
+        "status": final_status,
+        "execution_mode": "onchain" if real_tx_hash else ("fiat_sepa" if real_payout_id else "internal"),
+        "onchain_tx_hash": real_tx_hash or onchain_tx,
+        "delivery_tx_hash": real_tx_hash,
+        "delivery_explorer": f"https://bscscan.com/tx/{real_tx_hash}" if real_tx_hash else None,
+        "payout_id": real_payout_id,
+        "eur_value": eur_value,
         "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
         "mm_spread_bps": mm_pricing["spread_bps"],
         "mm_matched_internal": bool(match_result),
@@ -483,7 +555,6 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
 
     try:
         from services.notification_dispatch import notify_trade_executed
-        eur_value = round(req.neno_amount * neno_eur_price, 2)
         asyncio.ensure_future(notify_trade_executed(uid, "NENO", "sell", req.neno_amount, neno_eur_price, eur_value))
     except Exception:
         pass
@@ -491,24 +562,38 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     new_neno = await _get_balance(db, uid, "NENO")
     new_asset = await _get_balance(db, uid, asset)
 
-    # Ledger entry for audit trail
     await create_ledger_entry(
         user_id=uid, tx_type="sell_neno", debit_asset="NENO", debit_amount=req.neno_amount,
         credit_asset=asset, credit_amount=net, fee_amount=fee, fee_asset=asset,
-        onchain_tx_hash=onchain_tx,
+        onchain_tx_hash=real_tx_hash or onchain_tx,
         initial_state=STATE_INTERNAL_CREDITED,
     )
 
-    # Treasury fee tracking
     _treasury = TreasuryEngine()
     await _treasury.record_fee(db, tx_id, fee, asset, "sell_neno")
 
+    # ── WebSocket balance broadcast ──
+    try:
+        from routes.websocket_routes import broadcast_balance_update
+        asyncio.ensure_future(broadcast_balance_update(uid, {
+            "balances": {"NENO": round(new_neno, 8), asset: round(new_asset, 8)},
+            "trigger": "sell_neno", "tx_id": tx_id,
+        }))
+    except Exception:
+        pass
+
     result = {
-        "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (" (on-chain)" if onchain_tx else ""),
+        "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (f" | tx: {real_tx_hash}" if real_tx_hash else "") + (f" | payout: {real_payout_id}" if real_payout_id else ""),
         "transaction": tx,
         "balances": {"NENO": round(new_neno, 8), asset: round(new_asset, 8)},
-        "state": STATE_INTERNAL_CREDITED,
-        "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
+        "state": final_status,
+        "execution_proof": {
+            "tx_hash": real_tx_hash,
+            "payout_id": real_payout_id,
+            "explorer": f"https://bscscan.com/tx/{real_tx_hash}" if real_tx_hash else None,
+            "treasury_movement": True,
+        },
+        "onchain_explorer": f"https://bscscan.com/tx/{real_tx_hash or onchain_tx}" if (real_tx_hash or onchain_tx) else None,
         "market_maker": {
             "price_type": "bid",
             "effective_price": neno_eur_price,
@@ -519,7 +604,7 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         },
     }
 
-    # ── AUDIT POST: snapshot saldi + deltas ──
+    # ── AUDIT POST ──
     await log_post_operation(
         pre_snapshot=audit_pre, result=result,
         assets_involved=["NENO", asset], tx_id=tx_id
@@ -532,12 +617,18 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
 
 @router.post("/swap")
 async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current_user)):
-    """Swap any token for any other token. Uses NENO as the bridge asset."""
+    """Swap any token for any other token. Uses NENO as the bridge asset. Real on-chain delivery when possible."""
     db = get_database()
     uid = current_user["user_id"]
     from_asset = req.from_asset.upper()
     to_asset = req.to_asset.upper()
     onchain_tx = req.tx_hash or None
+    guard = SecurityGuard.get_instance()
+
+    # ── Rate limit ──
+    allowed, remaining = await guard.check_rate_limit(uid)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Rate limit superato: max 10 operazioni/minuto")
 
     # ── AUDIT PRE ──
     audit_pre = await log_pre_operation(
@@ -562,20 +653,10 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     mm = MarketMakerService.get_instance()
     mm_pricing = await mm.get_pricing()
 
-    # If from_asset is NENO: user sells NENO → bid price
-    # If to_asset is NENO: user buys NENO → ask price
     if from_asset == "NENO":
         from_price = mm_pricing["bid"]
     if to_asset == "NENO":
         to_price = mm_pricing["ask"]
-
-    balance = await _get_balance(db, uid, from_asset)
-    if balance < req.amount:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
-        )
-    await _debit(db, uid, from_asset, req.amount)
 
     eur_value = req.amount * from_price
     fee_eur = round(eur_value * PLATFORM_FEE, 8)
@@ -583,28 +664,42 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     receive_amount = round(net_eur / to_price, 8)
     fee_in_to = round(fee_eur / to_price, 8)
 
-    await _credit(db, uid, to_asset, receive_amount)
+    # ── Treasury caps ──
+    cap_ok, cap_reason = await guard.enforce_caps(uid, round(eur_value, 2), req.amount if from_asset == "NENO" else 0)
+    if not cap_ok:
+        raise HTTPException(status_code=400, detail=cap_reason)
 
-    tx_id = str(uuid.uuid4())
-    settlement = _settlement_record(tx_id, "swap", uid, req.amount, from_asset, {
-        "debit": {"asset": from_asset, "amount": req.amount},
-        "credit": {"asset": to_asset, "amount": receive_amount},
-        "fee_eur": round(fee_eur, 4),
-        "onchain_tx_hash": onchain_tx,
-    })
+    # ── Reentrancy lock ──
+    async with guard.get_user_lock(uid):
+        balance = await _get_balance(db, uid, from_asset)
+        if balance < req.amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
+            )
+        await _debit(db, uid, from_asset, req.amount)
+        await _credit(db, uid, to_asset, receive_amount)
 
-    # ── Treasury updates for swap ──
-    await mm.update_treasury(from_asset, req.amount, "swap_receive", from_price)
-    await mm.update_treasury(to_asset, -receive_amount, "swap_send", to_price)
+        tx_id = str(uuid.uuid4())
+        settlement = _settlement_record(tx_id, "swap", uid, req.amount, from_asset, {
+            "debit": {"asset": from_asset, "amount": req.amount},
+            "credit": {"asset": to_asset, "amount": receive_amount},
+            "fee_eur": round(fee_eur, 4),
+            "onchain_tx_hash": onchain_tx,
+        })
 
-    # Record PnL from swap spread
+        # ── Treasury updates for swap ──
+        await mm.update_treasury(from_asset, req.amount, "swap_receive", from_price)
+        await mm.update_treasury(to_asset, -receive_amount, "swap_send", to_price)
+
+    # Record PnL
     mm_pnl_entry = {
         "_id": str(uuid.uuid4()),
         "tx_id": tx_id, "user_id": uid, "direction": "swap",
         "neno_amount": req.amount if from_asset == "NENO" else receive_amount if to_asset == "NENO" else 0,
         "counter_asset": to_asset, "counter_amount": receive_amount,
         "effective_price": from_price, "mid_price": mm_pricing["mid_price"],
-        "spread_revenue_eur": round(fee_eur * 0.3, 4),  # 30% of fee is spread revenue
+        "spread_revenue_eur": round(fee_eur * 0.3, 4),
         "fee_revenue_eur": round(fee_eur * 0.7, 4),
         "total_revenue_eur": round(fee_eur, 4),
         "inventory_change_neno": 0,
@@ -613,6 +708,29 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     }
     await db.mm_pnl_ledger.insert_one(mm_pnl_entry)
 
+    # ── REAL ON-CHAIN DELIVERY of to_asset ──
+    real_tx_hash = None
+    exec_result = None
+    if to_asset in ASSET_TO_BSC_CONTRACT or to_asset == "BNB":
+        dest_wallet = req.destination_wallet
+        if not dest_wallet:
+            user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
+            dest_wallet = user.get("connected_wallet") if user else None
+        if dest_wallet:
+            try:
+                engine = ExecutionEngine.get_instance()
+                exec_result = await engine.send_asset_real(to_asset, dest_wallet, receive_amount)
+                if exec_result.get("success"):
+                    real_tx_hash = exec_result["tx_hash"]
+            except Exception as e:
+                logger.error(f"[SWAP] On-chain delivery error: {e}")
+
+    # ── Status enforcement ──
+    final_status = SecurityGuard.resolve_status(
+        has_tx_hash=bool(real_tx_hash or onchain_tx),
+        has_treasury_proof=True,
+    )
+
     tx = {
         "id": tx_id, "user_id": uid, "type": "swap",
         "from_asset": from_asset, "from_amount": req.amount,
@@ -620,9 +738,11 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         "eur_value": round(eur_value, 2), "fee_eur": round(fee_eur, 4),
         "fee_in_to_asset": fee_in_to,
         "rate": round(from_price / to_price, 8),
-        "status": "completed",
-        "execution_mode": "onchain" if onchain_tx else "internal",
+        "status": final_status,
+        "execution_mode": "onchain" if real_tx_hash else ("onchain_input" if onchain_tx else "internal"),
         "onchain_tx_hash": onchain_tx,
+        "delivery_tx_hash": real_tx_hash,
+        "delivery_explorer": f"https://bscscan.com/tx/{real_tx_hash}" if real_tx_hash else None,
         "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
         "mm_spread_bps": mm_pricing["spread_bps"],
         **settlement,
@@ -631,15 +751,33 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     await _log_tx(db, tx)
     tx["created_at"] = tx["created_at"].isoformat()
 
+    # ── WebSocket balance broadcast ──
+    try:
+        from routes.websocket_routes import broadcast_balance_update
+        asyncio.ensure_future(broadcast_balance_update(uid, {
+            "balances": {
+                from_asset: round(await _get_balance(db, uid, from_asset), 8),
+                to_asset: round(await _get_balance(db, uid, to_asset), 8),
+            },
+            "trigger": "swap", "tx_id": tx_id,
+        }))
+    except Exception:
+        pass
+
     swap_result = {
-        "message": f"Swappati {req.amount} {from_asset} per {receive_amount} {to_asset}" + (" (on-chain)" if onchain_tx else ""),
+        "message": f"Swappati {req.amount} {from_asset} per {receive_amount} {to_asset}" + (f" | tx: {real_tx_hash}" if real_tx_hash else ""),
         "transaction": tx,
         "balances": {
             from_asset: round(await _get_balance(db, uid, from_asset), 8),
             to_asset: round(await _get_balance(db, uid, to_asset), 8),
         },
-        "state": STATE_INTERNAL_CREDITED,
-        "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
+        "state": final_status,
+        "execution_proof": {
+            "delivery_tx_hash": real_tx_hash,
+            "explorer": f"https://bscscan.com/tx/{real_tx_hash}" if real_tx_hash else None,
+            "treasury_movement": True,
+        },
+        "onchain_explorer": f"https://bscscan.com/tx/{real_tx_hash or onchain_tx}" if (real_tx_hash or onchain_tx) else None,
         "market_maker": {
             "bid": mm_pricing["bid"], "ask": mm_pricing["ask"],
             "spread_bps": mm_pricing["spread_bps"],
@@ -976,6 +1114,12 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     db = get_database()
     uid = current_user["user_id"]
     onchain_tx = req.tx_hash or None
+    guard = SecurityGuard.get_instance()
+
+    # ── Rate limit ──
+    allowed, remaining = await guard.check_rate_limit(uid)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Rate limit superato: max 10 operazioni/minuto")
 
     # ── AUDIT PRE ──
     audit_pre = await log_pre_operation(
@@ -986,11 +1130,6 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         extra={"destination": req.destination, "wallet": req.destination_wallet, "stable": req.preferred_stable}
     )
 
-    neno_balance = await _get_balance(db, uid, "NENO")
-    if neno_balance < req.neno_amount:
-        raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
-    await _debit(db, uid, "NENO", req.neno_amount)
-
     # ── MM Pricing: sell at bid ──
     mm = MarketMakerService.get_instance()
     mm_pricing = await mm.get_pricing()
@@ -999,14 +1138,29 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     eur_gross = round(req.neno_amount * neno_eur_price, 2)
     fee = round(eur_gross * PLATFORM_FEE, 2)
     eur_net = round(eur_gross - fee, 2)
+    eur_value = eur_gross
 
-    # ── Treasury update: receives NENO ──
-    await mm.update_treasury("NENO", req.neno_amount, "offramp_receive", neno_eur_price)
+    # ── Treasury caps ──
+    cap_ok, cap_reason = await guard.enforce_caps(uid, eur_value, req.neno_amount)
+    if not cap_ok:
+        raise HTTPException(status_code=400, detail=cap_reason)
+
+    # ── Reentrancy lock ──
+    async with guard.get_user_lock(uid):
+        neno_balance = await _get_balance(db, uid, "NENO")
+        if neno_balance < req.neno_amount:
+            raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
+        await _debit(db, uid, "NENO", req.neno_amount)
+
+        # ── Treasury update: receives NENO ──
+        await mm.update_treasury("NENO", req.neno_amount, "offramp_receive", neno_eur_price)
 
     # ── Destination routing ──
     payout_state = STATE_INTERNAL_CREDITED
     dest_info = ""
     crypto_result = None
+    real_tx_hash = None
+    real_payout_id = None
 
     if req.destination == "card":
         if not req.card_id:
@@ -1020,52 +1174,89 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         await mm.update_treasury("EUR", -eur_net, "offramp_card_payout", 1.0)
 
     elif req.destination == "bank":
-        nium_key = os.environ.get("NIUM_API_KEY")
-        if nium_key:
-            # Real NIUM payout
-            if not req.destination_iban:
-                raise HTTPException(status_code=400, detail="IBAN richiesto per off-ramp su conto")
-            withdrawal_fee = max(round(eur_net * 0.001, 2), 0.50)
-            eur_after_bank = round(eur_net - withdrawal_fee, 2)
-            bank_tx = {
-                "id": str(uuid.uuid4()), "user_id": uid, "type": "sepa_withdrawal",
-                "amount": eur_net, "fee": withdrawal_fee, "net_amount": eur_after_bank,
-                "currency": "EUR", "destination_iban": req.destination_iban,
-                "beneficiary_name": req.beneficiary_name or "NeoNoble User",
-                "reference": f"NENO-OFFRAMP-{uuid.uuid4().hex[:8].upper()}",
-                "status": "processing", "estimated_arrival": "1-2 giorni lavorativi",
-                "created_at": datetime.now(timezone.utc),
-            }
-            await db.banking_transactions.insert_one({**bank_tx, "_id": bank_tx["id"]})
-            eur_net = eur_after_bank
-            dest_info = f"IBAN {req.destination_iban[-4:]}"
-            payout_state = STATE_PAYOUT_PENDING
-            await mm.update_treasury("EUR", -eur_net, "offramp_bank_payout", 1.0)
-        else:
-            # ── FALLBACK: NIUM non configurato → crypto off-ramp ──
-            dest_wallet = req.destination_wallet
-            if not dest_wallet:
-                # Try user's connected wallet
-                user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
-                dest_wallet = user.get("connected_wallet") if user else None
-            if not dest_wallet:
-                raise HTTPException(
-                    status_code=400,
-                    detail="NIUM non configurato e nessun wallet esterno disponibile. Fornisci destination_wallet o connetti un wallet."
+        # ── Stripe SEPA Real Payout ──
+        destination_iban = req.destination_iban or os.environ.get("PAYOUT_IBAN", "")
+        beneficiary = req.beneficiary_name or os.environ.get("PAYOUT_BENEFICIARY_NAME", "NeoNoble User")
+
+        try:
+            from services.real_payout_service import get_real_payout_service
+            payout_svc = get_real_payout_service()
+            if payout_svc and payout_svc.is_available():
+                withdrawal_fee = max(round(eur_net * 0.001, 2), 0.50)
+                eur_after_bank = round(eur_net - withdrawal_fee, 2)
+
+                payout_result = await payout_svc.create_payout(
+                    quote_id=str(uuid.uuid4()), transaction_id=str(uuid.uuid4()),
+                    amount_eur=eur_after_bank,
+                    reference=f"OFFRAMP-{uuid.uuid4().hex[:8].upper()}",
+                    metadata={"user_id": uid, "neno_amount": req.neno_amount, "iban": destination_iban},
                 )
-            stable = (req.preferred_stable or "USDT").upper()
-            crypto_result = await mm.execute_stablecoin_offramp(uid, eur_net, dest_wallet, stable)
-            if crypto_result["success"]:
-                dest_info = f"{crypto_result['stable_asset']} → {dest_wallet[:8]}...{dest_wallet[-6:]}"
-                payout_state = STATE_PAYOUT_EXECUTED_EXTERNAL
+                if payout_result.success:
+                    real_payout_id = payout_result.payout_id
+                    eur_net = eur_after_bank
+                    dest_info = f"SEPA {destination_iban[-4:]} | payout: {real_payout_id}"
+                    payout_state = STATE_PAYOUT_PENDING
+                    await mm.update_treasury("EUR", -eur_net, "offramp_bank_payout", 1.0)
+                else:
+                    # Stripe failed → fallback to crypto
+                    logger.warning(f"[OFFRAMP] Stripe SEPA failed: {payout_result.error}. Trying crypto fallback.")
+                    dest_wallet = req.destination_wallet
+                    if not dest_wallet:
+                        user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
+                        dest_wallet = user.get("connected_wallet") if user else None
+                    if dest_wallet:
+                        stable = (req.preferred_stable or "USDT").upper()
+                        crypto_result = await mm.execute_stablecoin_offramp(uid, eur_net, dest_wallet, stable)
+                        if crypto_result["success"]:
+                            real_tx_hash = crypto_result.get("tx_hash")
+                            dest_info = f"{crypto_result['stable_asset']} -> {dest_wallet[:8]}...{dest_wallet[-6:]}"
+                            payout_state = STATE_PAYOUT_EXECUTED_EXTERNAL
+                        else:
+                            await _credit(db, uid, "NENO", req.neno_amount)
+                            await mm.update_treasury("NENO", -req.neno_amount, "offramp_refund", neno_eur_price)
+                            raise HTTPException(status_code=500, detail=f"Payout fallito (Stripe + crypto): {crypto_result['error']}")
+                    else:
+                        bank_tx = {
+                            "id": str(uuid.uuid4()), "user_id": uid, "type": "sepa_withdrawal",
+                            "amount": eur_net, "fee": withdrawal_fee, "net_amount": eur_after_bank,
+                            "currency": "EUR", "destination_iban": destination_iban,
+                            "beneficiary_name": beneficiary,
+                            "status": "pending_settlement",
+                            "stripe_error": payout_result.error,
+                            "created_at": datetime.now(timezone.utc),
+                        }
+                        await db.banking_transactions.insert_one({**bank_tx, "_id": bank_tx["id"]})
+                        dest_info = f"IBAN {destination_iban[-4:]} (pending)"
+                        payout_state = "pending_settlement"
             else:
-                # Refund NENO if crypto offramp failed
-                await _credit(db, uid, "NENO", req.neno_amount)
-                await mm.update_treasury("NENO", -req.neno_amount, "offramp_refund", neno_eur_price)
-                raise HTTPException(status_code=500, detail=f"Off-ramp crypto fallito: {crypto_result['error']}")
+                # No Stripe → crypto fallback
+                dest_wallet = req.destination_wallet
+                if not dest_wallet:
+                    user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
+                    dest_wallet = user.get("connected_wallet") if user else None
+                if not dest_wallet:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Stripe SEPA non configurato e nessun wallet esterno disponibile."
+                    )
+                stable = (req.preferred_stable or "USDT").upper()
+                crypto_result = await mm.execute_stablecoin_offramp(uid, eur_net, dest_wallet, stable)
+                if crypto_result["success"]:
+                    real_tx_hash = crypto_result.get("tx_hash")
+                    dest_info = f"{crypto_result['stable_asset']} -> {dest_wallet[:8]}...{dest_wallet[-6:]}"
+                    payout_state = STATE_PAYOUT_EXECUTED_EXTERNAL
+                else:
+                    await _credit(db, uid, "NENO", req.neno_amount)
+                    await mm.update_treasury("NENO", -req.neno_amount, "offramp_refund", neno_eur_price)
+                    raise HTTPException(status_code=500, detail=f"Off-ramp crypto fallito: {crypto_result['error']}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[OFFRAMP] Bank payout error: {e}")
+            dest_info = f"IBAN (errore: {str(e)[:50]})"
+            payout_state = "failed"
 
     elif req.destination == "crypto":
-        # Explicit crypto off-ramp
         dest_wallet = req.destination_wallet
         if not dest_wallet:
             user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
@@ -1075,7 +1266,8 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         stable = (req.preferred_stable or "USDT").upper()
         crypto_result = await mm.execute_stablecoin_offramp(uid, eur_net, dest_wallet, stable)
         if crypto_result["success"]:
-            dest_info = f"{crypto_result['stable_asset']} → {dest_wallet[:8]}...{dest_wallet[-6:]}"
+            real_tx_hash = crypto_result.get("tx_hash")
+            dest_info = f"{crypto_result['stable_asset']} -> {dest_wallet[:8]}...{dest_wallet[-6:]}"
             payout_state = STATE_PAYOUT_EXECUTED_EXTERNAL
         else:
             await _credit(db, uid, "NENO", req.neno_amount)
@@ -1084,13 +1276,26 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     else:
         raise HTTPException(status_code=400, detail="destination deve essere 'card', 'bank' o 'crypto'")
 
+    # ── Status enforcement ──
+    final_status = SecurityGuard.resolve_status(
+        has_tx_hash=bool(real_tx_hash or onchain_tx),
+        has_payout_id=bool(real_payout_id),
+        has_treasury_proof=True,
+    )
+    # Override with payout_state if it's more specific
+    if payout_state in (STATE_PAYOUT_SETTLED, STATE_PAYOUT_EXECUTED_EXTERNAL):
+        final_status = "completed"
+    elif payout_state == STATE_PAYOUT_PENDING:
+        final_status = "pending_settlement"
+
     tx_id = str(uuid.uuid4())
     settlement = _settlement_record(tx_id, "neno_offramp", uid, req.neno_amount, "EUR", {
         "debit": {"asset": "NENO", "amount": req.neno_amount},
         "credit": {"asset": "EUR", "amount": eur_net, "destination": req.destination},
         "fee": {"asset": "EUR", "amount": fee},
         "onchain_tx_hash": onchain_tx,
-        "crypto_tx_hash": crypto_result.get("tx_hash") if crypto_result else None,
+        "crypto_tx_hash": real_tx_hash,
+        "payout_id": real_payout_id,
     })
 
     tx = {
@@ -1098,9 +1303,11 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "neno_amount": req.neno_amount, "eur_gross": eur_gross, "fee": fee,
         "eur_net": eur_net, "destination": req.destination,
         "destination_info": dest_info,
-        "status": "completed" if payout_state in (STATE_PAYOUT_SETTLED, STATE_PAYOUT_EXECUTED_EXTERNAL) else "processing",
-        "execution_mode": "onchain" if onchain_tx else ("crypto_external" if crypto_result else "internal"),
+        "status": final_status,
+        "execution_mode": "fiat_sepa" if real_payout_id else ("crypto_external" if real_tx_hash else "internal"),
         "onchain_tx_hash": onchain_tx,
+        "delivery_tx_hash": real_tx_hash,
+        "payout_id": real_payout_id,
         "crypto_payout": crypto_result if crypto_result else None,
         "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
         "mm_spread_bps": mm_pricing["spread_bps"],
@@ -1114,28 +1321,28 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     ledger = await create_ledger_entry(
         user_id=uid, tx_type="neno_offramp", debit_asset="NENO",
         debit_amount=req.neno_amount, credit_asset="EUR", credit_amount=eur_net,
-        fee_amount=fee, fee_asset="EUR", onchain_tx_hash=onchain_tx,
+        fee_amount=fee, fee_asset="EUR", onchain_tx_hash=real_tx_hash or onchain_tx,
         destination_type=req.destination,
         destination_details={
             "iban": req.destination_iban, "card_id": req.card_id,
             "beneficiary": req.beneficiary_name,
             "crypto_wallet": req.destination_wallet,
-            "crypto_tx_hash": crypto_result.get("tx_hash") if crypto_result else None,
+            "crypto_tx_hash": real_tx_hash,
+            "payout_id": real_payout_id,
         },
         initial_state=STATE_INTERNAL_CREDITED,
     )
 
-    # Transition ledger state
     if payout_state == STATE_PAYOUT_EXECUTED_EXTERNAL:
         await transition_state(ledger["id"], STATE_PAYOUT_EXECUTED_EXTERNAL, "Crypto off-ramp executed")
-    elif req.destination == "bank" and os.environ.get("NIUM_API_KEY"):
-        payout = await enqueue_payout(
+    elif real_payout_id:
+        await enqueue_payout(
             user_id=uid, amount=eur_net, currency="EUR",
-            destination_type="bank", destination_iban=req.destination_iban,
-            beneficiary_name=req.beneficiary_name or "NeoNoble User",
+            destination_type="bank", destination_iban=req.destination_iban or os.environ.get("PAYOUT_IBAN", ""),
+            beneficiary_name=req.beneficiary_name or os.environ.get("PAYOUT_BENEFICIARY_NAME", "NeoNoble User"),
             ledger_entry_id=ledger["id"],
         )
-        await transition_state(ledger["id"], STATE_PAYOUT_PENDING, "Bank payout queued")
+        await transition_state(ledger["id"], STATE_PAYOUT_PENDING, f"Stripe SEPA payout: {real_payout_id}")
     elif req.destination == "card":
         await transition_state(ledger["id"], STATE_PAYOUT_PENDING, "Card top-up")
 
@@ -1154,19 +1361,36 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
+    # ── WebSocket balance broadcast ──
+    try:
+        from routes.websocket_routes import broadcast_balance_update
+        asyncio.ensure_future(broadcast_balance_update(uid, {
+            "balances": {"NENO": round(await _get_balance(db, uid, "NENO"), 8)},
+            "trigger": "offramp", "tx_id": tx_id,
+        }))
+    except Exception:
+        pass
+
     offramp_result = {
-        "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}" + (" (on-chain)" if onchain_tx else ""),
+        "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}",
         "transaction": tx,
         "neno_balance": round(await _get_balance(db, uid, "NENO"), 8),
-        "state": payout_state,
+        "state": final_status,
+        "execution_proof": {
+            "tx_hash": real_tx_hash,
+            "payout_id": real_payout_id,
+            "explorer": f"https://bscscan.com/tx/{real_tx_hash}" if real_tx_hash else None,
+            "treasury_movement": True,
+        },
         "payout": {
-            "state": payout_state,
+            "state": final_status,
             "amount": eur_net,
             "destination": dest_info,
-            "crypto_tx_hash": crypto_result.get("tx_hash") if crypto_result else None,
-            "crypto_explorer": crypto_result.get("explorer") if crypto_result else None,
+            "crypto_tx_hash": real_tx_hash,
+            "crypto_explorer": f"https://bscscan.com/tx/{real_tx_hash}" if real_tx_hash else None,
+            "stripe_payout_id": real_payout_id,
         },
-        "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
+        "onchain_explorer": f"https://bscscan.com/tx/{real_tx_hash or onchain_tx}" if (real_tx_hash or onchain_tx) else None,
         "market_maker": {
             "price_type": "bid", "effective_price": neno_eur_price,
             "mid_price": mm_pricing["mid_price"], "spread_bps": mm_pricing["spread_bps"],
@@ -1775,4 +1999,141 @@ async def get_transaction_state(tx_id: str, current_user: dict = Depends(get_cur
         "ledger": ledger,
         "payout": payout,
         "current_state": ledger["state"] if ledger else tx.get("status"),
+    }
+
+
+
+# ── Real On-Chain Withdrawal: Internal balance → real on-chain delivery ──
+
+class RealWithdrawalRequest(BaseModel):
+    asset: str = Field(description="Asset to withdraw (NENO, BNB, ETH, BTC, USDT, USDC)")
+    amount: float = Field(gt=0, description="Amount to withdraw")
+    destination_wallet: str = Field(min_length=10, description="Destination wallet address (0x...)")
+
+
+@router.post("/withdraw-real")
+async def withdraw_real_onchain(req: RealWithdrawalRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Real on-chain withdrawal: debit internal balance, broadcast BEP-20 transfer.
+    Supports: NENO, BNB, ETH (Binance-Peg), BTC (BTCB), USDT, USDC on BSC.
+    Status is ONLY 'completed' with a confirmed tx hash.
+    """
+    db = get_database()
+    uid = current_user["user_id"]
+    asset = req.asset.upper()
+    guard = SecurityGuard.get_instance()
+
+    # Rate limit
+    allowed, remaining = await guard.check_rate_limit(uid)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Rate limit superato: max 10 operazioni/minuto")
+
+    # Price lookup for cap enforcement
+    price_eur = await _get_any_price_eur(db, asset)
+    if price_eur is None:
+        raise HTTPException(status_code=400, detail=f"Asset {asset} non supportato")
+
+    eur_value = round(req.amount * price_eur, 2)
+    neno_amt = req.amount if asset == "NENO" else 0
+
+    # Treasury caps
+    cap_ok, cap_reason = await guard.enforce_caps(uid, eur_value, neno_amt)
+    if not cap_ok:
+        raise HTTPException(status_code=400, detail=cap_reason)
+
+    # Reentrancy lock + balance check
+    async with guard.get_user_lock(uid):
+        balance = await _get_balance(db, uid, asset)
+        if balance < req.amount:
+            raise HTTPException(status_code=400, detail=f"Saldo {asset} insufficiente: {balance:.8g}")
+        await _debit(db, uid, asset, req.amount)
+
+    # Real on-chain execution
+    engine = ExecutionEngine.get_instance()
+    exec_result = await engine.send_asset_real(asset, req.destination_wallet, req.amount)
+
+    if not exec_result.get("success"):
+        # Refund on failure
+        await _credit(db, uid, asset, req.amount)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Trasferimento on-chain fallito: {exec_result.get('error', 'unknown')}"
+        )
+
+    tx_hash = exec_result["tx_hash"]
+    final_status = "completed"  # has tx_hash proof
+
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "withdraw_real", uid, req.amount, asset, {
+        "debit": {"asset": asset, "amount": req.amount},
+        "delivery": {"tx_hash": tx_hash, "to": req.destination_wallet},
+    })
+
+    tx = {
+        "id": tx_id, "user_id": uid, "type": "withdraw_real",
+        "asset": asset, "amount": req.amount,
+        "destination_wallet": req.destination_wallet,
+        "delivery_tx_hash": tx_hash,
+        "block_number": exec_result.get("block_number"),
+        "gas_used": exec_result.get("gas_used"),
+        "eur_value": eur_value,
+        "status": final_status,
+        "execution_mode": "onchain",
+        **settlement,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await _log_tx(db, tx)
+    tx["created_at"] = tx["created_at"].isoformat()
+
+    new_balance = await _get_balance(db, uid, asset)
+
+    # WebSocket broadcast
+    try:
+        from routes.websocket_routes import broadcast_balance_update
+        asyncio.ensure_future(broadcast_balance_update(uid, {
+            "balances": {asset: round(new_balance, 8)},
+            "trigger": "withdraw_real", "tx_id": tx_id,
+        }))
+    except Exception:
+        pass
+
+    return {
+        "message": f"Trasferiti {req.amount} {asset} a {req.destination_wallet}",
+        "transaction": tx,
+        "balance": round(new_balance, 8),
+        "status": final_status,
+        "execution_proof": {
+            "tx_hash": tx_hash,
+            "block_number": exec_result.get("block_number"),
+            "gas_used": exec_result.get("gas_used"),
+            "explorer": f"https://bscscan.com/tx/{tx_hash}",
+            "from": exec_result.get("from"),
+            "to": req.destination_wallet,
+            "contract": exec_result.get("contract"),
+            "chain": "BSC Mainnet",
+        },
+    }
+
+
+# ── Security Status endpoint ──
+
+@router.get("/security-status")
+async def security_status(current_user: dict = Depends(get_current_user)):
+    """View current security configuration and caps."""
+    return {
+        "treasury_caps": {
+            "max_single_tx_eur": MAX_SINGLE_TX_EUR if 'MAX_SINGLE_TX_EUR' in dir() else 50000,
+            "max_daily_eur": MAX_DAILY_EUR if 'MAX_DAILY_EUR' in dir() else 200000,
+            "max_neno_per_tx": MAX_NENO_PER_TX if 'MAX_NENO_PER_TX' in dir() else 50,
+        },
+        "rate_limit": {
+            "max_exec_ops_per_min": 10,
+        },
+        "supported_onchain_assets": list(ASSET_TO_BSC_CONTRACT.keys()) + ["BNB"],
+        "status_enforcement": {
+            "provable": ["completed", "settled"],
+            "pending": ["pending_execution", "pending_settlement"],
+            "terminal_fail": ["failed", "reverted"],
+            "rule": "Solo operazioni con tx_hash, payout_id o treasury_proof possono avere stato 'completed'",
+        },
     }

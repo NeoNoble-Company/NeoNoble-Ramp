@@ -23,8 +23,10 @@ logger = logging.getLogger(__name__)
 RATE_LIMITS: Dict[str, Tuple[int, int]] = {
     "/api/auth/login": (10, 60),          # 10 req/min
     "/api/auth/register": (5, 60),         # 5 req/min
-    "/api/neno-exchange/buy": (30, 60),    # 30 req/min
-    "/api/neno-exchange/sell": (30, 60),
+    "/api/neno-exchange/buy": (10, 60),    # 10 req/min (execution-level)
+    "/api/neno-exchange/sell": (10, 60),
+    "/api/neno-exchange/swap": (10, 60),
+    "/api/neno-exchange/offramp": (10, 60),
     "/api/margin/": (60, 60),              # 60 req/min
     "/api/advanced-orders/": (60, 60),
     "/api/kyc/verify-document-ai": (5, 60),# 5 req/min (AI calls)

@@ -151,11 +151,33 @@ export default function NenoExchange() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Live balance polling every 5 seconds for real-time sync
+  // WebSocket balance sync + polling fallback
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    // Try WebSocket for real-time updates
+    let ws = null;
+    let wsConnected = false;
+    try {
+      const wsBase = BACKEND_URL.replace(/^http/, 'ws');
+      ws = new WebSocket(`${wsBase}/ws/balances/${token}`);
+      ws.onopen = () => { wsConnected = true; console.log('[WS] Balance sync connected'); };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'balance_update' && msg.data?.balances) {
+            setBalances(prev => ({ ...prev, ...msg.data.balances }));
+          }
+        } catch (e) { /* ignore parse errors */ }
+      };
+      ws.onclose = () => { wsConnected = false; };
+      ws.onerror = () => { wsConnected = false; };
+    } catch (e) { /* WebSocket not available */ }
+
+    // Fallback polling every 5s (only when WS is not connected)
     const interval = setInterval(() => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+      if (wsConnected) return; // Skip polling when WS is active
       const authHdr = { Authorization: `Bearer ${token}` };
       xhrFetch(`${BACKEND_URL}/api/wallet/balances`, { headers: authHdr })
         .then(bData => {
@@ -166,7 +188,11 @@ export default function NenoExchange() {
         .catch(() => {});
       if (refetchNenoBalance) refetchNenoBalance();
     }, 5000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      if (ws) ws.close();
+    };
   }, [refetchNenoBalance]);
 
   // Live NENO quote
@@ -271,6 +297,7 @@ export default function NenoExchange() {
       }
 
       const tx = data.transaction || {};
+      const proof = data.execution_proof || {};
       setResult({
         ok: true,
         msg: data.message || 'Operazione completata',
@@ -281,10 +308,14 @@ export default function NenoExchange() {
         blockExplorer: onchainHash ? `https://bscscan.com/tx/${onchainHash}` : tx.settlement_explorer,
         contractExplorer: tx.settlement_contract_explorer,
         network: tx.settlement_network || 'BSC Mainnet',
-        isOnChain: !!onchainHash,
-        onchainExplorer: data.onchain_explorer,
+        isOnChain: !!onchainHash || !!proof.tx_hash,
+        onchainExplorer: data.onchain_explorer || (proof.explorer),
+        deliveryTxHash: proof.tx_hash || tx.delivery_tx_hash,
+        deliveryExplorer: proof.explorer || (tx.delivery_tx_hash ? `https://bscscan.com/tx/${tx.delivery_tx_hash}` : null),
+        payoutId: proof.payout_id || tx.payout_id,
         payout: data.payout || null,
         market_maker: data.market_maker || null,
+        executionProof: proof,
       });
       // Immediately update local balances with the response data
       if (data.balances) {
@@ -300,10 +331,16 @@ export default function NenoExchange() {
   };
 
   const handleBuy = () => exec('/api/neno-exchange/buy', { pay_asset: asset, neno_amount: parseFloat(nenoAmount) });
-  const handleSell = () => exec('/api/neno-exchange/sell', { receive_asset: asset, neno_amount: parseFloat(nenoAmount) }, true);
+  const handleSell = () => {
+    const body = { receive_asset: asset, neno_amount: parseFloat(nenoAmount) };
+    if (address) body.destination_wallet = address;
+    exec('/api/neno-exchange/sell', body, true);
+  };
   const handleSwap = () => {
     const isFromNeno = swapFrom.toUpperCase() === 'NENO';
-    exec('/api/neno-exchange/swap', { from_asset: swapFrom, to_asset: swapTo, amount: parseFloat(swapAmt) }, isFromNeno);
+    const body = { from_asset: swapFrom, to_asset: swapTo, amount: parseFloat(swapAmt) };
+    if (address) body.destination_wallet = address;
+    exec('/api/neno-exchange/swap', body, isFromNeno);
   };
   const handleOfframp = () => {
     const body = { neno_amount: parseFloat(nenoAmount), destination: offrampDest };
@@ -485,19 +522,27 @@ export default function NenoExchange() {
             {result.ok && result.state && (
               <div className="mt-1 flex items-center gap-2">
                 <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  result.state === 'completed' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
                   result.state === 'internal_credited' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  result.state === 'pending_execution' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                  result.state === 'pending_settlement' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
                   result.state === 'payout_pending' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
                   result.state === 'payout_sent' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                   result.state === 'payout_settled' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
                   result.state === 'payout_executed_external' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' :
+                  result.state === 'failed' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
                   'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
                 }`} data-testid="tx-state-badge">
+                  {result.state === 'completed' && 'Completato (con proof)'}
                   {result.state === 'internal_credited' && 'Accreditato internamente'}
+                  {result.state === 'pending_execution' && 'Esecuzione pendente'}
+                  {result.state === 'pending_settlement' && 'Settlement pendente'}
                   {result.state === 'payout_pending' && 'Payout in coda'}
                   {result.state === 'payout_sent' && 'Payout inviato'}
                   {result.state === 'payout_settled' && 'Payout completato'}
                   {result.state === 'payout_executed_external' && 'Payout Crypto Eseguito'}
-                  {!['internal_credited','payout_pending','payout_sent','payout_settled','payout_executed_external'].includes(result.state) && result.state}
+                  {result.state === 'failed' && 'Fallito'}
+                  {!['completed','internal_credited','pending_execution','pending_settlement','payout_pending','payout_sent','payout_settled','payout_executed_external','failed'].includes(result.state) && result.state}
                 </span>
               </div>
             )}
@@ -563,6 +608,31 @@ export default function NenoExchange() {
                     <ExternalLink className="w-2.5 h-2.5" /> Verifica su BscScan
                   </a>
                 )}
+              </div>
+            )}
+            {result.ok && result.deliveryTxHash && !result.settlementHash && (
+              <div className="mt-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 text-[10px] space-y-1" data-testid="delivery-proof-info">
+                <div className="text-emerald-400 font-bold flex items-center gap-1"><Shield className="w-3 h-3" /> Delivery On-Chain Reale</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-600">Delivery TX:</span>
+                  <span className="font-mono text-emerald-400">{result.deliveryTxHash.slice(0, 14)}...{result.deliveryTxHash.slice(-8)}</span>
+                  <button onClick={() => { navigator.clipboard.writeText(result.deliveryTxHash); setCopiedHash(result.deliveryTxHash); setTimeout(() => setCopiedHash(null), 2000); }}
+                    className="p-0.5 hover:bg-emerald-500/20 rounded">
+                    {copiedHash === result.deliveryTxHash ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 opacity-60" />}
+                  </button>
+                </div>
+                <a href={result.deliveryExplorer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400">
+                  <ExternalLink className="w-2.5 h-2.5" /> Verifica su BscScan
+                </a>
+              </div>
+            )}
+            {result.ok && result.payoutId && (
+              <div className="mt-2 bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-[10px] space-y-1" data-testid="fiat-payout-info">
+                <div className="text-blue-400 font-bold flex items-center gap-1"><Building className="w-3 h-3" /> Payout SEPA Reale</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-blue-600">Payout ID:</span>
+                  <span className="font-mono text-blue-400">{result.payoutId}</span>
+                </div>
               </div>
             )}
           </div>

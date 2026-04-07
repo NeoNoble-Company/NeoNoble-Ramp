@@ -24,7 +24,24 @@ NENO_DECIMALS = 18
 WBNB = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
 BUSD = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56"
 USDT_BSC = "0x55d398326f99059fF775485246999027B3197955"
+USDC_BSC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"
 PANCAKE_ROUTER_V2 = "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+
+# Binance-Peg wrapped tokens on BSC (real value, tradable on PancakeSwap)
+WETH_BSC = "0x2170Ed0880ac9A755fd29B2688956BD959F933F8"  # Binance-Peg ETH
+BTCB_BSC = "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c"  # Binance-Peg BTCB
+
+# Map internal asset names to BSC BEP-20 contract addresses
+ASSET_TO_BSC_CONTRACT = {
+    "NENO": NENO_CONTRACT,
+    "USDT": USDT_BSC,
+    "USDC": USDC_BSC,
+    "ETH": WETH_BSC,
+    "BTC": BTCB_BSC,
+}
+ASSET_DECIMALS = {
+    "NENO": 18, "USDT": 18, "USDC": 18, "ETH": 18, "BTC": 18,
+}
 
 ERC20_ABI = [
     {"inputs": [{"name": "account", "type": "address"}], "name": "balanceOf", "outputs": [{"type": "uint256"}], "stateMutability": "view", "type": "function"},
@@ -66,12 +83,12 @@ class ExecutionEngine:
             acct = Account.from_mnemonic(mnemonic)
             self._hot_wallet = acct.address
             self._hot_key = acct.key.hex()
-            logger.info(f"[EXEC] Hot wallet loaded: {self._hot_wallet}")
+            logger.info(f"[EXEC] Hot wallet loaded: {self._hot_wallet} (key: ***masked***)")
         elif pk:
             acct = Account.from_key(pk)
             self._hot_wallet = acct.address
             self._hot_key = pk
-            logger.info(f"[EXEC] Hot wallet from PK: {self._hot_wallet}")
+            logger.info(f"[EXEC] Hot wallet from PK: {self._hot_wallet} (key: ***masked***)")
 
     def _get_web3(self) -> Optional[Web3]:
         if self._w3 and self._w3.is_connected():
@@ -202,6 +219,81 @@ class ExecutionEngine:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    async def send_bep20(self, asset: str, to_address: str, amount: float) -> dict:
+        """
+        Send any BEP-20 token (ETH/BTC/USDT/USDC/NENO) from hot wallet.
+        Looks up the contract address automatically from ASSET_TO_BSC_CONTRACT.
+        Returns a real tx hash verifiable on BscScan.
+        """
+        asset_upper = asset.upper()
+        contract_addr = ASSET_TO_BSC_CONTRACT.get(asset_upper)
+        if not contract_addr:
+            return {"success": False, "error": f"Asset {asset} non supportato per trasferimento on-chain BSC"}
+
+        if asset_upper == "NENO":
+            return await self.send_neno(to_address, amount)
+
+        w3 = self._get_web3()
+        if not w3 or not self._hot_key:
+            return {"success": False, "error": "No web3 connection or private key"}
+
+        try:
+            to_addr = Web3.to_checksum_address(to_address)
+            decimals = ASSET_DECIMALS.get(asset_upper, 18)
+            contract = w3.eth.contract(address=Web3.to_checksum_address(contract_addr), abi=ERC20_ABI)
+            raw_amount = int(Decimal(str(amount)) * Decimal(10 ** decimals))
+
+            balance = contract.functions.balanceOf(self._hot_wallet).call()
+            if balance < raw_amount:
+                human_bal = float(Decimal(balance) / Decimal(10 ** decimals))
+                return {"success": False, "error": f"Insufficient {asset_upper} in hot wallet: {human_bal} < {amount}"}
+
+            async with self._nonce_lock:
+                nonce = w3.eth.get_transaction_count(self._hot_wallet, "pending")
+                tx = contract.functions.transfer(to_addr, raw_amount).build_transaction({
+                    "chainId": 56,
+                    "gas": 100000,
+                    "gasPrice": w3.eth.gas_price,
+                    "nonce": nonce,
+                    "from": self._hot_wallet,
+                })
+                signed = w3.eth.account.sign_transaction(tx, self._hot_key)
+                tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+                tx_hash_hex = tx_hash.hex()
+
+            logger.info(f"[EXEC] BEP-20 transfer sent: {amount} {asset_upper} to {to_addr} | tx: {tx_hash_hex}")
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+            success = receipt["status"] == 1
+
+            return {
+                "success": success,
+                "tx_hash": tx_hash_hex,
+                "block_number": receipt["blockNumber"],
+                "gas_used": receipt["gasUsed"],
+                "explorer": f"https://bscscan.com/tx/{tx_hash_hex}",
+                "from": self._hot_wallet,
+                "to": to_addr,
+                "amount": amount,
+                "asset": asset_upper,
+                "contract": contract_addr,
+                "chain": "BSC Mainnet",
+            }
+        except Exception as e:
+            logger.error(f"[EXEC] BEP-20 {asset_upper} transfer failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def send_asset_real(self, asset: str, to_address: str, amount: float) -> dict:
+        """
+        Unified real on-chain dispatch: BNB native or any BEP-20.
+        This is the single entry point for all real on-chain delivery.
+        """
+        asset_upper = asset.upper()
+        if asset_upper == "BNB":
+            return await self.send_bnb(to_address, amount)
+        if asset_upper in ASSET_TO_BSC_CONTRACT:
+            return await self.send_bep20(asset_upper, to_address, amount)
+        return {"success": False, "error": f"Asset {asset} non consegnabile on-chain via BSC"}
 
 
 class LiquidityEngine:
