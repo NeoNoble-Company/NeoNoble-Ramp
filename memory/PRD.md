@@ -1,39 +1,74 @@
-# NeoNoble Ramp - Product Requirements Document
+# NeoNoble Ramp - PRD (Product Requirements Document)
 
-## Status: PRODUCTION-GRADE INFRASTRUCTURE — FULLY OPERATIONAL
+## Original Problem Statement
+Enterprise-grade fintech platform for crypto/fiat bridge. Multi-chain wallet with custom token creation, internal exchange (NENO), real on-chain execution, NIUM banking integration, DCA trading, PDF compliance exports, and Market Maker activation.
 
-### Real On-Chain Execution Verified
-- tx_hash: `0x329adc7ab981dfd5b182f6a4769ef06b902044df1ad046e48e65ac6672d48f23`
-- 1 NENO sent from hot wallet to user wallet on BSC Mainnet
-- Hot wallet: 397 NENO + 0.00484 BNB remaining
+## Core Architecture
+- **Backend**: FastAPI + MongoDB (Motor) + Web3.py (BSC Mainnet)
+- **Frontend**: React + Tailwind + Wagmi/WalletConnect
+- **Blockchain**: BSC Mainnet, Alchemy RPC, real on-chain execution
+- **Market Maker**: Treasury-backed counterparty, dynamic bid/ask pricing
 
-### Architecture
-- Backend: FastAPI + MongoDB + Web3.py + Alchemy BSC RPC
-- Frontend: React.js + Tailwind + Wagmi/WalletConnect
-- Settlement: 5-state machine (on_chain_executed → internal_credited → payout_pending → payout_sent → payout_settled)
-- Background: Blockchain listener (3s), payout processor (30s), reconciliation (15s), DCA bot (60s)
+## Implemented Features
 
-### Infrastructure Layer
-1. **Execution Engine**: Real on-chain tx signing with hot wallet private key
-2. **Settlement Ledger**: Double-entry with full state_history audit trail
-3. **Payout Queue**: IBAN/SEPA/Card with retry logic (3x), auto-execute with NIUM
-4. **Treasury**: PnL tracking, fee collection (60 EUR collected), risk assessment
-5. **Liquidity Engine**: Internal netting, JIT routing, PancakeSwap V2 multi-hop
-6. **Multi-Rail Settlement**: Crypto + Stablecoin + SEPA + Card
-7. **WebSocket**: Balance stream at /api/ws/balances/{token}
-8. **API-as-a-Service**: /api/infra/* endpoints for multi-tenant
+### Phase 1-4 (Complete)
+- Custom Token Creation with on-chain deployment
+- NENO Buy/Sell/Swap with dynamic pricing
+- Multi-chain wallet with deposit/withdrawal
+- Off-ramp to card/bank/crypto
+- Settlement Ledger with state machine
+- Real on-chain execution engine
+- WebSocket real-time balance updates
+- Force balance sync
+- DCA Trading Bot
+- PDF Compliance Reports
+- SMS Notifications (Twilio-ready)
 
-### Key Endpoints
-- `POST /api/infra/execute/send-onchain` - Real on-chain transfer
-- `GET /api/infra/hot-wallet` - On-chain balances
-- `GET /api/infra/settlement/rails` - 4-rail status
-- `GET /api/infra/treasury/pnl` - P&L + risk
-- `GET /api/infra/health` - System health
-- `GET /api/infra/routing/quote` - DEX routing
-- `GET /api/infra/netting-stats` - Internalization rate
-- All NENO exchange endpoints with state tracking
+### Phase 5 - Market Maker (Complete - April 2026)
+- **Market Maker Pricing Engine**: Dynamic bid/ask with spread based on inventory skew + volatility
+  - Base spread: 50 bps (0.5%)
+  - Skew adjustment: +/- based on treasury NENO inventory vs target (500)
+  - Volatility adjustment: based on 24h trading volume
+  - Total spread: 20-200 bps range
+- **Treasury as Real Counterparty**: Single source of truth for platform finances
+  - Per-asset tracking: NENO, EUR, USDT, USDC, BNB
+  - Available vs locked amounts
+  - On-chain sync from hot wallet (BSC)
+  - Source tracking: on_chain / provider / internal
+- **Internal Matching Engine**: Netting before treasury
+  - Order book with pending/filled states
+  - Gas savings on matched orders
+- **PnL Accounting**: Revenue separated from inventory changes
+  - Spread revenue (bid/ask difference)
+  - Fee revenue (0.3% platform fee)
+  - Legacy fee tracking maintained
+- **Off-Ramp Fallback**: USDT/USDC crypto when NIUM not configured
+  - Sends stablecoin to user's BSC wallet
+  - State: payout_executed_external
+- **Risk Dashboard**: risk_level, inventory_ratio, spread monitoring
+- **API Endpoints**:
+  - GET /api/market-maker/pricing (public)
+  - GET /api/market-maker/treasury (auth)
+  - GET /api/market-maker/pnl (auth)
+  - GET /api/market-maker/risk (auth)
+  - GET /api/market-maker/order-book (auth)
 
-### Test Results
-- Iteration 30: 21/21 passed (100%)
-- Real on-chain execution confirmed
-- Treasury fees: 60 EUR collected
+## Key DB Collections
+- `treasury_inventory`: {asset, amount, locked_amount, available_amount, source, last_synced}
+- `mm_pnl_ledger`: {tx_id, direction, spread_revenue_eur, fee_revenue_eur, inventory_change_neno}
+- `mm_order_book`: {type, asset, amount, remaining_amount, status, price_eur}
+- `settlement_ledger`: {tx_id, state, debit_asset, credit_asset, fee_amount}
+
+## Current State
+- Treasury: NENO=397 (on-chain), BNB=0.00484, EUR=0, USDT=0, USDC=0
+- Pricing: Bid ~9815, Ask ~9985, Mid 10000, Spread ~170 bps
+- Risk: Low (inventory_ratio=0.794)
+
+## Pending / Blocked
+- NIUM Integration: Awaiting templateId from user portal
+- BSC RPC Error: Non-critical background log noise (P2)
+
+## Backlog
+- Microservices architecture split (P1)
+- Dynamic NENO pricing from real order book (P2)
+- Referral system with NENO bonuses (P2)
