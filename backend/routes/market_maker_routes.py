@@ -80,8 +80,8 @@ async def get_order_book(current_user: dict = Depends(get_current_user)):
 
 @router.get("/risk")
 async def get_risk_dashboard(current_user: dict = Depends(get_current_user)):
-    """Get Market Maker risk dashboard: inventory skew, exposure, limits."""
-    from services.market_maker_service import MarketMakerService
+    """Get Market Maker risk dashboard."""
+    from services.market_maker_service import MarketMakerService, TREASURY_USER_EMAIL
     mm = MarketMakerService.get_instance()
     pricing = await mm.get_pricing()
     treasury = await mm.get_treasury_inventory()
@@ -97,6 +97,7 @@ async def get_risk_dashboard(current_user: dict = Depends(get_current_user)):
         risk_level = "medium"
 
     return {
+        "treasury_owner": TREASURY_USER_EMAIL,
         "risk_level": risk_level,
         "neno_inventory": round(neno_amount, 4),
         "target_inventory": target,
