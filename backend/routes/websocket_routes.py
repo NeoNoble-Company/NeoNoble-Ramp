@@ -583,3 +583,100 @@ async def websocket_portfolio_tracker(websocket: WebSocket, token: str):
                 await asyncio.sleep(2)
     except WebSocketDisconnect:
         pass
+
+
+
+# ── Balance Stream WebSocket ──
+
+_balance_subscribers: Dict[str, Set[WebSocket]] = {}  # user_id -> connections
+
+
+@router.websocket("/balances/{token}")
+async def ws_balance_stream(websocket: WebSocket, token: str):
+    """Real-time balance updates via WebSocket. Token is JWT auth token."""
+    import jwt
+    import os
+
+    secret = os.environ.get("JWT_SECRET", "")
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        user_id = payload.get("user_id")
+        if not user_id:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Auth failed")
+        return
+
+    await websocket.accept()
+    if user_id not in _balance_subscribers:
+        _balance_subscribers[user_id] = set()
+    _balance_subscribers[user_id].add(websocket)
+
+    logger.info(f"[WS] Balance stream connected: {user_id}")
+
+    try:
+        from database.mongodb import get_database
+
+        while True:
+            try:
+                db = get_database()
+                wallets = await db.wallets.find(
+                    {"user_id": user_id, "balance": {"$gt": 0}}, {"_id": 0}
+                ).to_list(100)
+
+                balances = {}
+                for w in wallets:
+                    balances[w["asset"]] = round(w["balance"], 8)
+
+                recent_txs = await db.neno_transactions.find(
+                    {"user_id": user_id}, {"_id": 0}
+                ).sort("created_at", -1).to_list(5)
+
+                for t in recent_txs:
+                    if "created_at" in t and hasattr(t["created_at"], "isoformat"):
+                        t["created_at"] = t["created_at"].isoformat()
+
+                pending_payouts = await db.payout_queue.count_documents(
+                    {"user_id": user_id, "state": "payout_pending"}
+                )
+
+                await websocket.send_json({
+                    "type": "balance_update",
+                    "data": {
+                        "balances": balances,
+                        "recent_transactions": recent_txs,
+                        "pending_payouts": pending_payouts,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                })
+
+                await asyncio.sleep(2)
+
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.debug(f"[WS] Balance stream error: {e}")
+                await asyncio.sleep(3)
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if user_id in _balance_subscribers:
+            _balance_subscribers[user_id].discard(websocket)
+            if not _balance_subscribers[user_id]:
+                del _balance_subscribers[user_id]
+        logger.info(f"[WS] Balance stream disconnected: {user_id}")
+
+
+async def broadcast_balance_update(user_id: str, data: dict):
+    """Broadcast balance update to all connected WebSocket clients for a user."""
+    if user_id not in _balance_subscribers:
+        return
+    dead = set()
+    for ws in _balance_subscribers[user_id]:
+        try:
+            await ws.send_json({"type": "balance_update", "data": data})
+        except Exception:
+            dead.add(ws)
+    _balance_subscribers[user_id] -= dead

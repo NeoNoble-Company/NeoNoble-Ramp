@@ -31,6 +31,7 @@ from services.settlement_ledger import (
     STATE_ONCHAIN_EXECUTED, STATE_INTERNAL_CREDITED, STATE_PAYOUT_PENDING,
     STATE_PAYOUT_SENT, STATE_PAYOUT_SETTLED,
 )
+from services.execution_engine import ExecutionEngine, TreasuryEngine, LiquidityEngine
 
 logger = logging.getLogger(__name__)
 
@@ -421,6 +422,10 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         onchain_tx_hash=onchain_tx,
         initial_state=STATE_INTERNAL_CREDITED,
     )
+
+    # Treasury fee tracking
+    _treasury = TreasuryEngine()
+    await _treasury.record_fee(db, tx_id, fee, asset, "sell_neno")
 
     return {
         "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (" (on-chain)" if onchain_tx else ""),

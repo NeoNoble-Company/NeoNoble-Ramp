@@ -737,6 +737,10 @@ api_router.include_router(advanced_analytics_router)
 api_router.include_router(montecarlo_router)
 api_router.include_router(pep_router)
 
+# Infrastructure API
+from routes.infra_routes import router as infra_router
+api_router.include_router(infra_router)
+
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
 
