@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle, Coins, Zap } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -36,6 +36,10 @@ export default function AdminDashboard() {
   const [recentTxs, setRecentTxs] = useState([]);
   const [realTreasury, setRealTreasury] = useState(null);
   const [virtualMetrics, setVirtualMetrics] = useState(null);
+  const [circleBalances, setCircleBalances] = useState(null);
+  const [circleAutoOp, setCircleAutoOp] = useState(null);
+  const [circleSegregation, setCircleSegregation] = useState(null);
+  const [circleFailSafe, setCircleFailSafe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
 
@@ -48,7 +52,7 @@ export default function AdminDashboard() {
     setLoading(true);
     const h = headers();
     try {
-      const [fin, p, str, saf, br, sec, tc, txs, rt, vm] = await Promise.all([
+      const [fin, p, str, saf, br, sec, tc, txs, rt, vm, cb, cao, csg, cfs] = await Promise.all([
         xhrFetch(`${API}/api/institutional/financials`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/pnl?period_hours=24`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/structure`, { headers: h }).catch(() => null),
@@ -59,11 +63,17 @@ export default function AdminDashboard() {
         xhrFetch(`${API}/api/neno-exchange/transactions?limit=10`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/strategic/real-treasury`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/strategic/virtual-metrics`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/circle/wallets/balances`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/circle/auto-op/status`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/circle/segregation/summary`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/circle/fail-safe/report`, { headers: h }).catch(() => null),
       ]);
       setFinancials(fin); setPnl(p); setStructure(str); setSafeguarding(saf);
       setBankingRails(br); setSecurityStatus(sec); setTreasuryCheck(tc);
       setRecentTxs(txs?.transactions || []);
       setRealTreasury(rt); setVirtualMetrics(vm);
+      setCircleBalances(cb); setCircleAutoOp(cao);
+      setCircleSegregation(csg); setCircleFailSafe(cfs);
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [headers]);
@@ -72,6 +82,7 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'circle-usdc', label: 'Circle USDC', icon: Coins },
     { id: 'real-virtual', label: 'Real vs Virtual', icon: Shield },
     { id: 'treasury', label: 'Treasury & Risk', icon: Lock },
     { id: 'structure', label: 'IPO Structure', icon: Building },
@@ -150,6 +161,117 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-[10px] text-zinc-500">Coverage</div>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'circle-usdc' && (
+          <div className="space-y-4" data-testid="circle-usdc-tab">
+            {/* Wallet Balances */}
+            <div className="bg-zinc-900/80 border border-cyan-500/20 rounded-xl p-4" data-testid="circle-wallets-panel">
+              <h3 className="text-sm font-bold text-cyan-400 mb-3 flex items-center gap-1.5"><Coins className="w-4 h-4" /> Wallet Segregati USDC (On-Chain Verificato)</h3>
+              {circleBalances?.wallets ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {Object.entries(circleBalances.wallets).map(([role, data]) => (
+                    <div key={role} className={`bg-zinc-800/50 border rounded-lg p-3 ${
+                      role === 'client' ? 'border-blue-500/30' : role === 'treasury' ? 'border-emerald-500/30' : 'border-amber-500/30'
+                    }`} data-testid={`circle-wallet-${role}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-bold uppercase ${
+                          role === 'client' ? 'text-blue-400' : role === 'treasury' ? 'text-emerald-400' : 'text-amber-400'
+                        }`}>{role}</span>
+                        {data.verified ? <CheckCircle className="w-3 h-3 text-emerald-500" /> : <AlertTriangle className="w-3 h-3 text-red-500" />}
+                      </div>
+                      <div className="text-xl font-bold text-white font-mono">{data.balance?.toFixed(6) || '0.000000'} USDC</div>
+                      <div className="text-[9px] text-zinc-600 mt-1 font-mono truncate">{data.address}</div>
+                      <div className="text-[9px] text-zinc-600">Chain: {data.chain} | Block: {data.block || 'N/A'}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="text-xs text-zinc-500">Caricamento...</div>}
+              {circleBalances && (
+                <div className="mt-3 bg-zinc-800/30 rounded-lg p-2 flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-500">Totale USDC On-Chain</span>
+                  <span className="text-sm font-bold text-cyan-400">{circleBalances.total_usdc?.toFixed(6) || '0.000000'} USDC</span>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-Operation Loop */}
+            <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-4" data-testid="auto-op-panel">
+              <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-1.5">
+                <Zap className="w-4 h-4" /> Auto-Operation Loop
+                {circleAutoOp?.running && <span className="ml-2 text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full animate-pulse">ACTIVE</span>}
+              </h3>
+              {circleAutoOp && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-emerald-400">{circleAutoOp.cycle_count}</div>
+                    <div className="text-[10px] text-zinc-500">Cicli Completati</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-cyan-400">{circleAutoOp.operations_executed}</div>
+                    <div className="text-[10px] text-zinc-500">Operazioni Eseguite</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-red-400">{circleAutoOp.operations_blocked}</div>
+                    <div className="text-[10px] text-zinc-500">Operazioni Bloccate</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-amber-400">{circleAutoOp.total_pnl_usdc?.toFixed(6)}</div>
+                    <div className="text-[10px] text-zinc-500">PnL Reale (USDC)</div>
+                  </div>
+                </div>
+              )}
+              {circleAutoOp?.fail_safes && (
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {Object.entries(circleAutoOp.fail_safes).map(([key, val]) => (
+                    <div key={key} className="bg-zinc-800/30 rounded p-1.5 flex items-center gap-1">
+                      {val === true ? <CheckCircle className="w-3 h-3 text-emerald-500 flex-shrink-0" /> : <span className="text-[9px] text-zinc-400">{val}</span>}
+                      <span className="text-[9px] text-zinc-500">{key.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Segregation Summary */}
+            <div className="bg-zinc-900/80 border border-blue-500/20 rounded-xl p-4" data-testid="segregation-panel">
+              <h3 className="text-sm font-bold text-blue-400 mb-3">Wallet Segregation</h3>
+              {circleSegregation && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-white">{circleSegregation.total_movements}</div>
+                    <div className="text-[10px] text-zinc-500">Movimenti Totali</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-emerald-400">{circleSegregation.confirmed}</div>
+                    <div className="text-[10px] text-zinc-500">Confermati</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-amber-400">{circleSegregation.pending}</div>
+                    <div className="text-[10px] text-zinc-500">In Attesa</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Fail-Safe Report */}
+            {circleFailSafe && (
+              <div className="bg-zinc-900/80 border border-red-500/20 rounded-xl p-4" data-testid="fail-safe-panel">
+                <h3 className="text-sm font-bold text-red-400 mb-3 flex items-center gap-1.5"><Lock className="w-4 h-4" /> Fail-Safe & Reality Check</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {circleFailSafe.rules && Object.entries(circleFailSafe.rules).map(([rule, active]) => (
+                    <div key={rule} className="flex items-center gap-2 bg-zinc-800/50 rounded-lg p-2">
+                      {active ? <CheckCircle className="w-3 h-3 text-emerald-500" /> : <AlertTriangle className="w-3 h-3 text-red-500" />}
+                      <span className="text-[10px] text-zinc-400">{rule.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-[10px] text-zinc-600">
+                  Cicli totali: {circleFailSafe.statistics?.total_cycles} | Operazioni bloccate: {circleFailSafe.statistics?.blocked_operations}
                 </div>
               </div>
             )}

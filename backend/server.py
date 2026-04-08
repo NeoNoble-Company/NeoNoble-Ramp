@@ -200,6 +200,9 @@ from routes.exchange_orders_routes import router as exchange_orders_router
 from routes.institutional_routes import router as institutional_router
 from routes.strategic_routes import router as strategic_router
 
+# Import Circle USDC routes
+from routes.circle_routes import router as circle_router
+
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
 
@@ -362,6 +365,11 @@ async def lifespan(app: FastAPI):
     init_task.cancel()
     logger.info("NeoNoble Ramp API shutting down...")
     try:
+        from services.auto_operation_loop import AutoOperationLoop
+        await AutoOperationLoop.get_instance().stop()
+    except Exception:
+        pass
+    try:
         from services.background_scheduler import stop_scheduler
         await stop_scheduler()
     except Exception:
@@ -444,6 +452,17 @@ async def _background_init():
             
             # KYC risk score indexes
             await db.kyc_risk_scores.create_index("user_id", unique=True)
+            
+            # Circle USDC & Wallet Segregation indexes
+            await db.circle_audit_log.create_index([("timestamp", -1)])
+            await db.circle_audit_log.create_index("operation")
+            await db.wallet_segregation_movements.create_index([("created_at", -1)])
+            await db.wallet_segregation_movements.create_index("rule_type")
+            await db.wallet_segregation_movements.create_index("from_wallet")
+            await db.wallet_segregation_movements.create_index("to_wallet")
+            await db.auto_op_metrics.create_index([("cycle", -1)])
+            await db.auto_op_events.create_index([("timestamp", -1)])
+            await db.auto_op_state.create_index("key", unique=True)
             
             logger.info("[INIT] Database indexes created")
         except Exception as e:
@@ -656,6 +675,24 @@ async def _background_init():
     
     logger.info("[INIT] Background initialization complete - all services ready")
 
+    # Initialize Circle USDC Wallet Service
+    try:
+        from services.circle_wallet_service import CircleWalletService
+        circle_svc = CircleWalletService.get_instance()
+        await circle_svc.initialize()
+        logger.info("[INIT] Circle USDC Wallet Service initialized")
+    except Exception as e:
+        logger.warning(f"[INIT] Circle USDC initialization failed: {e}")
+
+    # Start Auto-Operation Loop (autonomous monitoring)
+    try:
+        from services.auto_operation_loop import AutoOperationLoop
+        auto_op = AutoOperationLoop.get_instance()
+        await auto_op.start()
+        logger.info("[INIT] Auto-Operation Loop started — autonomous mode active")
+    except Exception as e:
+        logger.warning(f"[INIT] Auto-Operation Loop failed to start: {e}")
+
     # Initialize Market Maker Treasury
     try:
         from services.market_maker_service import MarketMakerService
@@ -692,7 +729,8 @@ async def root():
             "blockchain_monitoring": bool(os.environ.get('BSC_RPC_URL')),
             "hd_wallet": bool(os.environ.get('NENO_WALLET_MNEMONIC')),
             "stripe_payouts": bool(os.environ.get('STRIPE_SECRET_KEY')),
-            "por_engine": True  # Always available
+            "por_engine": True,
+            "circle_usdc": bool(os.environ.get('CIRCLE_API_KEY')),
         },
         "por_engine": {
             "name": "NeoNoble Internal PoR",
@@ -755,6 +793,7 @@ api_router.include_router(market_maker_router)
 api_router.include_router(exchange_orders_router)
 api_router.include_router(institutional_router)
 api_router.include_router(strategic_router)
+api_router.include_router(circle_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router

@@ -287,8 +287,25 @@ class ExecutionEngine:
         """
         Unified real on-chain dispatch: BNB native or any BEP-20.
         This is the single entry point for all real on-chain delivery.
+        Also hooks into wallet segregation for USDC operations.
         """
         asset_upper = asset.upper()
+
+        # USDC operations get routed through segregation engine
+        if asset_upper == "USDC":
+            try:
+                from services.wallet_segregation_engine import WalletSegregationEngine
+                seg = WalletSegregationEngine.get_instance()
+                await seg.record_movement(
+                    from_role="treasury",
+                    to_role="external",
+                    amount_usdc=amount,
+                    rule_type="outbound_transfer",
+                    metadata={"to_address": to_address, "asset": "USDC"},
+                )
+            except Exception as e:
+                logger.warning(f"[EXEC] USDC segregation log failed: {e}")
+
         if asset_upper == "BNB":
             return await self.send_bnb(to_address, amount)
         if asset_upper in ASSET_TO_BSC_CONTRACT:
