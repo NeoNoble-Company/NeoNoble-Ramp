@@ -13,6 +13,22 @@ function getAuthHeaders() {
   return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` };
 }
 
+/* XHR-based fetch wrappers — prevent "body stream already read" errors */
+function xhrFetchJson(url, options = {}) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    const hdrs = options.headers || getAuthHeaders();
+    Object.entries(hdrs).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.onload = () => {
+      try { resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, status: xhr.status, data: {} }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, status: 0, data: {} });
+    xhr.send(options.body || null);
+  });
+}
+
 const INTERVALS = [
   { id: '1m', label: '1m' }, { id: '5m', label: '5m' }, { id: '15m', label: '15m' },
   { id: '1h', label: '1H' }, { id: '4h', label: '4H' }, { id: '1d', label: '1D' },
@@ -64,8 +80,7 @@ function TradingChart({ pairId, interval }) {
     if (!chartRef.current) return;
     (async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/trading/pairs/${pairId}/candles?interval=${interval}&limit=200`);
-        const data = await res.json();
+        const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/pairs/${pairId}/candles?interval=${interval}&limit=200`);
         const candles = (data.candles || []).map(c => ({
           time: c.time, open: c.open, high: c.high, low: c.low, close: c.close
         }));
@@ -88,8 +103,8 @@ function OrderBook({ pairId }) {
 
   const fetchOB = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/pairs/${pairId}/orderbook?depth=12`);
-      setOrderbook(await res.json());
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/pairs/${pairId}/orderbook?depth=12`);
+      setOrderbook(data || { bids: [], asks: [] });
     } catch (e) { console.error(e); }
   }, [pairId]);
 
@@ -163,10 +178,10 @@ function OrderForm({ pairId, pair, onOrderPlaced }) {
       const body = { pair_id: pairId, side, order_type: orderType, quantity: parseFloat(quantity) };
       if ((orderType === 'limit' || orderType === 'stop_limit') && price) body.price = parseFloat(price);
       if (['stop_loss', 'take_profit', 'stop_limit'].includes(orderType) && stopPrice) body.stop_price = parseFloat(stopPrice);
-      const res = await fetch(`${BACKEND_URL}/api/trading/orders`, {
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/trading/orders`, {
         method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body)
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) throw new Error(data.detail || 'Order failed');
       setResult({ success: true, msg: data.message });
       setQuantity('');
@@ -246,8 +261,7 @@ function RecentTrades({ pairId }) {
 
   const fetchTrades = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/trades/${pairId}?limit=20`);
-      const data = await res.json();
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/trades/${pairId}?limit=20`);
       setTrades(data.trades || []);
     } catch (e) { console.error(e); }
   }, [pairId]);
@@ -287,8 +301,7 @@ function MyOrders({ pairId, refreshKey }) {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/orders/my?pair_id=${pairId}&limit=20`, { headers: getAuthHeaders() });
-      const data = await res.json();
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/orders/my?pair_id=${pairId}&limit=20`, { headers: getAuthHeaders() });
       setOrders(data.orders || []);
     } catch (e) { console.error(e); }
   }, [pairId]);
@@ -297,7 +310,7 @@ function MyOrders({ pairId, refreshKey }) {
 
   const handleCancel = async (orderId) => {
     try {
-      await fetch(`${BACKEND_URL}/api/trading/orders/cancel`, {
+      await xhrFetchJson(`${BACKEND_URL}/api/trading/orders/cancel`, {
         method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ order_id: orderId })
       });
       fetchOrders();
@@ -414,8 +427,7 @@ export default function TradingPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/trading/pairs`);
-        const data = await res.json();
+        const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/pairs`);
         setPairs(data.pairs || []);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
@@ -424,8 +436,8 @@ export default function TradingPage() {
 
   const fetchTicker = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/pairs/${selectedPair}/ticker`);
-      setTicker(await res.json());
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/pairs/${selectedPair}/ticker`);
+      setTicker(data || {});
     } catch (e) { console.error(e); }
   }, [selectedPair]);
 

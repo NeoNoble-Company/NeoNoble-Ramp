@@ -715,6 +715,30 @@ async def _background_init():
     
     logger.info("[INIT] Background initialization complete - all services ready")
 
+    # Ensure admin role for designated admin user
+    try:
+        admin_email = "massimo.fornara.2212@gmail.com"
+        admin_user = await db.users.find_one({"email": admin_email})
+        if admin_user:
+            if admin_user.get("role") != "ADMIN":
+                await db.users.update_one({"email": admin_email}, {"$set": {"role": "ADMIN"}})
+                logger.info(f"[INIT] Admin role assigned to {admin_email}")
+            else:
+                logger.info(f"[INIT] {admin_email} already has ADMIN role")
+        else:
+            logger.info(f"[INIT] Admin user {admin_email} not found — will be assigned on next login/register")
+    except Exception as e:
+        logger.warning(f"[INIT] Admin role assignment failed: {e}")
+
+    # Initialize idempotency indexes
+    try:
+        from services.idempotency_service import IdempotencyService
+        idem_svc = IdempotencyService.get_instance()
+        await idem_svc.ensure_indexes()
+        logger.info("[INIT] Idempotency indexes created")
+    except Exception as e:
+        logger.warning(f"[INIT] Idempotency index creation failed: {e}")
+
     # Initialize Circle USDC Wallet Service
     try:
         from services.circle_wallet_service import CircleWalletService

@@ -239,9 +239,20 @@ async def _debit(db, user_id: str, asset: str, amount: float):
 
 
 async def _log_tx(db, tx: dict):
+    """Safe transaction logging — prevents E11000 duplicate key errors via upsert."""
     doc = {**tx}
-    doc["_id"] = doc["id"]
-    await db.neno_transactions.insert_one(doc)
+    tx_id = doc.get("id", "")
+    if not tx_id:
+        return
+    doc.pop("_id", None)
+    try:
+        await db.neno_transactions.update_one(
+            {"_id": tx_id},
+            {"$setOnInsert": doc},
+            upsert=True,
+        )
+    except Exception as e:
+        logger.error(f"[SAFE_LOG] Transaction log error for {tx_id}: {e}")
 
 
 # ── Dynamic Price endpoint ──
@@ -325,89 +336,118 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
     uid = current_user["user_id"]
     asset = req.pay_asset.upper()
 
-    price_eur = await _get_any_price_eur(db, asset)
-    if price_eur is None:
-        raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
-
-    # ── Market Maker Pricing: user buys at ASK ──
-    mm = MarketMakerService.get_instance()
-    mm_pricing = await mm.get_pricing()
-    neno_eur_price = mm_pricing["ask"]  # user pays ask
-    mid_price = mm_pricing["mid_price"]
-
-    # Try internal matching first
-    match_result = await mm.try_internal_match("buy", "NENO", req.neno_amount, neno_eur_price)
-
-    rate = neno_eur_price / price_eur
-    gross_cost = round(req.neno_amount * rate, 8)
-    fee = round(gross_cost * PLATFORM_FEE, 8)
-    total_cost = round(gross_cost + fee, 8)
-
-    balance = await _get_balance(db, uid, asset)
-    if balance < total_cost:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo {asset} insufficiente: {balance:.8g} disponibile, {total_cost:.8g} necessario",
-        )
-
-    await _debit(db, uid, asset, total_cost)
-    await _credit(db, uid, "NENO", req.neno_amount)
-
-    tx_id = str(uuid.uuid4())
-    settlement = _settlement_record(tx_id, "buy_neno", uid, req.neno_amount, "NENO", {
-        "debit": {"asset": asset, "amount": total_cost},
-        "credit": {"asset": "NENO", "amount": req.neno_amount},
-        "fee": {"asset": asset, "amount": fee},
-    })
-
-    # ── Treasury counterparty execution ──
-    mm_result = await mm.execute_as_counterparty(
-        tx_id=tx_id, user_id=uid, direction="buy",
-        neno_amount=req.neno_amount, counter_asset=asset,
-        counter_amount=total_cost, fee_amount=fee, fee_asset=asset,
-        effective_price=neno_eur_price, mid_price=mid_price,
-    )
-
-    tx = {
-        "id": tx_id, "user_id": uid, "type": "buy_neno",
-        "neno_amount": req.neno_amount, "pay_asset": asset,
-        "pay_amount": total_cost, "rate": rate, "neno_eur_price": neno_eur_price,
-        "fee": fee, "fee_asset": asset, "status": "completed",
-        "eur_value": round(req.neno_amount * neno_eur_price, 2),
-        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
-        "mm_spread_bps": mm_pricing["spread_bps"],
-        "mm_matched_internal": bool(match_result),
-        "mm_counterparty": mm_result.get("counterparty", "treasury"),
-        "mm_spread_revenue": mm_result.get("spread_revenue_eur", 0),
-        **settlement,
-        "created_at": datetime.now(timezone.utc),
-    }
-    await _log_tx(db, tx)
-    tx["created_at"] = tx["created_at"].isoformat()
+    # ── Idempotency check ──
+    from services.idempotency_service import IdempotencyService
+    idem = IdempotencyService.get_instance()
+    idem_key = idem.generate_key(uid, "buy_neno", asset=asset, neno_amount=str(req.neno_amount))
+    lock_result = await idem.check_and_lock(idem_key, "buy_neno", uid)
+    if not lock_result["locked"]:
+        existing = lock_result.get("existing", {})
+        if existing.get("status") == "completed":
+            return existing.get("result_summary", {"message": "Operazione già eseguita (idempotency)", "duplicate": True})
 
     try:
-        from services.notification_dispatch import notify_trade_executed
-        eur_value = round(req.neno_amount * neno_eur_price, 2)
-        asyncio.ensure_future(notify_trade_executed(uid, "NENO", "buy", req.neno_amount, neno_eur_price, eur_value))
-    except Exception:
-        pass
+        price_eur = await _get_any_price_eur(db, asset)
+        if price_eur is None:
+            raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    new_neno = await _get_balance(db, uid, "NENO")
-    new_pay = await _get_balance(db, uid, asset)
+        # ── Market Maker Pricing: user buys at ASK ──
+        mm = MarketMakerService.get_instance()
+        mm_pricing = await mm.get_pricing()
+        neno_eur_price = mm_pricing["ask"]  # user pays ask
+        mid_price = mm_pricing["mid_price"]
 
-    return {
-        "message": f"Acquistati {req.neno_amount} NENO per {total_cost} {asset}",
-        "transaction": tx,
-        "balances": {"NENO": round(new_neno, 8), asset: round(new_pay, 8)},
-        "market_maker": {
-            "price_type": "ask",
-            "effective_price": neno_eur_price,
-            "mid_price": mid_price,
-            "spread_bps": mm_pricing["spread_bps"],
-            "matched_internal": bool(match_result),
-            "spread_revenue": mm_result.get("spread_revenue_eur", 0),
-        },
-    }
+        # Try internal matching first
+        match_result = await mm.try_internal_match("buy", "NENO", req.neno_amount, neno_eur_price)
+
+        rate = neno_eur_price / price_eur
+        gross_cost = round(req.neno_amount * rate, 8)
+        fee = round(gross_cost * PLATFORM_FEE, 8)
+        total_cost = round(gross_cost + fee, 8)
+
+        balance = await _get_balance(db, uid, asset)
+        if balance < total_cost:
+            # Hybrid Liquidity: route through engine instead of hard fail
+            from services.hybrid_liquidity_engine import HybridLiquidityEngine
+            hybrid = HybridLiquidityEngine.get_instance()
+            hybrid_result = await hybrid.execute_with_priority(uid, "buy", "NENO", req.neno_amount, neno_eur_price)
+            if hybrid_result.get("success") and hybrid_result.get("execution_type") == "dex_fallback":
+                logger.info(f"[BUY] Hybrid liquidity DEX fallback for user {uid}")
+            # Still need user funds — raise if truly insufficient
+            if balance < total_cost:
+                await idem.mark_failed(idem_key, "insufficient_balance")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Saldo {asset} insufficiente: {balance:.8g} disponibile, {total_cost:.8g} necessario",
+                )
+
+        await _debit(db, uid, asset, total_cost)
+        await _credit(db, uid, "NENO", req.neno_amount)
+
+        tx_id = str(uuid.uuid4())
+        settlement = _settlement_record(tx_id, "buy_neno", uid, req.neno_amount, "NENO", {
+            "debit": {"asset": asset, "amount": total_cost},
+            "credit": {"asset": "NENO", "amount": req.neno_amount},
+            "fee": {"asset": asset, "amount": fee},
+        })
+
+        # ── Treasury counterparty execution ──
+        mm_result = await mm.execute_as_counterparty(
+            tx_id=tx_id, user_id=uid, direction="buy",
+            neno_amount=req.neno_amount, counter_asset=asset,
+            counter_amount=total_cost, fee_amount=fee, fee_asset=asset,
+            effective_price=neno_eur_price, mid_price=mid_price,
+        )
+
+        tx = {
+            "id": tx_id, "user_id": uid, "type": "buy_neno",
+            "neno_amount": req.neno_amount, "pay_asset": asset,
+            "pay_amount": total_cost, "rate": rate, "neno_eur_price": neno_eur_price,
+            "fee": fee, "fee_asset": asset, "status": "completed",
+            "eur_value": round(req.neno_amount * neno_eur_price, 2),
+            "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+            "mm_spread_bps": mm_pricing["spread_bps"],
+            "mm_matched_internal": bool(match_result),
+            "mm_counterparty": mm_result.get("counterparty", "treasury"),
+            "mm_spread_revenue": mm_result.get("spread_revenue_eur", 0),
+            **settlement,
+            "created_at": datetime.now(timezone.utc),
+        }
+        await _log_tx(db, tx)
+        tx["created_at"] = tx["created_at"].isoformat()
+
+        try:
+            from services.notification_dispatch import notify_trade_executed
+            eur_value = round(req.neno_amount * neno_eur_price, 2)
+            asyncio.ensure_future(notify_trade_executed(uid, "NENO", "buy", req.neno_amount, neno_eur_price, eur_value))
+        except Exception:
+            pass
+
+        new_neno = await _get_balance(db, uid, "NENO")
+        new_pay = await _get_balance(db, uid, asset)
+
+        result = {
+            "message": f"Acquistati {req.neno_amount} NENO per {total_cost} {asset}",
+            "transaction": tx,
+            "balances": {"NENO": round(new_neno, 8), asset: round(new_pay, 8)},
+            "market_maker": {
+                "price_type": "ask",
+                "effective_price": neno_eur_price,
+                "mid_price": mid_price,
+                "spread_bps": mm_pricing["spread_bps"],
+                "matched_internal": bool(match_result),
+                "spread_revenue": mm_result.get("spread_revenue_eur", 0),
+            },
+        }
+
+        await idem.mark_completed(idem_key, tx_id, result)
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await idem.mark_failed(idem_key, str(e))
+        raise
 
 
 # ── Sell NENO ──
@@ -418,6 +458,16 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     uid = current_user["user_id"]
     asset = req.receive_asset.upper()
     guard = SecurityGuard.get_instance()
+
+    # ── Idempotency check ──
+    from services.idempotency_service import IdempotencyService
+    idem = IdempotencyService.get_instance()
+    idem_key = idem.generate_key(uid, "sell_neno", asset=asset, neno_amount=str(req.neno_amount))
+    lock_result = await idem.check_and_lock(idem_key, "sell_neno", uid)
+    if not lock_result["locked"]:
+        existing = lock_result.get("existing", {})
+        if existing.get("status") == "completed":
+            return existing.get("result_summary", {"message": "Operazione già eseguita (idempotency)", "duplicate": True})
 
     # ── Rate limit ──
     allowed, remaining = await guard.check_rate_limit(uid)
@@ -637,6 +687,16 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     onchain_tx = req.tx_hash or None
     guard = SecurityGuard.get_instance()
 
+    # ── Idempotency check ──
+    from services.idempotency_service import IdempotencyService
+    idem = IdempotencyService.get_instance()
+    idem_key = idem.generate_key(uid, "swap", from_asset=from_asset, to_asset=to_asset, amount=str(req.amount))
+    lock_result = await idem.check_and_lock(idem_key, "swap", uid)
+    if not lock_result["locked"]:
+        existing = lock_result.get("existing", {})
+        if existing.get("status") == "completed":
+            return existing.get("result_summary", {"message": "Operazione già eseguita (idempotency)", "duplicate": True})
+
     # ── Rate limit ──
     allowed, remaining = await guard.check_rate_limit(uid)
     if not allowed:
@@ -781,7 +841,7 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         from services.realtime_sync_service import EventBus
         asyncio.ensure_future(EventBus.get_instance().emit("trade_executed", {
             "type": "swap", "tx_id": tx_id, "user_id": uid,
-            "fee": fee, "fee_asset": from_asset, "eur_value": eur_value,
+            "fee": fee_eur, "fee_asset": from_asset, "eur_value": eur_value,
             "tx_hash": real_tx_hash,
         }))
     except Exception:
@@ -1138,6 +1198,16 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     uid = current_user["user_id"]
     onchain_tx = req.tx_hash or None
     guard = SecurityGuard.get_instance()
+
+    # ── Idempotency check ──
+    from services.idempotency_service import IdempotencyService
+    idem = IdempotencyService.get_instance()
+    idem_key = idem.generate_key(uid, "offramp", neno_amount=str(req.neno_amount), destination=req.destination)
+    lock_result = await idem.check_and_lock(idem_key, "offramp", uid)
+    if not lock_result["locked"]:
+        existing = lock_result.get("existing", {})
+        if existing.get("status") == "completed":
+            return existing.get("result_summary", {"message": "Operazione già eseguita (idempotency)", "duplicate": True})
 
     # ── Rate limit ──
     allowed, remaining = await guard.check_rate_limit(uid)

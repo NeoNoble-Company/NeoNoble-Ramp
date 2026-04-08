@@ -16,6 +16,22 @@ function getAuthHeaders() {
   };
 }
 
+/* XHR-based fetch wrappers — prevent "body stream already read" errors */
+function xhrFetchJson(url, options = {}) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    const hdrs = options.headers || getAuthHeaders();
+    Object.entries(hdrs).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.onload = () => {
+      try { resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, status: xhr.status, data: {} }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, status: 0, data: {} });
+    xhr.send(options.body || null);
+  });
+}
+
 const STATUS_COLORS = {
   active: 'bg-green-500/20 text-green-400 border-green-500/30',
   pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
@@ -55,8 +71,7 @@ export default function CardManagement() {
 
   const fetchCards = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: getAuthHeaders() });
-      const data = await res.json();
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/cards/my-cards`, { headers: getAuthHeaders() });
       setCards(data.cards || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -68,8 +83,7 @@ export default function CardManagement() {
     setTxLoading(true);
     setSelectedCard(cardId);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/cards/${cardId}/transactions`, { headers: getAuthHeaders() });
-      const data = await res.json();
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/cards/${cardId}/transactions`, { headers: getAuthHeaders() });
       setTransactions(data.transactions || []);
     } catch (e) { console.error(e); }
     finally { setTxLoading(false); }
@@ -78,10 +92,9 @@ export default function CardManagement() {
   const handleFreeze = async (cardId) => {
     setActionLoading(cardId);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/cards/${cardId}/freeze`, {
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/cards/${cardId}/freeze`, {
         method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({})
       });
-      const data = await res.json();
       setSuccess(data.message);
       await fetchCards();
     } catch (e) { setError(e.message); }
@@ -92,7 +105,7 @@ export default function CardManagement() {
     if (!window.confirm('Sei sicuro di voler cancellare questa carta permanentemente?')) return;
     setActionLoading(cardId);
     try {
-      await fetch(`${BACKEND_URL}/api/cards/${cardId}/cancel`, {
+      await xhrFetchJson(`${BACKEND_URL}/api/cards/${cardId}/cancel`, {
         method: 'POST', headers: getAuthHeaders()
       });
       setSuccess('Carta cancellata');
@@ -300,14 +313,13 @@ function CreateCardModal({ onClose, onSuccess }) {
         }
         body.shipping_address = address;
       }
-      const res = await fetch(`${BACKEND_URL}/api/cards/create`, {
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/cards/create`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(body)
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Errore nella creazione');
+        throw new Error(res.data?.detail || 'Errore nella creazione');
       }
       onSuccess();
     } catch (e) { setError(e.message); }
@@ -401,14 +413,13 @@ function TopUpModal({ card, onClose, onSuccess }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/cards/${card.id}/top-up`, {
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/cards/${card.id}/top-up`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ amount_crypto: parseFloat(amount), crypto_asset: asset })
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Errore nel top-up');
+        throw new Error(res.data?.detail || 'Errore nel top-up');
       }
       onSuccess();
     } catch (e) { setError(e.message); }

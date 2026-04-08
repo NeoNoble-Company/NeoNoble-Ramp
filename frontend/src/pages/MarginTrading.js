@@ -10,6 +10,22 @@ import {
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
 
+/* XHR-based fetch wrappers — prevent "body stream already read" errors */
+function xhrFetchJson(url, options = {}) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    const hdrs = options.headers || headers();
+    Object.entries(hdrs).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.onload = () => {
+      try { resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, status: xhr.status, data: {} }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, status: 0, data: {} });
+    xhr.send(options.body || null);
+  });
+}
+
 const PAIRS = ['BTC-EUR','ETH-EUR','BNB-EUR','NENO-EUR','SOL-EUR','XRP-EUR','ADA-EUR','DOGE-EUR'];
 const INTERVALS = [
   { id: '1m', label: '1m' }, { id: '5m', label: '5m' }, { id: '15m', label: '15m' },
@@ -451,15 +467,14 @@ export default function MarginTrading() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [aRes, pRes, oRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/trading/margin/account`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/trading/margin/positions`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/trading/orders/active`, { headers: headers() }),
+      const [aData, pData, oData] = await Promise.all([
+        xhrFetchJson(`${BACKEND_URL}/api/trading/margin/account`, { headers: headers() }),
+        xhrFetchJson(`${BACKEND_URL}/api/trading/margin/positions`, { headers: headers() }),
+        xhrFetchJson(`${BACKEND_URL}/api/trading/orders/active`, { headers: headers() }),
       ]);
-      const [aData, pData, oData] = await Promise.all([aRes.json(), pRes.json(), oRes.json()]);
-      setAccount(aData.account);
-      setPositions(pData.positions || []);
-      setAdvOrders(oData.orders || []);
+      setAccount(aData.data?.account);
+      setPositions(pData.data?.positions || []);
+      setAdvOrders(oData.data?.orders || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -467,17 +482,16 @@ export default function MarginTrading() {
   const fetchCandles = useCallback(async () => {
     setCandleLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/pairs/${pair}/candles?interval=${interval}&limit=300`);
-      const data = await res.json();
-      setCandles(data.candles || []);
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/pairs/${pair}/candles?interval=${interval}&limit=300`);
+      setCandles(data?.candles || []);
     } catch (e) { console.error(e); }
     finally { setCandleLoading(false); }
   }, [pair, interval]);
 
   const fetchTicker = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/pairs/${pair}/ticker`);
-      setTicker(await res.json());
+      const { data } = await xhrFetchJson(`${BACKEND_URL}/api/trading/pairs/${pair}/ticker`);
+      setTicker(data || {});
     } catch (e) { console.error(e); }
   }, [pair]);
 
@@ -491,7 +505,7 @@ export default function MarginTrading() {
 
   const createAccount = async () => {
     try {
-      await fetch(`${BACKEND_URL}/api/trading/margin/account`, { method: 'POST', headers: headers(), body: JSON.stringify({ leverage: 20 }) });
+      await xhrFetchJson(`${BACKEND_URL}/api/trading/margin/account`, { method: 'POST', headers: headers(), body: JSON.stringify({ leverage: 20 }) });
       fetchData();
     } catch (e) { console.error(e); }
   };
@@ -500,10 +514,9 @@ export default function MarginTrading() {
     setResult(null);
     const url = depAction === 'deposit' ? '/api/trading/margin/deposit' : '/api/trading/margin/withdraw';
     try {
-      const res = await fetch(`${BACKEND_URL}${url}`, { method: 'POST', headers: headers(), body: JSON.stringify({ asset: 'EUR', amount: parseFloat(depAmount) }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message }); setShowDeposit(false); setDepAmount(''); fetchData();
+      const res = await xhrFetchJson(`${BACKEND_URL}${url}`, { method: 'POST', headers: headers(), body: JSON.stringify({ asset: 'EUR', amount: parseFloat(depAmount) }) });
+      if (!res.ok) throw new Error(res.data?.detail || 'Errore');
+      setResult({ ok: true, msg: res.data?.message }); setShowDeposit(false); setDepAmount(''); fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
 
@@ -513,10 +526,9 @@ export default function MarginTrading() {
       const body = { pair_id: pair, side, quantity: parseFloat(qty), leverage: parseFloat(leverage) };
       if (sl) body.stop_loss = parseFloat(sl);
       if (tp) body.take_profit = parseFloat(tp);
-      const res = await fetch(`${BACKEND_URL}/api/trading/margin/open`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message }); setShowOpen(false); setQty(''); setSl(''); setTp(''); fetchData();
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/trading/margin/open`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(res.data?.detail || 'Errore');
+      setResult({ ok: true, msg: res.data?.message }); setShowOpen(false); setQty(''); setSl(''); setTp(''); fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
     finally { setOpening(false); }
   };
@@ -524,10 +536,9 @@ export default function MarginTrading() {
   const handleClose = async (posId) => {
     setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/margin/close`, { method: 'POST', headers: headers(), body: JSON.stringify({ position_id: posId }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message }); fetchData();
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/trading/margin/close`, { method: 'POST', headers: headers(), body: JSON.stringify({ position_id: posId }) });
+      if (!res.ok) throw new Error(res.data?.detail || 'Errore');
+      setResult({ ok: true, msg: res.data?.message }); fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
 
@@ -545,10 +556,9 @@ export default function MarginTrading() {
         url = `${BACKEND_URL}/api/trading/orders/trailing-stop`;
         body = { pair_id: pair, side, quantity: parseFloat(qty), trail_percent: parseFloat(limitPrice) };
       }
-      const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message }); setShowLimitOrder(false); setLimitPrice(''); setQty(''); fetchData();
+      const res = await xhrFetchJson(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(res.data?.detail || 'Errore');
+      setResult({ ok: true, msg: res.data?.message }); setShowLimitOrder(false); setLimitPrice(''); setQty(''); fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
     finally { setOpening(false); }
   };
@@ -556,10 +566,9 @@ export default function MarginTrading() {
   const handleCancelOrder = async (orderId) => {
     setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/trading/orders/cancel`, { method: 'POST', headers: headers(), body: JSON.stringify({ order_id: orderId }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message }); fetchData();
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/trading/orders/cancel`, { method: 'POST', headers: headers(), body: JSON.stringify({ order_id: orderId }) });
+      if (!res.ok) throw new Error(res.data?.detail || 'Errore');
+      setResult({ ok: true, msg: res.data?.message }); fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
 

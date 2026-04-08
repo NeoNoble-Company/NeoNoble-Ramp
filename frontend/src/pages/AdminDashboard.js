@@ -25,6 +25,129 @@ const StatCard = ({ label, value, sub, icon: Icon, color = 'emerald' }) => (
   </div>
 );
 
+function RevenueWithdrawPanel() {
+  const [amount, setAmount] = useState('');
+  const [destType, setDestType] = useState('sepa');
+  const [iban, setIban] = useState('');
+  const [wallet, setWallet] = useState('');
+  const [beneficiary, setBeneficiary] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const data = await xhrFetch(`${API}/api/cashout/revenue-history`, { headers: hdrs });
+      setHistory(data.withdrawals || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  const handleWithdraw = async () => {
+    setLoading(true); setResult(null);
+    try {
+      const body = { amount: parseFloat(amount), currency: 'EUR', destination_type: destType };
+      if (destType === 'crypto') body.destination_wallet = wallet;
+      else { body.destination_iban = iban; body.beneficiary_name = beneficiary; }
+      const data = await xhrFetch(`${API}/api/cashout/revenue-withdraw`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify(body)
+      });
+      if (data.success) {
+        setResult({ ok: true, msg: data.message, payout_id: data.payout_id, tx_hash: data.tx_hash, explorer: data.explorer });
+        setAmount(''); fetchHistory();
+      } else {
+        setResult({ ok: false, msg: data.detail || 'Errore nel prelievo revenue' });
+      }
+    } catch (e) { setResult({ ok: false, msg: e.message }); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="revenue-tab">
+      <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-5" data-testid="revenue-withdraw-panel">
+        <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-1.5">
+          <TrendingUp className="w-4 h-4" /> Revenue Withdrawal — Prelievo Profitti
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Importo (EUR)</label>
+            <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
+              placeholder="0.00" data-testid="revenue-amount-input" />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Tipo Destinazione</label>
+            <select value={destType} onChange={e => setDestType(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white" data-testid="revenue-dest-type">
+              <option value="sepa">SEPA</option>
+              <option value="swift">SWIFT</option>
+              <option value="crypto">Crypto Wallet</option>
+            </select>
+          </div>
+        </div>
+        {destType !== 'crypto' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">IBAN Destinazione</label>
+              <input type="text" value={iban} onChange={e => setIban(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white font-mono"
+                placeholder="IT60X0542811101000000123456" data-testid="revenue-iban-input" />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Beneficiario</label>
+              <input type="text" value={beneficiary} onChange={e => setBeneficiary(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
+                placeholder="NeoNoble Holdings SA" data-testid="revenue-beneficiary-input" />
+            </div>
+          </div>
+        ) : (
+          <div className="mb-4">
+            <label className="text-xs text-zinc-400 mb-1 block">Wallet Destinazione</label>
+            <input type="text" value={wallet} onChange={e => setWallet(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white font-mono"
+              placeholder="0x..." data-testid="revenue-wallet-input" />
+          </div>
+        )}
+        <button onClick={handleWithdraw} disabled={loading || !amount}
+          className="w-full md:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg disabled:opacity-50 transition"
+          data-testid="revenue-withdraw-btn">
+          {loading ? 'Esecuzione...' : 'Preleva Revenue'}
+        </button>
+        {result && (
+          <div className={`mt-4 p-3 rounded-lg text-sm ${result.ok ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`} data-testid="revenue-result">
+            <div>{result.msg}</div>
+            {result.payout_id && <div className="text-xs mt-1 font-mono">Payout ID: {result.payout_id}</div>}
+            {result.tx_hash && <div className="text-xs mt-1 font-mono">TX: <a href={result.explorer} target="_blank" rel="noopener noreferrer" className="underline">{result.tx_hash.slice(0, 20)}...</a></div>}
+          </div>
+        )}
+      </div>
+      <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4" data-testid="revenue-history-panel">
+        <h3 className="text-sm font-bold text-zinc-300 mb-3">Storico Prelievi Revenue</h3>
+        {history.length === 0 ? (
+          <div className="text-xs text-zinc-600">Nessun prelievo revenue ancora</div>
+        ) : (
+          <div className="space-y-2">
+            {history.map((w, i) => (
+              <div key={w.id || i} className="bg-zinc-800/50 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-white font-mono">{w.amount} {w.currency} → {w.destination_type}</div>
+                  <div className="text-[10px] text-zinc-500">{w.created_at?.slice(0, 19)} | {w.admin_email}</div>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  w.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                }`}>{w.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [financials, setFinancials] = useState(null);
   const [pnl, setPnl] = useState(null);
@@ -87,6 +210,7 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'revenue', label: 'Revenue', icon: TrendingUp },
     { id: 'cashout', label: 'Cashout Engine', icon: Banknote },
     { id: 'circle-usdc', label: 'Circle USDC', icon: Coins },
     { id: 'real-virtual', label: 'Real vs Virtual', icon: Shield },
@@ -201,6 +325,9 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
+
+
+        {tab === 'revenue' && <RevenueWithdrawPanel />}
 
         {tab === 'cashout' && (
           <div className="space-y-4" data-testid="cashout-tab">
