@@ -1,603 +1,291 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard, Users, Coins, CreditCard,
-  Shield, Globe, LogOut, ChevronRight, Loader2,
-  Check, X, Eye, ArrowUpRight, ArrowDownRight,
-  Activity, Clock, ListChecks, BarChart3, TrendingUp,
-  FileText
-} from 'lucide-react';
+import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+const API = process.env.REACT_APP_BACKEND_URL;
 
-function getAuthHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${localStorage.getItem('token')}`
-  };
+function xhrFetch(url, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(opts.method || 'GET', url);
+    Object.entries(opts.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error(xhr.statusText)); } };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(opts.body || null);
+  });
 }
 
-const STATUS_COLORS = {
-  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  approved: 'bg-green-500/20 text-green-400 border-green-500/30',
-  rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
-  live: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  paused: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  active: 'bg-green-500/20 text-green-400 border-green-500/30',
-  cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
-};
+const StatCard = ({ label, value, sub, icon: Icon, color = 'emerald' }) => (
+  <div className={`bg-zinc-900/80 border border-${color}-500/20 rounded-xl p-4`} data-testid={`stat-${label.toLowerCase().replace(/\s/g,'-')}`}>
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-zinc-500 text-xs uppercase tracking-wider">{label}</span>
+      {Icon && <Icon className={`w-4 h-4 text-${color}-500`} />}
+    </div>
+    <div className={`text-xl font-bold text-${color}-400`}>{value}</div>
+    {sub && <div className="text-[10px] text-zinc-600 mt-1">{sub}</div>}
+  </div>
+);
 
-// Overview Section
-function OverviewSection({ tokenStats, subStats, usersCount }) {
-  const cards = [
-    { title: 'Utenti Totali', value: usersCount, icon: Users, color: 'from-blue-500/20 to-blue-600/10 border-blue-500/30' },
-    { title: 'Token Creati', value: tokenStats?.tokens?.total || 0, icon: Coins, color: 'from-purple-500/20 to-purple-600/10 border-purple-500/30' },
-    { title: 'Token in Attesa', value: tokenStats?.tokens?.pending || 0, icon: Clock, color: 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/30' },
-    { title: 'Token Live', value: tokenStats?.tokens?.live || 0, icon: Activity, color: 'from-green-500/20 to-green-600/10 border-green-500/30' },
-    { title: 'Listing Pendenti', value: tokenStats?.listings?.pending || 0, icon: ListChecks, color: 'from-orange-500/20 to-orange-600/10 border-orange-500/30' },
-    { title: 'Trading Pairs', value: tokenStats?.trading_pairs?.total || 0, icon: BarChart3, color: 'from-cyan-500/20 to-cyan-600/10 border-cyan-500/30' },
-    { title: 'Abbonamenti Attivi', value: subStats?.by_status?.active || 0, icon: CreditCard, color: 'from-pink-500/20 to-pink-600/10 border-pink-500/30' },
-    { title: 'MRR', value: `€${(subStats?.monthly_recurring_revenue || 0).toLocaleString()}`, icon: ArrowUpRight, color: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30' },
+export default function AdminDashboard() {
+  const [financials, setFinancials] = useState(null);
+  const [pnl, setPnl] = useState(null);
+  const [structure, setStructure] = useState(null);
+  const [safeguarding, setSafeguarding] = useState(null);
+  const [bankingRails, setBankingRails] = useState(null);
+  const [securityStatus, setSecurityStatus] = useState(null);
+  const [treasuryCheck, setTreasuryCheck] = useState(null);
+  const [recentTxs, setRecentTxs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('overview');
+
+  const headers = useCallback(() => {
+    const token = localStorage.getItem('token');
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    const h = headers();
+    try {
+      const [fin, p, str, saf, br, sec, tc, txs] = await Promise.all([
+        xhrFetch(`${API}/api/institutional/financials`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/institutional/pnl?period_hours=24`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/institutional/structure`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/institutional/compliance/safeguarding`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/institutional/banking-rails`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/neno-exchange/security-status`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/institutional/risk/treasury-check/NENO?amount=1`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/neno-exchange/transactions?limit=10`, { headers: h }).catch(() => null),
+      ]);
+      setFinancials(fin); setPnl(p); setStructure(str); setSafeguarding(saf);
+      setBankingRails(br); setSecurityStatus(sec); setTreasuryCheck(tc);
+      setRecentTxs(txs?.transactions || []);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }, [headers]);
+
+  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, [fetchAll]);
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'treasury', label: 'Treasury & Risk', icon: Shield },
+    { id: 'structure', label: 'IPO Structure', icon: Building },
+    { id: 'rails', label: 'Banking Rails', icon: Globe },
+    { id: 'executions', label: 'Execution Logs', icon: Activity },
   ];
 
   return (
-    <div data-testid="admin-overview">
-      <h2 className="text-2xl font-bold text-white mb-6">Dashboard Overview</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map((card, i) => (
-          <div key={i} className={`bg-gradient-to-br ${card.color} border rounded-xl p-5`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-gray-400 text-sm">{card.title}</span>
-              <card.icon className="w-4 h-4 text-gray-500" />
-            </div>
-            <div className="text-2xl font-bold text-white">{card.value}</div>
+    <div className="min-h-screen bg-zinc-950 text-white" data-testid="admin-dashboard">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              Admin Command Center
+            </h1>
+            <p className="text-zinc-500 text-sm">NeoNoble Ramp — IPO-Ready Fintech Platform</p>
           </div>
-        ))}
-      </div>
-      <div className="mt-6 bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-3">Fee Structure</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div><span className="text-gray-400">Token Creation:</span> <span className="text-white ml-1">€{tokenStats?.fees?.token_creation}</span></div>
-          <div><span className="text-gray-400">Listing Standard:</span> <span className="text-white ml-1">€{tokenStats?.fees?.listing_standard}</span></div>
-          <div><span className="text-gray-400">Listing Premium:</span> <span className="text-white ml-1">€{tokenStats?.fees?.listing_premium}</span></div>
-          <div><span className="text-gray-400">Trading Pair:</span> <span className="text-white ml-1">€{tokenStats?.fees?.trading_pair}</span></div>
+          <button onClick={fetchAll} className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition" data-testid="refresh-btn">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
-      </div>
-    </div>
-  );
-}
 
-// Token Management Section
-function TokenManagement() {
-  const [tokens, setTokens] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(null);
-  const [filter, setFilter] = useState('all');
-
-  const fetchTokens = useCallback(async () => {
-    setLoading(true);
-    try {
-      let url = `${BACKEND_URL}/api/tokens/list?page_size=100`;
-      if (filter !== 'all') url += `&status=${filter}`;
-      const res = await fetch(url, { headers: getAuthHeaders() });
-      const data = await res.json();
-      setTokens(data.tokens || []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, [filter]);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchTokens(); }, [filter]);
-
-  const handleAction = async (tokenId, action) => {
-    setActionLoading(tokenId);
-    try {
-      await fetch(`${BACKEND_URL}/api/tokens/${tokenId}/admin-action`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ action })
-      });
-      await fetchTokens();
-    } catch (e) { console.error(e); }
-    finally { setActionLoading(null); }
-  };
-
-  return (
-    <div data-testid="admin-tokens">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-white">Gestione Token</h2>
-        <div className="flex gap-2">
-          {['all', 'pending', 'approved', 'live', 'rejected'].map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === f ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-              {f === 'all' ? 'Tutti' : f.charAt(0).toUpperCase() + f.slice(1)}
+        <div className="flex gap-1 mb-6 bg-zinc-900/50 rounded-xl p-1" data-testid="tab-nav">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
+                tab === t.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'
+              }`} data-testid={`tab-${t.id}`}>
+              <t.icon className="w-3.5 h-3.5" /> {t.label}
             </button>
           ))}
         </div>
-      </div>
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-purple-500 animate-spin" /></div>
-      ) : tokens.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">Nessun token trovato</div>
-      ) : (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-800">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Chain</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Supply</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Prezzo</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Stato</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Azioni</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {tokens.map(t => (
-                <tr key={t.id} className="hover:bg-gray-800/50">
-                  <td className="px-4 py-3">
-                    <div className="text-white font-medium">{t.name}</div>
-                    <div className="text-gray-500 text-xs">${t.symbol}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">{t.chain}</td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">{t.total_supply?.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">€{t.current_price}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium border ${STATUS_COLORS[t.status] || STATUS_COLORS.pending}`}>
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {t.status === 'pending' && (
-                        <>
-                          <button onClick={() => handleAction(t.id, 'approve')} disabled={actionLoading === t.id}
-                            data-testid={`approve-token-${t.symbol}`}
-                            className="p-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors" title="Approva">
-                            {actionLoading === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                          </button>
-                          <button onClick={() => handleAction(t.id, 'reject')} disabled={actionLoading === t.id}
-                            data-testid={`reject-token-${t.symbol}`}
-                            className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors" title="Rifiuta">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                      {t.status === 'approved' && (
-                        <button onClick={() => handleAction(t.id, 'go_live')} disabled={actionLoading === t.id}
-                          data-testid={`golive-token-${t.symbol}`}
-                          className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-xs transition-colors">
-                          Go Live
-                        </button>
-                      )}
-                      {t.status === 'live' && (
-                        <button onClick={() => handleAction(t.id, 'pause')} disabled={actionLoading === t.id}
-                          className="px-2 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs transition-colors">
-                          Pausa
-                        </button>
-                      )}
-                      {t.status === 'paused' && (
-                        <button onClick={() => handleAction(t.id, 'unpause')} disabled={actionLoading === t.id}
-                          className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-xs transition-colors">
-                          Riattiva
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
 
-// Listing Management Section
-function ListingManagement() {
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(null);
-
-  const fetchListings = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/tokens/listings/list?page_size=100`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      setListings(data.listings || []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, []);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchListings(); }, []);
-
-  const handleAction = async (listingId, action) => {
-    setActionLoading(listingId);
-    try {
-      await fetch(`${BACKEND_URL}/api/tokens/listings/${listingId}/admin-action?action=${action}`, {
-        method: 'POST', headers: getAuthHeaders()
-      });
-      await fetchListings();
-    } catch (e) { console.error(e); }
-    finally { setActionLoading(null); }
-  };
-
-  return (
-    <div data-testid="admin-listings">
-      <h2 className="text-2xl font-bold text-white mb-6">Gestione Listing</h2>
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-purple-500 animate-spin" /></div>
-      ) : listings.length === 0 ? (
-        <div className="text-center py-12">
-          <ListChecks className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400">Nessuna richiesta di listing</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {listings.map(l => (
-            <div key={l.id} className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="text-white font-semibold">${l.token_symbol}</span>
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${STATUS_COLORS[l.status] || STATUS_COLORS.pending}`}>
-                      {l.status}
-                    </span>
-                    <span className="text-gray-500 text-xs">{l.listing_type}</span>
+        {tab === 'overview' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard label="Volume Totale" value={`EUR ${(financials?.kpis?.total_volume_eur || 0).toLocaleString()}`} icon={TrendingUp} />
+              <StatCard label="Transazioni" value={financials?.kpis?.total_transactions || 0} icon={Activity} color="cyan" />
+              <StatCard label="Utenti" value={financials?.kpis?.total_users || 0} icon={Building} color="blue" />
+              <StatCard label="Revenue/User" value={`EUR ${financials?.kpis?.revenue_per_user_eur || 0}`} icon={BarChart3} color="amber" />
+            </div>
+            {pnl && (
+              <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-4">
+                <h3 className="text-sm font-bold text-emerald-400 mb-3">PnL (24h)</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-emerald-400">EUR {pnl.trading_fees?.total_eur || 0}</div>
+                    <div className="text-[10px] text-zinc-500">Trading Fees ({pnl.trading_fees?.count || 0} trades)</div>
                   </div>
-                  <div className="text-gray-400 text-sm">Fee: €{l.listing_fee} | Pairs: {(l.requested_pairs || []).join(', ')}</div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-cyan-400">EUR {pnl.spread_revenue?.total_eur || 0}</div>
+                    <div className="text-[10px] text-zinc-500">Spread Revenue</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-amber-400">EUR {pnl.total_revenue_eur || 0}</div>
+                    <div className="text-[10px] text-zinc-500">Revenue Totale</div>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  {l.status === 'pending' && (
-                    <>
-                      <button onClick={() => handleAction(l.id, 'approve')} disabled={actionLoading === l.id}
-                        data-testid={`approve-listing-${l.token_symbol}`}
-                        className="px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-colors flex items-center gap-1">
-                        {actionLoading === l.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                        Approva
-                      </button>
-                      <button onClick={() => handleAction(l.id, 'reject')} disabled={actionLoading === l.id}
-                        className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors flex items-center gap-1">
-                        <X className="w-3 h-3" /> Rifiuta
-                      </button>
-                    </>
+              </div>
+            )}
+            {safeguarding && (
+              <div className="bg-zinc-900/80 border border-blue-500/20 rounded-xl p-4">
+                <h3 className="text-sm font-bold text-blue-400 mb-2">Safeguarding EMI</h3>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <div className="text-base font-bold text-white">EUR {(safeguarding.total_client_funds_eur || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-zinc-500">Fondi Clienti</div>
+                  </div>
+                  <div>
+                    <div className="text-base font-bold text-white">EUR {(safeguarding.treasury_eur || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-zinc-500">Treasury</div>
+                  </div>
+                  <div>
+                    <div className={`text-base font-bold ${safeguarding.coverage_pct >= 100 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {safeguarding.coverage_pct}%
+                    </div>
+                    <div className="text-[10px] text-zinc-500">Coverage</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'treasury' && (
+          <div className="space-y-4">
+            {securityStatus && (
+              <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-4">
+                <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-1.5"><Lock className="w-4 h-4" /> Security Caps</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
+                    <div className="text-base font-bold text-white">EUR {securityStatus.treasury_caps?.max_single_tx_eur?.toLocaleString()}</div>
+                    <div className="text-[10px] text-zinc-500">Max/Transazione</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
+                    <div className="text-base font-bold text-white">EUR {securityStatus.treasury_caps?.max_daily_eur?.toLocaleString()}</div>
+                    <div className="text-[10px] text-zinc-500">Max/Giorno</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
+                    <div className="text-base font-bold text-white">{securityStatus.treasury_caps?.max_neno_per_tx} NENO</div>
+                    <div className="text-[10px] text-zinc-500">Max NENO/TX</div>
+                  </div>
+                </div>
+                <div className="mt-3 text-[10px] text-zinc-600">
+                  Rate limit: {securityStatus.rate_limit?.max_exec_ops_per_min} ops/min | Assets on-chain: {securityStatus.supported_onchain_assets?.join(', ')}
+                </div>
+              </div>
+            )}
+            {treasuryCheck && (
+              <div className="bg-zinc-900/80 border border-cyan-500/20 rounded-xl p-4">
+                <h3 className="text-sm font-bold text-cyan-400 mb-2">Treasury On-Chain (NENO)</h3>
+                <div className="flex items-center gap-2">
+                  {treasuryCheck.sufficient ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <AlertTriangle className="w-4 h-4 text-red-500" />}
+                  <span className="font-mono text-sm">{treasuryCheck.on_chain} NENO on-chain</span>
+                </div>
+                <div className="text-[10px] text-zinc-600 mt-1">Contract: {treasuryCheck.contract}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'structure' && structure && (
+          <div className="space-y-4">
+            <div className="bg-zinc-900/80 border border-amber-500/20 rounded-xl p-4">
+              <h3 className="text-sm font-bold text-amber-400 mb-3">Holding — {structure.holding?.name}</h3>
+              <div className="text-xs text-zinc-400 mb-2">Giurisdizione: {structure.holding?.jurisdiction} | Status: <span className="text-emerald-400">{structure.holding?.status}</span></div>
+              <div className="space-y-2">
+                {structure.subsidiaries?.map((s, i) => (
+                  <div key={i} className="bg-zinc-800/50 rounded-lg p-3">
+                    <div className="text-xs font-bold text-white">{s.name}</div>
+                    <div className="text-[10px] text-zinc-500">{s.jurisdiction} — {s.function}</div>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {s.licenses?.map((l, j) => (
+                        <span key={j} className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">{l}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-zinc-900/80 border border-blue-500/20 rounded-xl p-4">
+              <h3 className="text-sm font-bold text-blue-400 mb-2">Governance</h3>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>Board Seats: {structure.governance?.board_seats}</div>
+                <div>Independent Directors: {structure.governance?.independent_directors}</div>
+                <div>Audit Committee: {structure.governance?.audit_committee ? 'Active' : 'N/A'}</div>
+                <div>Risk Committee: {structure.governance?.risk_committee ? 'Active' : 'N/A'}</div>
+                <div>Standard: {structure.governance?.reporting_standard}</div>
+                <div>External Auditor: {structure.governance?.external_auditor}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'rails' && bankingRails && (
+          <div className="space-y-3">
+            {Object.entries(bankingRails).filter(([k]) => !['cards','clearing_systems'].includes(k)).map(([key, val]) => (
+              <div key={key} className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white uppercase">{key.replace('_',' ')}</div>
+                  <div className="text-[10px] text-zinc-500">{val.type} | {val.coverage || val.currency || ''}</div>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  val.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                }`}>{val.status}</span>
+              </div>
+            ))}
+            <h3 className="text-xs font-bold text-zinc-400 mt-4">Payment Networks</h3>
+            {bankingRails.cards && Object.entries(bankingRails.cards).map(([key, val]) => (
+              <div key={key} className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-3 flex items-center justify-between">
+                <div className="text-xs font-bold text-white uppercase">{key}</div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">{val.status}</span>
+              </div>
+            ))}
+            <h3 className="text-xs font-bold text-zinc-400 mt-4">Clearing Systems</h3>
+            {bankingRails.clearing_systems && Object.entries(bankingRails.clearing_systems).map(([key, val]) => (
+              <div key={key} className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white uppercase">{key}</div>
+                  <div className="text-[10px] text-zinc-500">{val.type} | {val.currency}</div>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">{val.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'executions' && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-emerald-400 mb-2">Execution Logs Recenti</h3>
+            {recentTxs.length === 0 && <div className="text-xs text-zinc-500">Nessuna transazione recente</div>}
+            {recentTxs.map((tx, i) => (
+              <div key={tx.id || i} className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      tx.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                      tx.status === 'pending_execution' ? 'bg-orange-500/20 text-orange-400' :
+                      tx.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                      'bg-zinc-500/20 text-zinc-400'
+                    }`}>{tx.status}</span>
+                    <span className="text-xs text-white font-mono">{tx.type}</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-600">{tx.created_at?.slice(0, 19)}</span>
+                </div>
+                <div className="mt-1 text-[10px] text-zinc-400">
+                  {tx.eur_value && <span>EUR {tx.eur_value} | </span>}
+                  {tx.execution_mode && <span>Mode: {tx.execution_mode} | </span>}
+                  {tx.delivery_tx_hash && (
+                    <a href={`https://bscscan.com/tx/${tx.delivery_tx_hash}`} target="_blank" rel="noopener noreferrer"
+                       className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-0.5">
+                      TX: {tx.delivery_tx_hash.slice(0, 12)}... <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Users Section
-function UsersSection() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/auth/admin/users`, { headers: getAuthHeaders() });
-        const data = await res.json();
-        setUsers(data.users || []);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
-  }, []);
-
-  return (
-    <div data-testid="admin-users">
-      <h2 className="text-2xl font-bold text-white mb-6">Gestione Utenti</h2>
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-purple-500 animate-spin" /></div>
-      ) : (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-800">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ruolo</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Registrato</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {users.map((u, i) => (
-                <tr key={i} className="hover:bg-gray-800/50">
-                  <td className="px-4 py-3 text-white">{u.email}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      u.role === 'ADMIN' ? 'bg-red-500/20 text-red-400' :
-                      u.role === 'DEVELOPER' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>{u.role}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">
-                    {u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : 'N/A'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Subscriptions Management
-function SubscriptionsSection() {
-  const [subs, setSubs] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/subscriptions/admin/list?page_size=100`, { headers: getAuthHeaders() });
-        const data = await res.json();
-        setSubs(data.subscriptions || []);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
-  }, []);
-
-  return (
-    <div data-testid="admin-subscriptions">
-      <h2 className="text-2xl font-bold text-white mb-6">Gestione Abbonamenti</h2>
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-purple-500 animate-spin" /></div>
-      ) : subs.length === 0 ? (
-        <div className="text-center py-12">
-          <CreditCard className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400">Nessun abbonamento attivo</p>
-        </div>
-      ) : (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-800">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Utente</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Piano</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ciclo</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Importo</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Stato</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {subs.map(s => (
-                <tr key={s.id} className="hover:bg-gray-800/50">
-                  <td className="px-4 py-3 text-gray-300 text-sm">{s.user_id?.substring(0, 8)}...</td>
-                  <td className="px-4 py-3 text-white font-medium">{s.plan_name}</td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">{s.billing_cycle}</td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">€{s.amount_paid}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium border ${STATUS_COLORS[s.status] || STATUS_COLORS.active}`}>
-                      {s.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Analytics Section
-function AnalyticsSection() {
-  const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState(null);
-  const [engagement, setEngagement] = useState(null);
-  const [days, setDays] = useState(30);
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const headers = getAuthHeaders();
-        const [ovRes, engRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/analytics/admin/overview?days=${days}`, { headers }),
-          fetch(`${BACKEND_URL}/api/analytics/admin/engagement?days=${Math.min(days, 90)}`, { headers })
-        ]);
-        if (ovRes.ok) setOverview(await ovRes.json());
-        if (engRes.ok) setEngagement(await engRes.json());
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
-  }, [days]);
-
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-purple-500 animate-spin" /></div>;
-
-  return (
-    <div data-testid="admin-analytics">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-white">Analytics & Traffico</h2>
-        <div className="flex gap-2">
-          {[7, 30, 90].map(d => (
-            <button key={d} onClick={() => setDays(d)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${days === d ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-              {d}g
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-xl p-5">
-          <div className="text-gray-400 text-sm mb-1">Page Views</div>
-          <div className="text-2xl font-bold text-white">{overview?.page_views?.total || 0}</div>
-        </div>
-        <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/30 rounded-xl p-5">
-          <div className="text-gray-400 text-sm mb-1">Utenti Attivi</div>
-          <div className="text-2xl font-bold text-white">{overview?.users?.active || 0}</div>
-        </div>
-        <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-xl p-5">
-          <div className="text-gray-400 text-sm mb-1">Nuovi Utenti</div>
-          <div className="text-2xl font-bold text-white">{overview?.users?.new || 0}</div>
-        </div>
-        <div className="bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 border border-cyan-500/30 rounded-xl p-5">
-          <div className="text-gray-400 text-sm mb-1">Sessioni</div>
-          <div className="text-2xl font-bold text-white">{engagement?.sessions || 0}</div>
-        </div>
-      </div>
-
-      {/* Engagement */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Engagement</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between"><span className="text-gray-400">Pagine/Sessione</span><span className="text-white font-medium">{engagement?.avg_pages_per_session || 0}</span></div>
-            <div className="flex justify-between"><span className="text-gray-400">Durata Media (sec)</span><span className="text-white font-medium">{engagement?.avg_session_duration_seconds || 0}</span></div>
-            <div className="flex justify-between"><span className="text-gray-400">Token Creati</span><span className="text-white font-medium">{engagement?.recent_activity?.tokens_created || 0}</span></div>
-            <div className="flex justify-between"><span className="text-gray-400">Nuovi Abbonamenti</span><span className="text-white font-medium">{engagement?.recent_activity?.subscriptions || 0}</span></div>
-            <div className="flex justify-between"><span className="text-gray-400">Listing Richiesti</span><span className="text-white font-medium">{engagement?.recent_activity?.listings || 0}</span></div>
+            ))}
           </div>
-        </div>
-
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Top Pagine</h3>
-          {(overview?.page_views?.by_page || []).length === 0 ? (
-            <div className="text-gray-500 text-sm py-4 text-center">Nessun dato di traffico ancora</div>
-          ) : (
-            <div className="space-y-2">
-              {(overview?.page_views?.by_page || []).slice(0, 8).map((p, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <span className="text-gray-300 text-sm truncate max-w-[200px]">{p.page}</span>
-                  <span className="text-white font-medium text-sm">{p.views}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
-
-      {/* Daily Traffic */}
-      {(overview?.daily_traffic || []).length > 0 && (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Traffico Giornaliero</h3>
-          <div className="flex gap-1 items-end h-32">
-            {overview.daily_traffic.map((d, i) => {
-              const maxViews = Math.max(...overview.daily_traffic.map(x => x.views));
-              const height = maxViews > 0 ? (d.views / maxViews) * 100 : 0;
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${d.date}: ${d.views} views`}>
-                  <div className="w-full bg-purple-500/60 rounded-t" style={{ height: `${Math.max(height, 2)}%` }} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Sidebar
-const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'tokens', label: 'Token', icon: Coins },
-  { id: 'listings', label: 'Listing', icon: ListChecks },
-  { id: 'users', label: 'Utenti', icon: Users },
-  { id: 'subscriptions', label: 'Abbonamenti', icon: CreditCard },
-  { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-];
-
-export default function AdminDashboard() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState('overview');
-  const [loading, setLoading] = useState(true);
-  const [tokenStats, setTokenStats] = useState(null);
-  const [subStats, setSubStats] = useState(null);
-  const [usersCount, setUsersCount] = useState(0);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const headers = getAuthHeaders();
-        const [tsRes, ssRes, uRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/tokens/stats/overview`, { headers }),
-          fetch(`${BACKEND_URL}/api/subscriptions/admin/stats`, { headers }),
-          fetch(`${BACKEND_URL}/api/auth/admin/users`, { headers })
-        ]);
-        setTokenStats(await tsRes.json());
-        setSubStats(await ssRes.json());
-        const uData = await uRes.json();
-        setUsersCount(uData.total || 0);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-950 flex" data-testid="admin-dashboard">
-      {/* Sidebar */}
-      <div className="w-60 bg-gray-900 border-r border-gray-800 min-h-screen p-4 flex flex-col">
-        <div className="flex items-center gap-3 mb-8 px-2">
-          <div className="w-9 h-9 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="text-white font-bold text-sm">Admin Panel</div>
-            <div className="text-gray-500 text-xs">NeoNoble Ramp</div>
-          </div>
-        </div>
-        <nav className="flex-1 space-y-1">
-          {NAV_ITEMS.map(item => (
-            <button key={item.id} onClick={() => setActiveSection(item.id)}
-              data-testid={`admin-nav-${item.id}`}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                activeSection === item.id ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}>
-              <item.icon className="w-4 h-4" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <div className="pt-4 border-t border-gray-800 space-y-1">
-          <button onClick={() => navigate('/audit')}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg text-sm transition-colors"
-            data-testid="admin-nav-audit">
-            <FileText className="w-4 h-4" /> Registro Audit
-          </button>
-          <button onClick={() => navigate('/dashboard')}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg text-sm transition-colors">
-            <Globe className="w-4 h-4" /> Dashboard
-          </button>
-          <button onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors">
-            <LogOut className="w-4 h-4" /> Logout
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="flex-1 p-8">
-        <div className="max-w-6xl mx-auto">
-          {activeSection === 'overview' && <OverviewSection tokenStats={tokenStats} subStats={subStats} usersCount={usersCount} />}
-          {activeSection === 'tokens' && <TokenManagement />}
-          {activeSection === 'listings' && <ListingManagement />}
-          {activeSection === 'users' && <UsersSection />}
-          {activeSection === 'subscriptions' && <SubscriptionsSection />}
-          {activeSection === 'analytics' && <AnalyticsSection />}
-        </div>
-      </main>
     </div>
   );
 }

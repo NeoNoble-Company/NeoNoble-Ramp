@@ -196,6 +196,8 @@ from routes.dca_routes import router as dca_router
 
 # Import Market Maker routes
 from routes.market_maker_routes import router as market_maker_router
+from routes.exchange_orders_routes import router as exchange_orders_router
+from routes.institutional_routes import router as institutional_router
 
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
@@ -749,6 +751,8 @@ api_router.include_router(advanced_analytics_router)
 api_router.include_router(montecarlo_router)
 api_router.include_router(pep_router)
 api_router.include_router(market_maker_router)
+api_router.include_router(exchange_orders_router)
+api_router.include_router(institutional_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router
