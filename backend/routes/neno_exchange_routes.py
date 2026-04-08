@@ -37,6 +37,7 @@ from services.execution_engine import ExecutionEngine, TreasuryEngine, Liquidity
 from services.market_maker_service import MarketMakerService
 from services.audit_logger import log_pre_operation, log_post_operation
 from services.security_guard import SecurityGuard
+from services.virtual_real_engine import VirtualRealEngine
 
 logger = logging.getLogger(__name__)
 
@@ -2040,6 +2041,12 @@ async def withdraw_real_onchain(req: RealWithdrawalRequest, current_user: dict =
     cap_ok, cap_reason = await guard.enforce_caps(uid, eur_value, neno_amt)
     if not cap_ok:
         raise HTTPException(status_code=400, detail=cap_reason)
+
+    # PAYOUT GUARD: check real on-chain fund availability
+    vr_engine = VirtualRealEngine.get_instance()
+    payout_check = await vr_engine.can_payout(asset, req.amount)
+    if payout_check.get("blocked"):
+        raise HTTPException(status_code=400, detail=f"PAYOUT BLOCCATO: {payout_check['reason']}")
 
     # Reentrancy lock + balance check
     async with guard.get_user_lock(uid):

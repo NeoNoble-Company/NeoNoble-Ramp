@@ -34,6 +34,8 @@ export default function AdminDashboard() {
   const [securityStatus, setSecurityStatus] = useState(null);
   const [treasuryCheck, setTreasuryCheck] = useState(null);
   const [recentTxs, setRecentTxs] = useState([]);
+  const [realTreasury, setRealTreasury] = useState(null);
+  const [virtualMetrics, setVirtualMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
 
@@ -46,7 +48,7 @@ export default function AdminDashboard() {
     setLoading(true);
     const h = headers();
     try {
-      const [fin, p, str, saf, br, sec, tc, txs] = await Promise.all([
+      const [fin, p, str, saf, br, sec, tc, txs, rt, vm] = await Promise.all([
         xhrFetch(`${API}/api/institutional/financials`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/pnl?period_hours=24`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/structure`, { headers: h }).catch(() => null),
@@ -55,10 +57,13 @@ export default function AdminDashboard() {
         xhrFetch(`${API}/api/neno-exchange/security-status`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/risk/treasury-check/NENO?amount=1`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/neno-exchange/transactions?limit=10`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/strategic/real-treasury`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/strategic/virtual-metrics`, { headers: h }).catch(() => null),
       ]);
       setFinancials(fin); setPnl(p); setStructure(str); setSafeguarding(saf);
       setBankingRails(br); setSecurityStatus(sec); setTreasuryCheck(tc);
       setRecentTxs(txs?.transactions || []);
+      setRealTreasury(rt); setVirtualMetrics(vm);
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [headers]);
@@ -67,7 +72,8 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
-    { id: 'treasury', label: 'Treasury & Risk', icon: Shield },
+    { id: 'real-virtual', label: 'Real vs Virtual', icon: Shield },
+    { id: 'treasury', label: 'Treasury & Risk', icon: Lock },
     { id: 'structure', label: 'IPO Structure', icon: Building },
     { id: 'rails', label: 'Banking Rails', icon: Globe },
     { id: 'executions', label: 'Execution Logs', icon: Activity },
@@ -147,6 +153,67 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {tab === 'real-virtual' && (
+          <div className="space-y-4">
+            <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-4" data-testid="real-treasury-panel">
+              <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Treasury REALE (On-Chain Verificato)</h3>
+              {realTreasury && (
+                <>
+                  <div className="text-xl font-bold text-emerald-400 mb-3">EUR {(realTreasury.total_eur_value || 0).toLocaleString()}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {realTreasury.assets && Object.entries(realTreasury.assets).map(([asset, data]) => (
+                      <div key={asset} className="bg-zinc-800/50 rounded-lg p-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">{asset}</span>
+                          {data.verified ? <CheckCircle className="w-3 h-3 text-emerald-500" /> : <AlertTriangle className="w-3 h-3 text-red-500" />}
+                        </div>
+                        <div className="text-sm font-mono text-emerald-400">{data.balance}</div>
+                        <div className="text-[9px] text-zinc-600">{data.source}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-[10px] text-zinc-600">
+                    Hot wallet: {realTreasury.hot_wallet} | Block: {realTreasury.block_number} | Fee reali guadagnate: EUR {realTreasury.real_revenue?.total_fees_earned || 0} ({realTreasury.real_revenue?.real_trade_count || 0} trade)
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="bg-zinc-900/80 border border-amber-500/20 rounded-xl p-4" data-testid="virtual-metrics-panel">
+              <h3 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Metriche VIRTUALI (NON sono denaro reale)</h3>
+              {virtualMetrics && (
+                <>
+                  <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-2 mb-3 text-[10px] text-amber-500">
+                    {virtualMetrics.warning}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="text-base font-bold text-emerald-400">EUR {(virtualMetrics.real_executed_volume_eur || 0).toLocaleString()}</div>
+                      <div className="text-[10px] text-zinc-500">Volume Reale</div>
+                    </div>
+                    <div>
+                      <div className="text-base font-bold text-amber-400">EUR {(virtualMetrics.virtual_demand_volume_eur || 0).toLocaleString()}</div>
+                      <div className="text-[10px] text-zinc-500">Volume Virtuale</div>
+                    </div>
+                    <div>
+                      <div className="text-base font-bold text-cyan-400">{virtualMetrics.conversion_rate_pct}%</div>
+                      <div className="text-[10px] text-zinc-500">Conversion Rate</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 bg-zinc-800/50 rounded-lg p-2">
+                    <div className="text-[10px] text-zinc-400 font-mono">
+                      virtual demand → trading reale → fee/spread → treasury reale → payout
+                    </div>
+                    <div className="text-[10px] text-zinc-500 mt-1">
+                      Reali: {virtualMetrics.real_transactions} tx | Virtuali: {virtualMetrics.virtual_transactions} tx | Totali: {virtualMetrics.total_transactions}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
 
