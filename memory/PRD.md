@@ -1,51 +1,60 @@
-# NeoNoble Ramp — PRD
+# NeoNoble Ramp — Product Requirements Document
 
-## Problema originale
-Piattaforma fintech/exchange IPO-ready con execution reale on-chain, DEX swap reali PancakeSwap V2, hybrid liquidity (user matching + market maker + DEX), cashout continuo, wallet segregati Circle USDC, fiat payout SEPA/SWIFT.
+## Problema Originale
+Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA.
 
-## Principio Fondamentale
-- ZERO simulazione. Solo flussi reali verificabili on-chain.
-- Ogni operazione produce TX hash o payout ID come prova.
-- REAL_MODE = TRUE globalmente.
+## Utenti
+- **Admin**: Gestione treasury, revenue withdrawal, monitoraggio real-time
+- **Trader**: Compra/vendi/swap NENO e altri asset
+- **Utente Banking**: IBAN virtuale, carte, bonifici SEPA
 
-## Esecuzioni Reali Verificate (BSC Mainnet)
-- NENO→USDC: TX `0c348de0f043c9f814a83122422c5aa39cb72721bdba357e025ad658c7b08701`
-- BNB→USDC: TX `ad51615f566c00eccadf113b441b280404c3a2d905de08cc519a672abb694a0e`
-- NENO/WBNB Pool: `0x27f9610fCe91B27aC98D7426Ebbb10110A7CdACd`
+## Architettura Core
+- Backend: FastAPI + MongoDB + Motor (async)
+- Frontend: React + Tailwind + Shadcn
+- Blockchain: Web3.py (BSC), PancakeSwap V2
+- Wallets: Circle USDC (Client/Treasury/Revenue segregation)
+- Payments: Stripe SEPA
 
-## Engine Operativi (28+)
-1-14: Core Exchange (Matching, Order Book, Market Making, Risk, Clearing, Settlement, Profit, Arbitrage, Smart Router, LP, Compliance, Capital Markets, Security Guard, Virtual→Real)
-15-17: Circle USDC, Wallet Segregation, Auto-Operation Loop
-18-20: Cashout Engine, Auto-Conversion, Smart Cashout Router
-21-23: Real-Time Sync, EventBus, Instant Withdraw Engine
-24-25: DEX Swap Service (PancakeSwap V2), Live Pipeline
-26: Hybrid Liquidity Engine (user matching + market maker + DEX fallback)
-27: Dynamic Spread Engine (100-300bps, inventory skew, volume tiers)
+## Fasi Completate
 
-## Hybrid Liquidity
-- Execution priority: internal_match → market_maker → dex_fallback
-- Spread: 100-300bps (base 200, inventory skew, demand adjustment)
-- Volume tiers: 0→200bps, 10k→175, 50k→150, 100k→125, 500k→100
-- Fee: 0.5% platform, 10% referral rebate
+### Phase 1-4: Foundation → Advanced Features ✅
+- Auth JWT + Ruoli (USER/DEVELOPER/ADMIN)
+- NENO Exchange (buy/sell/swap/offramp)
+- Multichain Wallet + Banking
+- Card Management + KYC/AML
+- Margin Trading + Order Book
+- DCA Trading Bot
+- PDF Compliance Reports
+- SMS/Push Notifications
 
-## Wallet Segregation
-- CLIENT: 0xf44C81dbab89941173d0d49C1CEA876950eDCfd3
-- TREASURY: 0x837799C8B457B21ab54Be374092BEEBa6EA47587
-- REVENUE: 0xF7ba3C8E9F667E864edcD2F0A4579F1E8274fD44
-- Hot Wallet: 0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E
+### Phase 5: Real Money Activation ✅
+- Circle USDC Programmable Wallets
+- Wallet Segregation (Client/Treasury/Revenue)
+- Autonomous Profit Extraction Engine
+- PancakeSwap V2 DEX (real swaps)
+- Real-time Sync + EventBus
 
-## EUR Accounts
-- IT: IT80V1810301600068254758246 (FNOMITM2) — SEPA
-- BE: BE06967614820722 (TRWIBEB1XXX) — SWIFT
+### Phase 6: Production Hardening ✅ (2026-04-08)
+- Idempotency keys su tutte le operazioni finanziarie (buy/sell/swap/offramp)
+- Safe transaction logging (upsert vs insert per prevenire E11000)
+- Universal xhrFetch wrapper (TradingPage, CardManagement, MarginTrading)
+- Revenue Withdrawal endpoint (/api/cashout/revenue-withdraw)
+- Admin Dashboard Revenue tab con form prelievo
+- Hybrid Liquidity Engine fallback su buy operations
+- TTL indexes per idempotency keys
 
-## Fiat Rails: Stripe SEPA ACTIVE, Circle ACTIVE
+## P0/P1 Issues Risolti
+- [x] E11000 Duplicate Key Error → IdempotencyService + safe_log_tx upsert
+- [x] response.clone() body stream error → xhrFetchJson wrapper universale
+- [x] Treasury insufficient blocks → Hybrid Liquidity Engine fallback
+- [x] Admin Access → admin@neonobleramp.com + massimo.fornara.2212@gmail.com ADMIN
+- [x] Revenue Withdrawal → /api/cashout/revenue-withdraw (SEPA/SWIFT/Crypto)
 
-## Test Score: 180/180 passati (iter. 33-40)
-
-## Bug Fix
-- [x] Wallet & Banking "body stream already read" → Fixed con safeFetch/response.clone()
-
-## Stato
-- [x] TUTTO completato e testato
-- [ ] KYC provider (Sumsub/Onfido)
-- [ ] NIUM templateId (bloccato su utente)
+## Backlog (P2+)
+- [ ] Microservices Architecture (splitting monolite)
+- [ ] KYC/AML provider reale (Sumsub/Onfido)
+- [ ] Visa/Mastercard BIN sponsor
+- [ ] Multi-country scaling
+- [ ] Pricing NENO dinamico (order book reale)
+- [ ] Referral System con bonus NENO
+- [ ] NIUM templateId (bloccato su configurazione utente)
