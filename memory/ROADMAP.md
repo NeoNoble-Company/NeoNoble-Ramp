@@ -6,15 +6,18 @@
 - [x] Security hardening (caps, rate limit, reentrancy)
 - [x] Real on-chain execution (proven with tx hashes)
 - [x] Stripe SEPA fiat payout
-- [x] Admin Command Center dashboard
+- [x] Admin Command Center dashboard (7 tabs)
 - [x] IPO-ready corporate structure
+- [x] Circle USDC Programmable Wallets (3 wallet segregati)
+- [x] Wallet Segregation Engine (CLIENT/TREASURY/REVENUE)
+- [x] Auto-Operation Loop (autonomous, fail-safe, real mode)
 
 ## P1 — PROSSIMI
-- [ ] Circle USDC integration (EUR -> USDC -> trading -> payout)
 - [ ] NIUM fiat rail activation (blocked on templateId)
 - [ ] WETH/BTCB deposito nel hot wallet per transfer reali ETH/BTC
 - [ ] Dynamic NENO pricing da order book reale
 - [ ] Microservices split (execution, settlement, risk)
+- [ ] Real KYC/AML provider (Sumsub/Onfido)
 
 ## P2 — BACKLOG
 - [ ] Visa/Mastercard BIN sponsor integration
@@ -24,7 +27,6 @@
 - [ ] Referral System con NENO bonuses
 - [ ] Multi-country multi-currency scaling
 - [ ] External auditor integration (Big 4)
-- [ ] Real KYC/AML provider integration (Onfido/Jumio)
 - [ ] Institutional hedge fund LP onboarding
 - [ ] Bond issuance framework
 - [ ] Listed exchange integration (Euronext, SIX, LSE)

@@ -1,5 +1,16 @@
 # NeoNoble Ramp — CHANGELOG
 
+## 2026-04-08 — Circle USDC Integration + Wallet Segregation + Auto-Operation Loop
+- Circle USDC Programmable Wallets: API key configurata, servizio inizializzato con Circle production API
+- 3 Wallet Segregati: CLIENT (0xf44C...Cfd3), TREASURY (0x8377...7587), REVENUE (0x8786...17F3) — on-chain verificati via BSC RPC
+- Wallet Segregation Engine: routing automatico depositi→CLIENT, execution→TREASURY, fee→REVENUE con audit trail completo
+- Auto-Operation Loop: loop autonomo continuo (ogni 120s), monitoraggio fondi, detection depositi, fail-safe real mode
+- Fail-Safe: blocco operazioni senza copertura, zero simulazione, zero creazione artificiale fondi
+- Reconciliation: on-chain vs ledger con detection discrepanze
+- Frontend: nuovo tab "Circle USDC" nell'Admin Dashboard con wallet balances, auto-op status, segregation summary, fail-safe panel
+- 14 nuovi endpoint API: /api/circle/wallets/balances, /diagnostic, /segregation/*, /auto-op/*, /fail-safe/report
+- 18/18 test passati (iteration_36)
+
 ## 2026-04-08 — Virtual→Real Architecture + Strategic Plan 0→IPO
 - VirtualRealEngine: classificazione tx (real/virtual/pending), real treasury (on-chain RPC), virtual metrics
 - Payout Guard: blocca automaticamente payout se fondi reali insufficienti nel hot wallet
