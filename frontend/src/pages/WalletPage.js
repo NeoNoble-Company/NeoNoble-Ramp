@@ -8,7 +8,24 @@ import {
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+const hdr = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+
+/* Safe fetch wrapper — prevents "body stream already read" by using clone() */
+async function safeFetch(url, opts = {}) {
+  try {
+    const res = await fetch(url, opts);
+    const clone = res.clone();
+    try { return await clone.json(); } catch { return {}; }
+  } catch { return {}; }
+}
+
+async function safePost(url, body) {
+  try {
+    const res = await fetch(url, { method: 'POST', headers: hdr(), body: JSON.stringify(body) });
+    const data = await res.clone().json().catch(() => ({}));
+    return { ok: res.ok, data };
+  } catch (e) { return { ok: false, data: { detail: e.message } }; }
+}
 
 const CHAIN_ICONS = { ethereum: '/eth.svg', bsc: '/bnb.svg', polygon: '/matic.svg' };
 const CHAIN_COLORS = { ethereum: '#627EEA', bsc: '#F3BA2F', polygon: '#8247E5' };
@@ -73,15 +90,14 @@ export default function WalletPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [wRes, cRes, ocRes, ibRes, sRes, btRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/multichain/chains`),
-        fetch(`${BACKEND_URL}/api/multichain/balances`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/banking/iban`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/wallet/settlements?limit=10`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/banking/transactions?limit=10`, { headers: headers() }),
+      const [wData, cData, ocData, ibData, sData, btData] = await Promise.all([
+        safeFetch(`${BACKEND_URL}/api/wallet/balances`, { headers: hdr() }),
+        safeFetch(`${BACKEND_URL}/api/multichain/chains`),
+        safeFetch(`${BACKEND_URL}/api/multichain/balances`, { headers: hdr() }),
+        safeFetch(`${BACKEND_URL}/api/banking/iban`, { headers: hdr() }),
+        safeFetch(`${BACKEND_URL}/api/wallet/settlements?limit=10`, { headers: hdr() }),
+        safeFetch(`${BACKEND_URL}/api/banking/transactions?limit=10`, { headers: hdr() }),
       ]);
-      const [wData, cData, ocData, ibData, sData, btData] = await Promise.all([wRes.json(), cRes.json(), ocRes.json(), ibRes.json(), sRes.json(), btRes.json()]);
       setWallets(wData.wallets || []);
       setTotalEur(wData.total_eur_value || 0);
       setChains(cData.chains || []);
@@ -98,8 +114,7 @@ export default function WalletPage() {
   const fetchUnifiedWallet = useCallback(async () => {
     setUnifiedLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/multichain/unified-wallet`, { headers: headers() });
-      const data = await res.json();
+      const data = await safeFetch(`${BACKEND_URL}/api/multichain/unified-wallet`, { headers: hdr() });
       setUnifiedAssets(data.assets || []);
       setUnifiedTotal(data.total_eur_value || 0);
     } catch (e) { console.error(e); }
@@ -111,10 +126,9 @@ export default function WalletPage() {
   const handleDiscoverTokens = async (chain) => {
     setDiscovering(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/multichain/discover-tokens`, {
-        method: 'POST', headers: headers(), body: JSON.stringify({ chain })
+      const data = await safeFetch(`${BACKEND_URL}/api/multichain/discover-tokens`, {
+        method: 'POST', headers: hdr(), body: JSON.stringify({ chain })
       });
-      const data = await res.json();
       setDiscoveredTokens(data.discovered_tokens || []);
     } catch (e) { console.error(e); }
     finally { setDiscovering(false); }
@@ -124,12 +138,8 @@ export default function WalletPage() {
     e.preventDefault();
     setConvertLoading(true); setConvertResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/wallet/convert`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ from_asset: convertFrom, to_asset: convertTo, amount: parseFloat(convertAmount) })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Conversion failed');
+      const { ok, data } = await safePost(`${BACKEND_URL}/api/wallet/convert`, { from_asset: convertFrom, to_asset: convertTo, amount: parseFloat(convertAmount) });
+      if (!ok) throw new Error(data.detail || 'Conversion failed');
       setConvertResult({ success: true, data });
       setConvertAmount('');
       fetchAll();
@@ -141,12 +151,8 @@ export default function WalletPage() {
     e.preventDefault();
     setLinkLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/multichain/link`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ address: linkAddress, chain: linkChain })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Link failed');
+      const { ok, data } = await safePost(`${BACKEND_URL}/api/multichain/link`, { address: linkAddress, chain: linkChain });
+      if (!ok) throw new Error(data.detail || 'Link failed');
       setShowLink(false); setLinkAddress('');
       fetchAll();
     } catch (e) { alert(e.message); }
@@ -156,8 +162,8 @@ export default function WalletPage() {
   const handleSyncChain = async (chain) => {
     setSyncing(true);
     try {
-      await fetch(`${BACKEND_URL}/api/multichain/sync`, {
-        method: 'POST', headers: headers(),
+      await safeFetch(`${BACKEND_URL}/api/multichain/sync`, {
+        method: 'POST', headers: hdr(),
         body: JSON.stringify({ chain })
       });
       fetchAll();
@@ -167,11 +173,7 @@ export default function WalletPage() {
 
   const handleAssignIban = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/banking/iban/assign`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ currency: 'EUR', beneficiary_name: ibanName || undefined })
-      });
-      await res.json();
+      await safePost(`${BACKEND_URL}/api/banking/iban/assign`, { currency: 'EUR', beneficiary_name: ibanName || undefined });
       setShowIbanForm(false); setIbanName('');
       fetchAll();
     } catch (e) { console.error(e); }
@@ -180,12 +182,8 @@ export default function WalletPage() {
   const handleWithdraw = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${BACKEND_URL}/api/banking/sepa/withdraw`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ amount: parseFloat(withdrawAmount), destination_iban: withdrawIban, beneficiary_name: withdrawName })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      const { ok, data } = await safePost(`${BACKEND_URL}/api/banking/sepa/withdraw`, { amount: parseFloat(withdrawAmount), destination_iban: withdrawIban, beneficiary_name: withdrawName });
+      if (!ok) throw new Error(data.detail);
       setShowWithdraw(false); setWithdrawAmount(''); setWithdrawIban(''); setWithdrawName('');
       fetchAll();
     } catch (e) { alert(e.message); }
