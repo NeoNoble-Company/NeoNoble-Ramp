@@ -583,6 +583,17 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     except Exception:
         pass
 
+    # ── Event-driven instant cashout ──
+    try:
+        from services.realtime_sync_service import EventBus
+        asyncio.ensure_future(EventBus.get_instance().emit("trade_executed", {
+            "type": "sell_neno", "tx_id": tx_id, "user_id": uid,
+            "fee": fee, "fee_asset": asset, "eur_value": eur_value,
+            "tx_hash": real_tx_hash,
+        }))
+    except Exception:
+        pass
+
     result = {
         "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (f" | tx: {real_tx_hash}" if real_tx_hash else "") + (f" | payout: {real_payout_id}" if real_payout_id else ""),
         "transaction": tx,
@@ -761,6 +772,17 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
                 to_asset: round(await _get_balance(db, uid, to_asset), 8),
             },
             "trigger": "swap", "tx_id": tx_id,
+        }))
+    except Exception:
+        pass
+
+    # ── Event-driven instant cashout ──
+    try:
+        from services.realtime_sync_service import EventBus
+        asyncio.ensure_future(EventBus.get_instance().emit("trade_executed", {
+            "type": "swap", "tx_id": tx_id, "user_id": uid,
+            "fee": fee, "fee_asset": from_asset, "eur_value": eur_value,
+            "tx_hash": real_tx_hash,
         }))
     except Exception:
         pass
@@ -2100,6 +2122,17 @@ async def withdraw_real_onchain(req: RealWithdrawalRequest, current_user: dict =
         asyncio.ensure_future(broadcast_balance_update(uid, {
             "balances": {asset: round(new_balance, 8)},
             "trigger": "withdraw_real", "tx_id": tx_id,
+        }))
+    except Exception:
+        pass
+
+    # ── Event-driven settlement confirmation ──
+    try:
+        from services.realtime_sync_service import EventBus
+        asyncio.ensure_future(EventBus.get_instance().emit("settlement_confirmed", {
+            "type": "withdraw_real", "tx_id": tx_id, "user_id": uid,
+            "asset": asset, "amount": req.amount, "eur_value": eur_value,
+            "tx_hash": tx_hash,
         }))
     except Exception:
         pass

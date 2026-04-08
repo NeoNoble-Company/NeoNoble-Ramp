@@ -124,6 +124,35 @@ export default function AdminDashboard() {
 
         {tab === 'overview' && (
           <div className="space-y-4">
+            {/* System Status Banner */}
+            <div className="bg-zinc-900/80 border border-emerald-500/30 rounded-xl p-3" data-testid="system-status-banner">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-bold text-emerald-400">REAL MODE</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3 h-3 text-cyan-400" />
+                    <span className="text-[10px] text-cyan-400">Cashout Engine: {cashoutStatus?.running ? 'ACTIVE' : 'OFF'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <ArrowRightLeft className="w-3 h-3 text-blue-400" />
+                    <span className="text-[10px] text-blue-400">Instant Withdraw: ACTIVE</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Coins className="w-3 h-3 text-amber-400" />
+                    <span className="text-[10px] text-amber-400">Auto-Op Loop: {circleAutoOp?.running ? 'ACTIVE' : 'OFF'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {cashoutReport?.hot_wallet?.neno > 0 && (
+                    <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{cashoutReport?.hot_wallet?.neno?.toFixed(4)} NENO</span>
+                  )}
+                  <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{cashoutReport?.usdc_total?.toFixed(2) || '0.00'} USDC</span>
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard label="Volume Totale" value={`EUR ${(financials?.kpis?.total_volume_eur || 0).toLocaleString()}`} icon={TrendingUp} />
               <StatCard label="Transazioni" value={financials?.kpis?.total_transactions || 0} icon={Activity} color="cyan" />

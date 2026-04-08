@@ -206,6 +206,9 @@ from routes.circle_routes import router as circle_router
 # Import Cashout Engine routes
 from routes.cashout_routes import router as cashout_router
 
+# Import Real-Time Sync routes
+from routes.sync_routes import router as sync_router
+
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
 
@@ -480,6 +483,12 @@ async def _background_init():
             await db.cashout_metrics.create_index([("cycle", -1)])
             await db.auto_conversions.create_index([("created_at", -1)])
             
+            # Instant Withdraw & Event Bus indexes
+            await db.instant_withdrawals.create_index([("created_at", -1)])
+            await db.instant_withdrawals.create_index("status")
+            await db.event_bus_log.create_index([("timestamp", -1)])
+            await db.event_bus_log.create_index("event")
+            
             logger.info("[INIT] Database indexes created")
         except Exception as e:
             logger.warning(f"[INIT] Index creation failed (non-fatal): {e}")
@@ -718,6 +727,19 @@ async def _background_init():
     except Exception as e:
         logger.warning(f"[INIT] Cashout Engine failed to start: {e}")
 
+    # Initialize Instant Withdraw Engine + Event Bus
+    try:
+        from services.realtime_sync_service import EventBus
+        from services.instant_withdraw_engine import InstantWithdrawEngine
+        event_bus = EventBus.get_instance()
+        iw_engine = InstantWithdrawEngine.get_instance()
+        event_bus.on("trade_executed", iw_engine.on_trade_executed)
+        event_bus.on("fee_collected", iw_engine.on_fee_collected)
+        event_bus.on("settlement_confirmed", iw_engine.on_settlement_confirmed)
+        logger.info("[INIT] Instant Withdraw Engine + Event Bus connected — event-driven cashout active")
+    except Exception as e:
+        logger.warning(f"[INIT] Instant Withdraw Engine init failed: {e}")
+
     # Initialize Market Maker Treasury
     try:
         from services.market_maker_service import MarketMakerService
@@ -820,6 +842,7 @@ api_router.include_router(institutional_router)
 api_router.include_router(strategic_router)
 api_router.include_router(circle_router)
 api_router.include_router(cashout_router)
+api_router.include_router(sync_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router
