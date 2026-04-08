@@ -1,45 +1,30 @@
-# NeoNoble Ramp — Roadmap
+# NeoNoble Ramp — ROADMAP
 
-## COMPLETED (100%)
-All features implemented, tested, and verified.
+## P0 — COMPLETATO
+- [x] Exchange core (matching, order book, risk, clearing, profit)
+- [x] Institutional infrastructure (LP tier-1, capital markets, compliance)
+- [x] Security hardening (caps, rate limit, reentrancy)
+- [x] Real on-chain execution (proven with tx hashes)
+- [x] Stripe SEPA fiat payout
+- [x] Admin Command Center dashboard
+- [x] IPO-ready corporate structure
 
-### Core Exchange
-- NENO Exchange: Buy, Sell, Swap, Off-Ramp, Create Token
-- On-Chain Settlement anchored to BSC blocks (keccak256)
-- NENO Contract 0xeF3F5C1892A8d7A3304E4A15959E124402d69974
-- Dynamic NENO Pricing
-- Custom Token Creation
+## P1 — PROSSIMI
+- [ ] Circle USDC integration (EUR -> USDC -> trading -> payout)
+- [ ] NIUM fiat rail activation (blocked on templateId)
+- [ ] WETH/BTCB deposito nel hot wallet per transfer reali ETH/BTC
+- [ ] Dynamic NENO pricing da order book reale
+- [ ] Microservices split (execution, settlement, risk)
 
-### Wallet & Banking
-- Multi-Chain Wallet Sync (ETH, BSC, Polygon)
-- WalletConnect QR (Project ID: configured)
-- MetaMask, Coinbase Wallet, Trust Wallet
-- IBAN/SEPA Banking Rails
-- Card Issuing (NIUM)
-
-### Trading
-- Margin Trading (up to 20x)
-- DCA Trading Bot
-- Advanced Orders
-
-### Compliance
-- AI KYC Verification
-- PEP Screening & Sanctions
-- Monte Carlo VaR Simulation
-- PDF Compliance Reports
-
-### Infrastructure
-- i18n (9 languages)
-- Referral System
-- Background Scheduler
-- Admin Audit Logging
-- Microservices Domain Registry
-
-## EXTERNAL DEPENDENCIES
-- NIUM templateId: Requires portal configuration for real card issuing
-- Twilio SMS: Requires API keys for SMS dispatch
-
-## FUTURE ENHANCEMENTS
-- Full Microservices Split
-- Real-time PEP providers (Dow Jones, Refinitiv)
-- WebSocket NENO price feeds
+## P2 — BACKLOG
+- [ ] Visa/Mastercard BIN sponsor integration
+- [ ] SWIFT gpi real integration
+- [ ] TARGET2 direct access (richiede banking license)
+- [ ] SEPA Instant via RT1
+- [ ] Referral System con NENO bonuses
+- [ ] Multi-country multi-currency scaling
+- [ ] External auditor integration (Big 4)
+- [ ] Real KYC/AML provider integration (Onfido/Jumio)
+- [ ] Institutional hedge fund LP onboarding
+- [ ] Bond issuance framework
+- [ ] Listed exchange integration (Euronext, SIX, LSE)
