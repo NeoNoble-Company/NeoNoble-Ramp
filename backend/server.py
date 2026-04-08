@@ -209,6 +209,9 @@ from routes.cashout_routes import router as cashout_router
 # Import Real-Time Sync routes
 from routes.sync_routes import router as sync_router
 
+# Import Live Execution routes
+from routes.live_routes import router as live_router
+
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
 
@@ -488,6 +491,10 @@ async def _background_init():
             await db.instant_withdrawals.create_index("status")
             await db.event_bus_log.create_index([("timestamp", -1)])
             await db.event_bus_log.create_index("event")
+            
+            # DEX Swap & Pipeline indexes
+            await db.dex_swap_log.create_index([("timestamp", -1)])
+            await db.pipeline_executions.create_index([("timestamp", -1)])
             
             logger.info("[INIT] Database indexes created")
         except Exception as e:
@@ -843,6 +850,7 @@ api_router.include_router(strategic_router)
 api_router.include_router(circle_router)
 api_router.include_router(cashout_router)
 api_router.include_router(sync_router)
+api_router.include_router(live_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router
