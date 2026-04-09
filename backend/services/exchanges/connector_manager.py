@@ -27,6 +27,7 @@ from .base_connector import (
 from .binance_connector import BinanceConnector
 from .kraken_connector import KrakenConnector
 from .coinbase_connector import CoinbaseConnector
+from .mexc_connector import MexcConnector
 from .neno_virtual_exchange import get_neno_exchange, NenoVirtualExchange
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ class ConnectorManager:
         self._connectors["binance"] = BinanceConnector()
         self._connectors["kraken"] = KrakenConnector()
         self._connectors["coinbase"] = CoinbaseConnector()
+        self._connectors["mexc"] = MexcConnector()
         
         # Load and initialize credentials from environment
         await self._load_credentials()
@@ -151,6 +153,20 @@ class ConnectorManager:
             logger.info("[CONNECTORS] Coinbase connector configured")
         else:
             logger.warning("[CONNECTORS] Coinbase credentials not configured")
+        
+        # MEXC
+        mexc_key = os.environ.get("MEXC_API_KEY")
+        mexc_secret = os.environ.get("MEXC_API_SECRET", "")
+        
+        if mexc_key:
+            await self._connectors["mexc"].initialize(
+                api_key=mexc_key,
+                api_secret=mexc_secret
+            )
+            await self._connectors["mexc"].connect()
+            logger.info("[CONNECTORS] MEXC connector configured")
+        else:
+            logger.warning("[CONNECTORS] MEXC credentials not configured")
     
     def is_enabled(self) -> bool:
         """Check if exchange trading is enabled."""

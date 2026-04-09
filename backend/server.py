@@ -916,6 +916,14 @@ api_router.include_router(pipeline_router)
 from routes.infra_routes import router as infra_router
 api_router.include_router(infra_router)
 
+# Institutional Liquidity Router
+from routes.router_routes import router as liquidity_router_api
+api_router.include_router(liquidity_router_api)
+
+# KYC/AML Provider
+from routes.kyc_provider_routes import router as kyc_provider_router
+api_router.include_router(kyc_provider_router)
+
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
 
