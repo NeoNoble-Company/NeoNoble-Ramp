@@ -4,12 +4,12 @@ import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, Ex
 const API = process.env.REACT_APP_BACKEND_URL;
 
 function xhrFetch(url, opts = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open(opts.method || 'GET', url);
     Object.entries(opts.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-    xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error(xhr.statusText)); } };
-    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); } };
+    xhr.onerror = () => resolve({});
     xhr.send(opts.body || null);
   });
 }
