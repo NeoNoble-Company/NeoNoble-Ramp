@@ -117,3 +117,7 @@ frontend/node_modules/.cache/default-development/21.pack
 *.env.*
 neonoble-ramp.tar.gz
 neonoble-ramp.zip
+-e 
+# Environment files
+*.env
+*.env.*
