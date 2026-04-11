@@ -301,6 +301,15 @@ por_engine.set_real_payout_service(real_payout_service)
 set_auth_service(auth_service)
 set_api_key_service(api_key_service)
 set_ramp_api_services(ramp_service, api_key_service)
+set_ramp_api_execution_services(
+    routing_service,
+    real_payout_service,
+    settlement_service,
+    wallet_service,
+    dex_service,
+    connector_manager
+)
+
 set_ramp_service(ramp_service)
 set_payout_service(payout_service)
 set_por_engine(por_engine)
