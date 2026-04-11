@@ -164,6 +164,135 @@ def por_quote_to_response(quote) -> dict:
         "metadata": quote.metadata
     }
     return response
+def _result_success(result) -> bool:
+    if result is None:
+        return False
+    if isinstance(result, dict):
+        return result.get("success", True)
+    return True
+
+def _result_status(result, default: str = "unknown") -> str:
+    if result is None:
+        return default
+    if isinstance(result, dict):
+        return result.get("status", default)
+    return getattr(result, "status", default)
+
+def _result_tx_hash(result):
+    if result is None:
+        return None
+    if isinstance(result, dict):
+        return result.get("tx_hash") or result.get("transaction_hash")
+    return getattr(result, "tx_hash", None) or getattr(result, "transaction_hash", None)
+
+def _result_reference(result):
+    if result is None:
+        return None
+    if isinstance(result, dict):
+        return result.get("reference") or result.get("payout_reference") or result.get("id")
+    return (
+        getattr(result, "reference", None)
+        or getattr(result, "payout_reference", None)
+        or getattr(result, "id", None)
+    )
+
+async def _execute_offramp_trade_with_fallback(quote):
+    """
+    Execution priority:
+    1. internal/user matching via routing_service
+    2. liquidity internal via routing_service
+    3. DEX
+    4. CEX connector
+    """
+    last_error = None
+
+    # 1-2) routing engine (internal match / internal liquidity / best execution)
+    if routing_service:
+        try:
+            execution = await routing_service.execute_trade(
+                from_asset=quote.crypto_currency,
+                to_asset="EUR",
+                amount=quote.crypto_amount
+            )
+            if _result_success(execution):
+                return execution
+        except Exception as e:
+            last_error = f"routing_service failed: {e}"
+
+    # 3) DEX fallback
+    if dex_service:
+        try:
+            execution = await dex_service.swap(
+                from_asset=quote.crypto_currency,
+                to_asset="EUR",
+                amount=quote.crypto_amount
+            )
+            if _result_success(execution):
+                return execution
+        except Exception as e:
+            last_error = f"dex_service failed: {e}"
+
+    # 4) CEX connector fallback
+    if connector_manager:
+        try:
+            execution = await connector_manager.execute(
+                from_asset=quote.crypto_currency,
+                to_asset="EUR",
+                amount=quote.crypto_amount
+            )
+            if _result_success(execution):
+                return execution
+        except Exception as e:
+            last_error = f"connector_manager failed: {e}"
+
+    raise RuntimeError(last_error or "No execution path available for offramp")
+
+async def _execute_onramp_trade_with_fallback(quote):
+    """
+    On-ramp execution priority:
+    1. internal routing / liquidity
+    2. DEX
+    3. CEX connector
+    """
+    last_error = None
+
+    if routing_service:
+        try:
+            execution = await routing_service.execute_trade(
+                from_asset="EUR",
+                to_asset=quote.crypto_currency,
+                amount=quote.fiat_amount
+            )
+            if _result_success(execution):
+                return execution
+        except Exception as e:
+            last_error = f"routing_service failed: {e}"
+
+    if dex_service:
+        try:
+            execution = await dex_service.swap(
+                from_asset="EUR",
+                to_asset=quote.crypto_currency,
+                amount=quote.fiat_amount
+            )
+            if _result_success(execution):
+                return execution
+        except Exception as e:
+            last_error = f"dex_service failed: {e}"
+
+    if connector_manager:
+        try:
+            execution = await connector_manager.execute(
+                from_asset="EUR",
+                to_asset=quote.crypto_currency,
+                amount=quote.fiat_amount
+            )
+            if _result_success(execution):
+                return execution
+        except Exception as e:
+            last_error = f"connector_manager failed: {e}"
+
+    raise RuntimeError(last_error or "No execution path available for onramp")
 
 
 # ========================
