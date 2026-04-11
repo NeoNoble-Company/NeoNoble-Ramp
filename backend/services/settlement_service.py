@@ -85,10 +85,7 @@ class SettlementService:
             now = datetime.now(timezone.utc)
             
             # Determine initial status based on mode
-            if self._mode == SettlementMode.INSTANT:
-                status = "completed"
-            else:
-                status = "pending"
+            status = "processing"
             
             settlement_doc = {
                 "settlement_id": settlement_id,
@@ -252,3 +249,27 @@ class SettlementService:
         }
         
         return stats
+
+async def settle_transaction(self, quote_id: str, execution: Dict, payout: Dict):
+    """
+    REAL settlement after execution + payout.
+    """
+    try:
+        await self.settlements_collection.update_one(
+            {"quote_id": quote_id},
+            {
+                "$set": {
+                    "status": "completed" if payout.get("success") else "failed",
+                    "execution": execution,
+                    "payout": payout,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+
+        logger.info(f"Settlement completed for {quote_id}")
+
+    except Exception as e:
+        logger.error(f"Settlement failed: {e}")
+
