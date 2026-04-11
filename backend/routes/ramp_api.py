@@ -538,24 +538,23 @@ except Exception as e:
     execution = None
 
 # 2. TRY DEX (1inch / PancakeSwap)
-if not execution or getattr(execution, "status", None) != "completed":
-    dex_service = get_dex_service()
+dex_service = get_dex_service()
 
-    if dex_service and dex_service.is_enabled():
-        try:
-            dex_result = await dex_service.execute_swap_1inch(
-                source_token=quote.crypto_currency,
-                destination_token="EUR",
-                amount_wei=quote.crypto_amount,
-                min_return=0,
-                quote_id=quote.quote_id
-            )
+if dex_service and dex_service.is_enabled():
+    try:
+        dex_result = await dex_service.execute_swap_1inch(
+            source_token=source_token,
+            destination_token=destination_token,
+            amount_wei=int(quote.crypto_amount),
+            min_return=0,
+            quote_id=quote.quote_id
+        )
 
-            if dex_result.status.value == "completed":
-                execution = dex_result
+        if dex_result.status.value == "completed":
+            execution = dex_result
 
-        except Exception as e:
-            execution = None
+    except Exception as e:
+        execution = None
 
 # 3. TRY CEX CONNECTOR (Binance / Kraken / Coinbase)
 if not execution:
