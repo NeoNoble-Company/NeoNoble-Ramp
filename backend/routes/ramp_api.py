@@ -514,6 +514,59 @@ async def process_deposit_por(request: DepositProcessRequest, http_request: Requ
     amount=request.amount
 )
 
+# 🔴 REAL EXECUTION WITH FALLBACK
+
+execution = None
+
+# 1. TRY ROUTING SERVICE (internal / smart routing)
+try:
+    execution = await routing_service.execute_trade(
+        from_asset=quote.crypto_currency,
+        to_asset="EUR",
+        amount=quote.crypto_amount
+    )
+except Exception as e:
+    execution = None
+
+# 2. TRY DEX (1inch / PancakeSwap)
+if not execution or getattr(execution, "status", None) != "completed":
+    dex_service = get_dex_service()
+
+    if dex_service and dex_service.is_enabled():
+        try:
+            dex_result = await dex_service.execute_swap_1inch(
+                source_token=quote.crypto_currency,
+                destination_token="EUR",
+                amount_wei=quote.crypto_amount,
+                min_return=0,
+                quote_id=quote.quote_id
+            )
+
+            if dex_result.status.value == "completed":
+                execution = dex_result
+
+        except Exception as e:
+            execution = None
+
+# 3. TRY CEX CONNECTOR (Binance / Kraken / Coinbase)
+if not execution:
+    connector_manager = get_connector_manager()
+
+    if connector_manager:
+        try:
+            execution = await connector_manager.execute(
+                symbol=f"{quote.crypto_currency}/EUR",
+                side="sell",
+                amount=quote.crypto_amount
+            )
+        except Exception as e:
+            execution = None
+
+# 4. FINAL CHECK
+if not execution:
+    raise Exception("Execution failed across all venues")
+
+
 if error:
     raise HTTPException(status_code=400, detail=error)
 
