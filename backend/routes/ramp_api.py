@@ -30,6 +30,9 @@ router = APIRouter(tags=["Developer Ramp API"])
 ramp_service: RampService = None
 por_engine: InternalPoRProvider = None
 hmac_middleware: HMACAuthMiddleware = None
+routing_service = None
+real_payout_service = None
+settlement_service = None
 
 # Real execution services
 routing_service = None
@@ -43,6 +46,12 @@ def set_services(ramp: RampService, api_key_service: PlatformApiKeyService):
     global ramp_service, hmac_middleware
     ramp_service = ramp
     hmac_middleware = HMACAuthMiddleware(api_key_service)
+
+def set_execution_services(routing, payout, settlement):
+    global routing_service, real_payout_service, settlement_service
+    routing_service = routing
+    real_payout_service = payout
+    settlement_service = settlement
 
 def set_por_engine(engine: InternalPoRProvider):
     global por_engine
@@ -498,61 +507,60 @@ async def process_deposit_por(request: DepositProcessRequest, http_request: Requ
 
     # 1. register confirmed deposit in PoR engine
     quote, error = await por_engine.process_deposit(
-        quote_id=request.quote_id,
-        tx_hash=request.tx_hash,
-        amount=request.amount
-    )
+    quote_id=request.quote_id,
+    tx_hash=request.tx_hash,
+    amount=request.amount
+)
 
-    if error:
-        raise HTTPException(status_code=400, detail=error)
+if error:
+    raise HTTPException(status_code=400, detail=error)
 
-    # 2. determine payout destination
-    iban = quote.metadata.get("bank_account") or getattr(quote, "bank_account", None)
-    if not iban:
-        raise HTTPException(status_code=400, detail="Missing IBAN for payout")
+# =========================
+# 🔴 REAL EXECUTION FLOW
+# =========================
 
-    # 3. real execution with fallback chain
-    try:
-        execution = await _execute_offramp_trade_with_fallback(quote)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Trade execution failed: {e}")
+# 1. EXECUTION (swap crypto → EUR)
+execution = await routing_service.execute_trade(
+    from_asset=quote.crypto_currency,
+    to_asset="EUR",
+    amount=quote.crypto_amount
+)
 
-    if not _result_success(execution):
-        raise HTTPException(status_code=500, detail=f"Trade execution unsuccessful: {execution}")
+# 2. REAL PAYOUT (Stripe)
+payout_result = await real_payout_service.create_payout(
+    quote_id=quote.quote_id,
+    transaction_id=quote.quote_id,
+    amount_eur=quote.fiat_amount,
+    reference=f"NENO-{quote.quote_id[:8]}",
+    metadata=quote.metadata
+)
 
-    # 4. real fiat payout
-    try:
-        payout = await real_payout_service.execute_payout(
-            user_id=quote.metadata.get("user_id"),
-            amount_eur=execution.get("amount_eur") if isinstance(execution, dict) and execution.get("amount_eur") is not None else quote.fiat_amount,
-            iban=iban
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Payout failed: {e}")
+# 3. SETTLEMENT
+await settlement_service.settle_transaction(
+    quote_id=quote.quote_id,
+    execution=execution,
+    payout={
+        "success": payout_result.success,
+        "payout_id": payout_result.payout_id,
+        "status": payout_result.status.value if payout_result.status else None
+    }
+)
 
-    if not _result_success(payout):
-        raise HTTPException(status_code=500, detail=f"Payout unsuccessful: {payout}")
+# =========================
+# 🔴 RESPONSE FINALE
+# =========================
 
-    # 5. settlement
-    try:
-        await settlement_service.settle_transaction(
-            quote_id=quote.quote_id,
-            execution=execution,
-            payout=payout
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Settlement failed: {e}")
+response = por_quote_to_response(quote)
 
-    # 6. enriched response
-    response = por_quote_to_response(quote)
-    response["execution_status"] = _result_status(execution, "completed")
-    response["tx_hash"] = _result_tx_hash(execution) or request.tx_hash
-    response["payout_status"] = _result_status(payout, "submitted")
-    response["payout_reference"] = _result_reference(payout)
-    response["execution"] = execution
-    response["payout"] = payout
+response["execution"] = execution
+response["payout"] = {
+    "success": payout_result.success,
+    "payout_id": payout_result.payout_id,
+    "status": payout_result.status.value if payout_result.status else None
+}
 
-    return response
+return response
+
 
     
     if error:
