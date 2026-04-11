@@ -106,7 +106,7 @@ from routes.dev_portal import router as dev_router, set_api_key_service
 from routes.ramp_api import (
     router as ramp_api_router,
     set_services as set_ramp_api_services,
-    set_execution_services as set_ramp_api_execution_services
+    set_execution_services
 )
 from routes.user_ramp import router as user_ramp_router, set_ramp_service
 from routes.webhooks import router as webhooks_router, set_payout_service
@@ -301,15 +301,12 @@ por_engine.set_real_payout_service(real_payout_service)
 set_auth_service(auth_service)
 set_api_key_service(api_key_service)
 set_ramp_api_services(ramp_service, api_key_service)
-set_ramp_api_execution_services(
+# 🔴 REAL EXECUTION SERVICES (CRITICAL)
+set_execution_services(
     routing_service,
     real_payout_service,
-    settlement_service,
-    wallet_service,
-    dex_service,
-    connector_manager
+    settlement_service
 )
-
 set_ramp_service(ramp_service)
 set_payout_service(payout_service)
 set_por_engine(por_engine)
