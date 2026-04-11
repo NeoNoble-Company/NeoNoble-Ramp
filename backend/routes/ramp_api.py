@@ -24,6 +24,15 @@ from services.pricing_service import pricing_service, SUPPORTED_CRYPTOS, NENO_PR
 from middleware.auth import HMACAuthMiddleware
 from services.api_key_service import PlatformApiKeyService
 
+# 🔴 TOKEN ADDRESS MAPPING (BSC)
+TOKEN_MAP = {
+    "NENO": "0xeF3F5C1892A8d7A3304E4A15959E124402d69974",
+    "USDT": "0x55d398326f99059fF775485246999027B3197955",
+    "USDC": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+    "WBNB": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+}
+
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Developer Ramp API"])
