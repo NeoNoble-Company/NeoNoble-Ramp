@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Developer Ramp API"])
 
 # Services will be set by main app
-# Services will be set by main app
 ramp_service: RampService = None
 por_engine: InternalPoRProvider = None
 hmac_middleware: HMACAuthMiddleware = None
