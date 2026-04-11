@@ -485,80 +485,74 @@ async def execute_offramp_por(request: OfframpExecuteRequest, http_request: Requ
 async def process_deposit_por(request: DepositProcessRequest, http_request: Request):
     """
     Process a confirmed crypto deposit via PoR engine.
-    
+
     **HMAC Authentication Required**
-    
+
     In instant settlement mode, this completes the entire
     off-ramp flow automatically.
     """
     await hmac_middleware.authenticate(http_request)
-    
+
     if not por_engine:
         raise HTTPException(status_code=503, detail="PoR engine not available")
-    
+
+    # 1. register confirmed deposit in PoR engine
     quote, error = await por_engine.process_deposit(
         quote_id=request.quote_id,
         tx_hash=request.tx_hash,
         amount=request.amount
     )
 
-    # 1. PROCESS DEPOSIT (già fatto)
-quote, error = await por_engine.process_deposit(
-    quote_id=request.quote_id,
-    tx_hash=request.tx_hash,
-    amount=request.amount
-)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
 
-if error:
-    raise HTTPException(status_code=400, detail=error)
+    # 2. determine payout destination
+    iban = quote.metadata.get("bank_account") or getattr(quote, "bank_account", None)
+    if not iban:
+        raise HTTPException(status_code=400, detail="Missing IBAN for payout")
 
-# 2. EXECUTION (SWAP REALE)
-execution = await routing_service.execute_trade(
-    from_asset=quote.crypto_currency,
-    to_asset="EUR",
-    amount=quote.crypto_amount
-)
+    # 3. real execution with fallback chain
+    try:
+        execution = await _execute_offramp_trade_with_fallback(quote)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Trade execution failed: {e}")
 
-if not execution or not execution.get("success"):
-    raise HTTPException(
-        status_code=500,
-        detail=f"Trade execution failed: {execution}"
-    )
+    if not _result_success(execution):
+        raise HTTPException(status_code=500, detail=f"Trade execution unsuccessful: {execution}")
 
-# 3. PAYOUT (FIAT REALE)
-iban = quote.metadata.get("bank_account")
+    # 4. real fiat payout
+    try:
+        payout = await real_payout_service.execute_payout(
+            user_id=quote.metadata.get("user_id"),
+            amount_eur=execution.get("amount_eur") if isinstance(execution, dict) and execution.get("amount_eur") is not None else quote.fiat_amount,
+            iban=iban
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Payout failed: {e}")
 
-if not iban:
-    raise HTTPException(
-        status_code=400,
-        detail="Missing IBAN for payout"
-    )
+    if not _result_success(payout):
+        raise HTTPException(status_code=500, detail=f"Payout unsuccessful: {payout}")
 
-payout = await real_payout_service.execute_payout(
-    user_id=quote.metadata.get("user_id"),
-    amount_eur=execution.get("amount_eur") or quote.fiat_amount,
-    iban=iban
-)
+    # 5. settlement
+    try:
+        await settlement_service.settle_transaction(
+            quote_id=quote.quote_id,
+            execution=execution,
+            payout=payout
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Settlement failed: {e}")
 
-if not payout or not payout.get("success"):
-    raise HTTPException(
-        status_code=500,
-        detail=f"Payout failed: {payout}"
-    )
+    # 6. enriched response
+    response = por_quote_to_response(quote)
+    response["execution_status"] = _result_status(execution, "completed")
+    response["tx_hash"] = _result_tx_hash(execution) or request.tx_hash
+    response["payout_status"] = _result_status(payout, "submitted")
+    response["payout_reference"] = _result_reference(payout)
+    response["execution"] = execution
+    response["payout"] = payout
 
-# 4. SETTLEMENT (CHIUSURA TRANSAZIONE)
-await settlement_service.settle_transaction(
-    quote_id=quote.quote_id,
-    execution=execution,
-    payout=payout
-)
-
-# 5. RESPONSE
-response = por_quote_to_response(quote)
-response["execution"] = execution
-response["payout"] = payout
-
-return response
+    return response
 
     
     if error:
