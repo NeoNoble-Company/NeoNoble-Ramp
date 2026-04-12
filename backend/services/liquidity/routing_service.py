@@ -369,31 +369,24 @@ self._connectors[RoutingVenue.CEX] = RealVenueConnector()
         # Execute (shadow or real)
         connector = self._connectors.get(RoutingVenue.CEX)
         
-        if self._config.shadow_mode:
-            # Shadow execution
-            success, result, error = await connector.execute_conversion(
-                source_currency, destination_currency, source_amount
-            )
-            
-            if success and result:
-                event.status = RoutingStatus.COMPLETED
-                event.destination_amount = result["destination_amount"]
-                event.executed_rate = result["executed_rate"]
-                event.slippage_pct = result["slippage_pct"]
-                event.fee_amount = result["fee_amount"]
-                event.fee_currency = result["fee_currency"]
-                event.venue_order_id = result["order_id"]
-                event.venue_trade_ids = result["trade_ids"]
-                event.shadow_execution_log = result
-                event.completed_at = now.isoformat()
-            else:
-                event.status = RoutingStatus.FAILED
-                event.error_message = error
-        else:
-            # Real execution would go here
-            # For Phase 1, we only support shadow mode
-            event.status = RoutingStatus.FAILED
-            event.error_message = "Real execution not enabled in Phase 1"
+        # 🔥 REAL EXECUTION
+
+success, result, error = await connector.execute_conversion(
+    source_currency,
+    destination_currency,
+    source_amount
+)
+
+if success and result:
+    event.status = RoutingStatus.COMPLETED
+    event.destination_amount = result["destination_amount"]
+    event.executed_rate = result["executed_rate"]
+    event.venue_order_id = result["order_id"]
+    event.completed_at = now.isoformat()
+else:
+    event.status = RoutingStatus.FAILED
+    event.error_message = error
+
         
         # Get rate snapshot after
         event.rate_snapshot_after = await self._get_rate_snapshot()
