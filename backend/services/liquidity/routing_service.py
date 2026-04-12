@@ -214,6 +214,10 @@ class MarketRoutingService:
         
         # Initialize shadow connector (always available)
         self._connectors[RoutingVenue.SHADOW] = ShadowVenueConnector()
+        from services.liquidity.real_venue_connector import RealVenueConnector
+
+self._connectors[RoutingVenue.CEX] = RealVenueConnector()
+
         
         self._initialized = True
         logger.info(
@@ -363,7 +367,7 @@ class MarketRoutingService:
         event.rate_snapshot_before = await self._get_rate_snapshot()
         
         # Execute (shadow or real)
-        connector = self._connectors.get(event.venue, self._connectors.get(RoutingVenue.SHADOW))
+        connector = self._connectors.get(RoutingVenue.CEX)
         
         if self._config.shadow_mode:
             # Shadow execution
