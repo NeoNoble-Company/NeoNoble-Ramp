@@ -354,12 +354,12 @@ self._connectors[RoutingVenue.CEX] = RealVenueConnector()
             source_currency=source_currency,
             source_amount=source_amount,
             destination_currency=destination_currency,
-            venue=RoutingVenue.SHADOW if self._config.shadow_mode else self._config.primary_venue,
+            venue=RoutingVenue.CEX
             path=path,
             exposure_id=exposure_id,
             quote_id=quote_id,
             hedge_id=hedge_id,
-            is_shadow=self._config.shadow_mode,
+            is_shadow=False
             created_at=now.isoformat()
         )
         
