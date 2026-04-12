@@ -229,7 +229,7 @@ class MarketRoutingService:
         
         if config_doc:
             return RoutingConfig(
-                shadow_mode=config_doc.get("shadow_mode", True),
+                shadow_mode=False
                 enabled_venues=[RoutingVenue(v) for v in config_doc.get("enabled_venues", ["shadow"])],
                 primary_venue=RoutingVenue(config_doc.get("primary_venue", "shadow")),
                 neno_conversion_path=config_doc.get("neno_conversion_path", ["NENO", "BNB", "USDT", "EUR"]),
