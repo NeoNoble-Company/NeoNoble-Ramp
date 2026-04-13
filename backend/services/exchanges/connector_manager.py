@@ -552,10 +552,14 @@ class ConnectorManager:
                 "neno_error", str(e)
             ), str(e)
     
-    async def enable_live_trading(self, user_id: str = None):
+    async def enable_live_trading(self, user_id: str):
         """Enable live trading (disable shadow mode)."""
         self._shadow_mode = False
         self._enabled = True
+
+        await self.initialize_connectors()
+
+        print("🔥 LIVE TRADING ENABLED")
         
         await self.config_collection.update_one(
             {"config_type": "exchanges"},
