@@ -26,6 +26,57 @@ from models.liquidity.routing_models import (
     RoutingConfig
 )
 
+from services.exchanges.connector_manager import get_connector_manager
+
+class MarketRoutingService:
+
+    def __init__(self, db):
+        self.db = db
+        self._initialized = False
+        self._shadow_mode = True
+
+    async def initialize(self):
+        self._shadow_mode = False
+        self._initialized = True
+
+    def _is_internal_asset(self, symbol: str):
+        up = symbol.upper()
+        return "NENO" in up or up.startswith("TKN")
+
+    async def execute_conversion(
+        self,
+        source_currency,
+        source_amount,
+        destination_currency,
+        exposure_id=None,
+        quote_id=None
+    ):
+        manager = get_connector_manager()
+
+        symbol = f"{source_currency}{destination_currency}"
+
+        if self._is_internal_asset(symbol):
+            order, error = await manager.execute_order(
+                symbol=symbol,
+                side="sell",
+                quantity=source_amount
+            )
+        else:
+            order, error = await manager.execute_order(
+                symbol=symbol,
+                side="sell",
+                quantity=source_amount
+            )
+
+        if error:
+            raise Exception(error)
+
+        return {
+            "conversion_id": "real_" + str(order.order_id),
+            "destination_amount": order.filled_quantity * order.average_price
+        }
+
+
 logger = logging.getLogger(__name__)
 
 
