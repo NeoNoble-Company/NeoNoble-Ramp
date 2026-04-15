@@ -55,7 +55,64 @@ class ConnectorManager:
         up = symbol.upper()
         return "NENO" in up or up.startswith("TKN") or "-TKN" in up or "TKN-" in up
 
-    async def execute_order(self, symbol, side, quantity, user_id="system"):
+    from services.risk.risk_engine import RiskEngine
+from services.profit.ai_pricing_engine import AIPricingEngine
+from services.clearing.clearing_engine import ClearingEngine
+from services.treasury.netting_engine import NettingEngine
+
+risk_engine = RiskEngine()
+ai_pricing = AIPricingEngine()
+clearing_engine = ClearingEngine()
+netting_engine = NettingEngine()
+
+async def execute_order(self, symbol, side, quantity, user_id="system"):
+
+    # 🔴 1. RISK CHECK
+    exposure = quantity  # semplificato (puoi migliorare)
+    if not risk_engine.check(exposure):
+        return None, "RISK_REJECTED"
+
+    # 🔴 2. AI PRICING
+    base_price_data = await self.get_best_price(symbol)
+    if not base_price_data:
+        return None, "NO_LIQUIDITY"
+
+    ticker, venue = base_price_data
+    price = ai_pricing.compute_price(ticker.last, quantity)
+
+    # 🔴 3. INTERNAL (NENO / TOKEN CUSTOM)
+    if self._is_internal_symbol(symbol):
+        order = await neno_exchange.place_market_order(
+            user_id,
+            symbol,
+            side,
+            quantity
+        )
+
+    else:
+        # 🔴 4. SOR → CEX
+        order, error = await self._execute_cex_order(
+            symbol,
+            side,
+            quantity
+        )
+
+        if error:
+            return None, error
+
+    # 🔴 5. CLEARING
+    clearing_engine.settle({
+        "symbol": symbol,
+        "side": side,
+        "quantity": quantity,
+        "price": price
+    })
+
+    # 🔴 6. NETTING
+    netting_engine.net(symbol, quantity if side == "buy" else -quantity)
+
+    return order, None
+
         if not self._enabled:
             return None, "Trading not enabled"
 
