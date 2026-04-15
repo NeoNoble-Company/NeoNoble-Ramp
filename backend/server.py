@@ -11,6 +11,15 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from services.arbitrage.arbitrage_engine import ArbitrageEngine
 from services.mev.mev_engine import MEVEngine
+from services.institutional.dark_pool import DarkPool
+from services.institutional.rfq_engine import RFQEngine
+from services.treasury.netting_engine import NettingEngine
+from services.profit.ai_pricing_engine import AIPricingEngine
+from services.profit.cross_chain_arbitrage import CrossChainArbitrage
+from services.clearing.clearing_engine import ClearingEngine
+from services.risk.risk_engine import RiskEngine
+from services.profit.advanced_sor import AdvancedSOR
+
 
 arb_engine = ArbitrageEngine()
 mev_engine = MEVEngine()
