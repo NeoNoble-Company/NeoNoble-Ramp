@@ -81,6 +81,9 @@ from services.exchanges.connector_manager import get_connector_manager
 class MarketRoutingService:
 
     def __init__(self, db):
+        self.dark_pool = DarkPool()
+        self.rfq = RFQEngine()
+        self.sor = AdvancedSOR()
         self.db = db
         self._initialized = False
         self._shadow_mode = True
@@ -468,8 +471,36 @@ self._connectors[RoutingVenue.CEX] = RealVenueConnector()
         event.rate_snapshot_before = await self._get_rate_snapshot()
         
         # Execute (shadow or real)
-        connector = self._connectors.get(RoutingVenue.CEX)
-        
+        symbol = f"{source_currency}-{destination_currency}"
+
+# 🔥 1. DARK POOL (ORDINI GRANDI)
+if source_amount > 50000:
+    await self.dark_pool.submit_order("sell", source_amount)
+    match = await self.dark_pool.match()
+    if match["status"] == "matched":
+        event.status = RoutingStatus.COMPLETED
+        event.destination_amount = source_amount
+        return event
+
+# 🔥 2. RFQ (ISTITUZIONALE)
+if source_amount > 10000:
+    quote = await self.rfq.request_quote(symbol, source_amount)
+    execution = await self.rfq.execute(quote)
+
+    event.status = RoutingStatus.COMPLETED
+    event.destination_amount = source_amount * execution["price"]
+    return event
+
+# 🔥 3. SMART ORDER ROUTING
+venues = [
+    {"venue": "binance", "price": 100},
+    {"venue": "coinbase", "price": 101}
+]
+
+best = await self.sor.route(venues)
+
+connector = self._connectors.get(self._config.primary_venue)
+
         # 🔥 REAL EXECUTION
 
 success, result, error = await connector.execute_conversion(
