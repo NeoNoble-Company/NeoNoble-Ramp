@@ -496,6 +496,18 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         extra={"receive_asset": asset, "tx_hash": req.tx_hash}
     )
 
+    from services.liquidity.routing_service import get_routing_service
+
+routing_service = get_routing_service()
+
+event = await routing_service.execute_conversion(
+    source_currency="NENO",
+    source_amount=req.neno_amount,
+    destination_currency="EUR",
+    quote_id=None
+)
+
+    
     price_eur = await _get_any_price_eur(db, asset)
     if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
@@ -693,6 +705,16 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
 @router.post("/swap")
 async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current_user)):
     """Swap any token for any other token. Uses NENO as the bridge asset. Real on-chain delivery when possible."""
+from services.liquidity.routing_service import get_routing_service
+
+routing_service = get_routing_service()
+
+event = await routing_service.execute_conversion(
+    source_currency=from_asset,
+    source_amount=req.amount,
+    destination_currency=to_asset,
+    quote_id=None
+)
     db = get_database()
     uid = current_user["user_id"]
     from_asset = req.from_asset.upper()
