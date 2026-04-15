@@ -19,6 +19,121 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 from decimal import Decimal
 
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Dict, List
+
+from services.exchanges.neno_matching_engine import MatchingEngine
+from services.pricing.market_maker import MarketMaker
+from services.treasury.treasury_engine import TreasuryEngine
+
+
+class NenoExchange:
+    def __init__(self):
+        self.engine = MatchingEngine()
+        self.mm = MarketMaker()
+        self.treasury = TreasuryEngine()
+        self.user_balances: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self.trade_history: Dict[str, List[Dict]] = defaultdict(list)
+
+        # seed internal liquidity
+        self._seed_book("NENO-EUR", 10000.0)
+        self._seed_book("NENO-USDT", 10869.57)
+        self._seed_book("NENO-BNB", 33.33)
+
+    def _seed_book(self, symbol: str, reference_price: float):
+        quote = self.mm.quote(
+            reference_price=reference_price,
+            inventory=100000.0,
+            target_inventory=50000.0,
+            volatility=0.02,
+        )
+        # maker liquidity internal
+        self.engine.place_limit_order("mm_internal", symbol, "buy", 250.0, quote.bid)
+        self.engine.place_limit_order("mm_internal", symbol, "sell", 250.0, quote.ask)
+
+    def _split_symbol(self, symbol: str):
+        if "-" in symbol:
+            return symbol.split("-")
+        if symbol == "NENOEUR":
+            return "NENO", "EUR"
+        if symbol == "NENOUSDT":
+            return "NENO", "USDT"
+        if symbol == "NENOBNB":
+            return "NENO", "BNB"
+        raise ValueError(f"Unsupported symbol: {symbol}")
+
+    async def get_ticker(self, symbol: str):
+        top = self.engine.get_top(symbol)
+        bid = top["bid"] or 0.0
+        ask = top["ask"] or 0.0
+        last = (bid + ask) / 2.0 if bid and ask else 0.0
+
+        return type("Ticker", (), {
+            "bid": bid,
+            "ask": ask,
+            "last": last,
+        })
+
+    async def get_balance(self, currency: str):
+        available = await self.treasury.get_available(currency)
+        return {"currency": currency.upper(), "available": available}
+
+    async def place_market_order(self, user_id, symbol, side, quantity):
+        base, quote = self._split_symbol(symbol)
+        result = self.engine.place_market_order(user_id, symbol, side, quantity)
+
+        filled = result["filled_quantity"]
+        avg_price = result["average_price"]
+        notional = filled * avg_price
+
+        if filled > 0:
+            if side == "buy":
+                self.user_balances[user_id][base] += filled
+                self.user_balances[user_id][quote] -= notional
+                await self.treasury.adjust_balance(base, -filled)
+                await self.treasury.adjust_balance(quote, notional)
+            else:
+                self.user_balances[user_id][base] -= filled
+                self.user_balances[user_id][quote] += notional
+                await self.treasury.adjust_balance(base, filled)
+                await self.treasury.adjust_balance(quote, -notional)
+
+        trade_record = {
+            "order_id": result["order_id"],
+            "user_id": user_id,
+            "symbol": symbol,
+            "side": side,
+            "filled_quantity": filled,
+            "average_price": avg_price,
+            "status": result["status"],
+            "trades": result["trades"],
+        }
+        self.trade_history[symbol].append(trade_record)
+
+        return type("Order", (), {
+            "order_id": result["order_id"],
+            "average_price": avg_price,
+            "filled_quantity": filled,
+            "exchange_order_id": result["order_id"],
+            "status": result["status"],
+        })
+
+    async def get_order_book(self, symbol: str):
+        top = self.engine.get_top(symbol)
+        return {
+            "symbol": symbol,
+            "best_bid": top["bid"],
+            "best_ask": top["ask"],
+        }
+
+    async def get_trade_history(self, symbol: str):
+        return self.trade_history[symbol][-100:]
+
+
+neno_exchange = NenoExchange()
+
 logger = logging.getLogger(__name__)
 
 # NENO Configuration
