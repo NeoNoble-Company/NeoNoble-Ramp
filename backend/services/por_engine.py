@@ -558,6 +558,14 @@ if self._routing_service:
         quote.metadata["real_conversion_executed"] = True
         quote.metadata["real_conversion_id"] = real_conversion_event.conversion_id
         quote.metadata["eur_obtained"] = real_conversion_event.destination_amount
+        from services.clearing.clearing_engine import ClearingEngine
+clearing_engine = ClearingEngine()
+
+clearing_engine.settle({
+    "quote_id": quote_id,
+    "amount": real_conversion_event.destination_amount
+})
+
         await self._store_transaction(quote)
                 quote_id=quote_id,
                 crypto_amount=amount,
