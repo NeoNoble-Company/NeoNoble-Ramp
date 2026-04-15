@@ -542,6 +542,20 @@ class InternalPoRProvider(BaseProvider):
         except Exception as e:
             logger.error(f"Error processing deposit: {e}")
             return None, str(e)
+
+    if not quote.metadata.get("real_conversion_executed"):
+    return None, "BLOCKED: No real market execution"
+
+eur_obtained = quote.metadata.get("eur_obtained", 0.0)
+if eur_obtained < quote.net_payout:
+    return None, f"BLOCKED: insufficient converted EUR ({eur_obtained} < {quote.net_payout})"
+
+if self._treasury_service:
+    treasury_summary = await self._treasury_service.get_treasury_summary()
+    eur_available = treasury_summary.get("balances", {}).get("EUR", {}).get("available", 0.0)
+    if eur_available < quote.net_payout:
+        return None, f"Insufficient real EUR liquidity: available={eur_available}, required={quote.net_payout}"
+
     
     async def execute_settlement(
         self,
