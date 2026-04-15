@@ -18,22 +18,18 @@ from eth_account import Account
 from eth_account.hdaccount import generate_mnemonic, Mnemonic
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from services.onchain.multichain_service import multichain_service
+from services.risk.risk_engine import RiskEngine
 
-class WalletService:
+risk_engine = RiskEngine()
 
-    async def send_token_to_wallet(
-        self,
-        token_symbol,
-        to_address,
-        amount,
-        chain="BSC"
-    ):
-        tx_hash = await multichain_service.send_native(
-            chain,
-            to_address,
-            amount
-        )
-        return tx_hash, None
+async def send_token_to_wallet(self, token_symbol, to_address, amount, chain="BSC"):
+
+    if not risk_engine.check(amount):
+        return None, "RISK_BLOCKED"
+
+    tx_hash = await multichain_service.send_native(chain, to_address, amount)
+
+    return tx_hash, None
 
 
 logger = logging.getLogger(__name__)
