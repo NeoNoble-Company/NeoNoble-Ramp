@@ -11,6 +11,11 @@ Phase 1: Shadow mode only - all routing is simulated and logged.
 Phase 2: Real venue integration (Binance, Kraken, etc.)
 """
 
+from services.institutional.dark_pool import DarkPool
+from services.institutional.rfq_engine import RFQEngine
+from services.profit.advanced_sor import AdvancedSOR
+
+
 from __future__ import annotations
 
 from services.exchanges.connector_manager import get_connector_manager
