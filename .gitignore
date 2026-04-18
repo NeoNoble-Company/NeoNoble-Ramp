@@ -31,6 +31,7 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
+
 *token.json*
 *credentials.json*
 
@@ -76,13 +77,46 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ node_modules/@next/swc-linux-x64-musl/next-swc.linux-x64-musl.node
-node_modules/@next/swc-linux-x64-gnu/next-swc.linux-x64-gnu.node
-node_modules/@next/swc-linux-x64-musl/next-swc.linux-x64-musl.node
+android-sdk/ -e 
+# Environment files
+*.env
+*.env.*
 -e 
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
+-e 
+# Environment files
+*.env
+*.env.*
+frontend/node_modules/.cache/default-development/6.pack
+frontend/node_modules/.cache/default-development/0.pack
+frontend/node_modules/.cache/default-development/1.pack
+frontend/node_modules/.cache/default-development/2.pack
+frontend/node_modules/.cache/default-development/4.pack
+frontend/node_modules/.cache/default-development/5.pack
+frontend/node_modules/.cache/default-development/3.pack
+frontend/node_modules/.cache/default-development/8.pack
+frontend/node_modules/.cache/default-development/8.pack
+frontend/node_modules/.cache/default-development/1.pack_
+frontend/node_modules/.cache/default-development/11.pack
+frontend/node_modules/.cache/default-development/14.pack
+frontend/node_modules/.cache/default-development/13.pack
+frontend/node_modules/.cache/default-development/16.pack
+frontend/node_modules/.cache/default-development/17.pack
+frontend/node_modules/.cache/default-development/19.pack
+frontend/node_modules/.cache/default-development/20.pack
+frontend/node_modules/.cache/default-development/21.pack
+-e 
+# Environment files
+*.env
+*.env.*
+neonoble-ramp.tar.gz
+neonoble-ramp.zip
 -e 
 # Environment files
 *.env

@@ -1,558 +1,310 @@
-# NeoNoble Ramp
+# NeoNoble Ramp Platform
 
-A production-ready crypto on/off-ramp platform for NENO tokens on Binance Smart Chain (BSC).
+A complete crypto on/off-ramp platform with enterprise-grade Provider-of-Record (PoR) engine, HMAC-secured API access, real-time pricing from CoinGecko, and a fixed NENO token price of €10,000.
 
-## 🚀 Features
+**Live URL**: https://multi-chain-wallet-14.preview.emergentagent.com
 
-- **Business API Keys System**: Secure HMAC-authenticated partner APIs for developers
-- **Dev Portal**: Self-service API key management and documentation
-- **User-Facing Ramp UI**: Simple interface for buying and selling NENO
-- **Fixed Pricing**: 1 NENO = €10,000 with 1% transaction fee
-- **Dual Authentication**: HMAC for business APIs, JWT for user sessions
-- **Complete API Suite**: Both business and UI endpoints
-- **Production-Ready**: Docker support, PostgreSQL database, comprehensive logging
+## Provider-of-Record (PoR) Engine
 
-## 📋 Prerequisites
+The platform includes a fully autonomous **internal PoR engine** that operates like enterprise providers (Transak, MoonPay, Ramp, Banxa):
 
-- Node.js 18+ and Yarn
-- PostgreSQL 15+
-- Docker (optional, for database)
+### PoR Features:
+- **Always Available**: €100M virtual liquidity pool, never blocks transactions
+- **Instant Settlement**: Default mode with configurable alternatives
+- **KYC/AML Handled**: PoR is responsible for compliance
+- **No Credentials Required**: Works autonomously out of the box
+- **Enterprise States**: Full transaction lifecycle (19 states)
 
-## 🏗️ Project Structure
+### Settlement Modes:
+- `instant` - Immediate completion (default)
+- `simulated_delay` - Realistic 1-3 day banking delay
+- `batch` - Scheduled batch processing
 
+### Transaction Lifecycle:
 ```
-/app
-├── app/
-│   ├── api/                    # API routes
-│   │   ├── dev/               # Developer portal APIs
-│   │   │   ├── register/      # Dev registration
-│   │   │   ├── login/         # Dev authentication
-│   │   │   └── api-keys/      # API key management
-│   │   ├── admin/             # Admin APIs
-│   │   │   └── api-clients/   # Admin API client management
-│   │   ├── ramp-api-*/        # Business APIs (HMAC-protected)
-│   │   └── ui-ramp-*/         # UI APIs (JWT-protected)
-│   ├── dev/                   # Developer portal pages
-│   │   ├── login/
-│   │   ├── dashboard/
-│   │   ├── api-keys/
-│   │   └── docs/
-│   ├── ramp/                  # User ramp pages
-│   │   ├── neno-buy/
-│   │   └── neno-sell/
-│   └── auth/                  # User authentication
-├── lib/
-│   ├── prisma.js              # Prisma client
-│   ├── middleware/            # Auth middlewares
-│   ├── services/              # Business logic
-│   └── utils/                 # Utilities (HMAC, JWT, API keys)
-├── prisma/
-│   └── schema.prisma          # Database schema
-├── config/
-│   └── tokens.js              # Token configuration (NENO)
-├── scripts/
-│   └── initDatabase.js        # Database initialization
-├── docker-compose.yml          # PostgreSQL container
-├── Dockerfile                  # Production build
-└── README.md
+QUOTE_CREATED → QUOTE_ACCEPTED → DEPOSIT_PENDING → DEPOSIT_DETECTED 
+→ DEPOSIT_CONFIRMED → SETTLEMENT_PENDING → SETTLEMENT_PROCESSING 
+→ PAYOUT_INITIATED → PAYOUT_COMPLETED → COMPLETED
 ```
 
-## 🛠️ Installation & Setup
+## Features
 
-### 1. Clone and Install Dependencies
+### Public NeoNoble Ramp App (End Users)
+- User signup/login with email and password
+- Buy crypto (onramp): EUR → Crypto
+- Sell crypto (offramp): Crypto → EUR with **real BSC deposit addresses**
+- Real-time price display from CoinGecko
+- Transaction history
+
+### NeoNoble Developer Portal
+- Developer signup/login
+- API key management (create, view, revoke)
+- Usage statistics dashboard
+- Quick start documentation
+
+### Platform API (for Integrations)
+- HMAC-SHA256 authenticated endpoints
+- Replay protection with timestamp window (±5 minutes)
+- Rate limiting per API key
+- Onramp/Offramp quote and execution endpoints
+
+### Blockchain Integration
+- **BNB Smart Chain (BSC)** for NENO BEP-20 token
+- HD wallet address generation for deposits
+- On-chain transaction monitoring
+- Automatic payout trigger on confirmed deposits
+
+### SEPA Payout System
+- **Stripe integration** (when balance available)
+- **Pending transfer records** for manual/external SEPA execution
+- Admin API for transfer management
+- Works like Transak/MoonPay/MetaMask Sell liquidity model
+
+### Pricing Engine
+- **NENO**: Fixed at €10,000 per token (deterministic)
+- **Other tokens**: Real-time prices from CoinGecko API
+- Supported cryptocurrencies: BTC, ETH, NENO, USDT, USDC, BNB, SOL, XRP, ADA, DOGE, MATIC, DOT, AVAX, LINK, UNI
+- 1.5% trading fee
+
+## Tech Stack
+
+### Backend
+- **FastAPI** - Python async web framework
+- **MongoDB** - Database (with Motor async driver)
+- **bcrypt** - Password hashing
+- **JWT** - Session management
+- **AES-256-GCM** - API secret encryption
+- **HMAC-SHA256** - API request authentication
+- **httpx** - Async HTTP client for CoinGecko API
+
+### Frontend
+- **React 19** - UI framework
+- **React Router** - Navigation
+- **Tailwind CSS** - Styling
+- **Lucide React** - Icons
+- **Axios** - HTTP client
+
+## Environment Variables
+
+### Backend (`/app/backend/.env`)
 
 ```bash
-cd /app
-yarn install
+MONGO_URL="mongodb://localhost:27017"
+DB_NAME="neonoble_ramp"
+CORS_ORIGINS="*"
+API_SECRET_ENCRYPTION_KEY="<32-byte-hex-key>"  # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+JWT_SECRET="<your-jwt-secret>"
 ```
 
-### 2. Start PostgreSQL Database
-
-**Option A: Using Docker (Recommended)**
+### Frontend (`/app/frontend/.env`)
 
 ```bash
-docker compose up -d
+REACT_APP_BACKEND_URL=<your-backend-url>
 ```
 
-**Option B: Local PostgreSQL**
+## Project Structure
 
-Install PostgreSQL 15+ and create a database:
-
-```bash
-createdb neonoble_ramp
+```
+/app/
+├── backend/
+│   ├── server.py              # Main FastAPI application
+│   ├── .env                   # Environment variables
+│   ├── requirements.txt       # Python dependencies
+│   ├── models/               
+│   │   ├── user.py            # User models
+│   │   ├── api_key.py         # Platform API Key models
+│   │   ├── transaction.py     # Transaction models
+│   │   └── quote.py           # Quote request/response models
+│   ├── services/
+│   │   ├── auth_service.py    # Authentication logic
+│   │   ├── api_key_service.py # API key management
+│   │   ├── ramp_service.py    # Ramp transaction logic
+│   │   └── pricing_service.py # Pricing from CoinGecko
+│   ├── middleware/
+│   │   └── auth.py            # JWT and HMAC authentication
+│   ├── routes/
+│   │   ├── auth.py            # Auth endpoints
+│   │   ├── dev_portal.py      # Developer portal endpoints
+│   │   ├── ramp_api.py        # HMAC-protected ramp API
+│   │   └── user_ramp.py       # User ramp endpoints
+│   └── utils/
+│       ├── encryption.py      # AES-256-GCM encryption
+│       ├── hmac_utils.py      # HMAC signature generation/verification
+│       ├── password.py        # bcrypt password hashing
+│       └── jwt_utils.py       # JWT token handling
+├── frontend/
+│   └── src/
+│       ├── App.js             # Main app with routing
+│       ├── api/               # API client
+│       ├── context/           # Auth context
+│       └── pages/             # Page components
+└── scripts/
+    ├── create_platform_key.py # CLI tool to create API keys
+    └── e2e_test.py            # End-to-end test script
 ```
 
-### 3. Configure Environment Variables
+## API Endpoints
 
-Copy the example environment file:
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | Login user |
+| GET | `/api/auth/me` | Get current user |
+| POST | `/api/auth/logout` | Logout |
 
-```bash
-cp .env.example .env
+### Developer Portal
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/dev/api-keys` | Create API key |
+| GET | `/api/dev/api-keys` | List API keys |
+| DELETE | `/api/dev/api-keys/{id}` | Revoke API key |
+| GET | `/api/dev/dashboard` | Get dashboard stats |
+
+### User Ramp (JWT Auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ramp/prices` | Get current prices |
+| POST | `/api/ramp/onramp/quote` | Create onramp quote |
+| POST | `/api/ramp/onramp/execute` | Execute onramp |
+| POST | `/api/ramp/offramp/quote` | Create offramp quote |
+| POST | `/api/ramp/offramp/execute` | Execute offramp |
+| GET | `/api/ramp/transactions` | Get transaction history |
+
+### Platform Ramp API (HMAC Auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ramp-api-health` | Health check |
+| GET | `/api/ramp-api-prices` | Get all prices |
+| POST | `/api/ramp-api-onramp-quote` | Create onramp quote |
+| POST | `/api/ramp-api-onramp` | Execute onramp |
+| POST | `/api/ramp-api-offramp-quote` | Create offramp quote |
+| POST | `/api/ramp-api-offramp` | Execute offramp |
+
+## HMAC Authentication
+
+All platform API endpoints require HMAC-SHA256 authentication.
+
+### Required Headers
+- `X-API-KEY`: Your API key (public identifier)
+- `X-TIMESTAMP`: Unix timestamp in seconds
+- `X-SIGNATURE`: HMAC-SHA256 signature
+
+### Signature Generation
+```python
+import hmac
+import hashlib
+import json
+import time
+
+def generate_signature(timestamp: str, body_json: str, api_secret: str) -> str:
+    message = f"{timestamp}{body_json}"
+    return hmac.new(
+        api_secret.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+# Example usage
+timestamp = str(int(time.time()))
+body = json.dumps({"fiat_amount": 100, "crypto_currency": "BTC"})
+signature = generate_signature(timestamp, body, your_api_secret)
 ```
-
-Edit `.env` and configure:
-
-```env
-# Database
-DATABASE_URL="postgresql://neonoble:neonoble123@localhost:5432/neonoble_ramp?schema=public"
-
-# JWT Secret (generate with: openssl rand -hex 32)
-JWT_SECRET="your-super-secret-jwt-key-here-change-in-production"
-
-# Application
-NODE_ENV="development"
-PORT=3000
-
-# Base URL
-NEXT_PUBLIC_BASE_URL="http://localhost:3000"
-
-# For production:
-# NEXT_PUBLIC_BASE_URL="https://neonoble.it"
-```
-
-### 4. Initialize Database
-
-Generate Prisma client:
-
-```bash
-npx prisma generate
-```
-
-Run migrations:
-
-```bash
-npx prisma migrate dev --name init
-```
-
-Initialize platform_internal API client:
-
-```bash
-node scripts/initDatabase.js
-```
-
-This will:
-- Create necessary database tables
-- Generate `platform_internal` API client (for UI endpoints)
-- Update `.env` with platform credentials
-
-### 5. Start Development Server
-
-```bash
-yarn dev
-```
-
-The application will be available at:
-- Dev Portal: http://localhost:3000/dev/login
-- User Ramp: http://localhost:3000/ramp
-- User Auth: http://localhost:3000/auth
-
-## 🔑 NENO Token Configuration
-
-The fixed pricing model for NENO is configured in `config/tokens.js`:
-
-```javascript
-{
-  symbol: 'NENO',
-  defaultChain: 'BSC',
-  decimals: 18,
-  fixedPriceEur: 10000,  // 1 NENO = €10,000
-}
-```
-
-**Transaction Fee**: 1% of the fiat amount
-
-## 🔐 Authentication
-
-### Developer Portal (HMAC Authentication)
-
-Business API endpoints require HMAC-SHA256 authentication:
-
-**Required Headers:**
-- `X-API-KEY`: Your API key
-- `X-TIMESTAMP`: Current Unix timestamp in milliseconds
-- `X-SIGNATURE`: HMAC-SHA256(apiSecret, timestamp + bodyJSON)
-- `Content-Type`: application/json
-
-**Signature Calculation (JavaScript):**
-
-```javascript
-const timestamp = Date.now().toString();
-const bodyJson = JSON.stringify(requestBody);
-const message = timestamp + bodyJson;
-const signature = CryptoJS.HmacSHA256(message, apiSecret).toString();
-```
-
-### User Portal (JWT Authentication)
-
-User endpoints use JWT tokens stored in cookies or Authorization header.
-
-## 📡 API Endpoints
-
-### Business APIs (HMAC-protected)
-
-Base URL: `https://neonoble.it` (production) or `http://localhost:3000` (development)
-
-#### POST /api/ramp-api-onramp-quote
-Get a quote for buying tokens with fiat.
-
-```json
-// Request
-{
-  "fromFiat": "EUR",
-  "toToken": "NENO",
-  "chain": "BSC",
-  "amountFiat": 10000
-}
-
-// Response (1 NENO = €10,000)
-{
-  "amountFiat": 10000,
-  "estimatedTokens": 1,
-  "rate": 10000,
-  "feeBase": 100,
-  "token": "NENO",
-  "chain": "BSC"
-}
-```
-
-#### POST /api/ramp-api-onramp
-Create an onramp session (buy tokens).
-
-```json
-// Request
-{
-  "fromFiat": "EUR",
-  "toToken": "NENO",
-  "chain": "BSC",
-  "amountFiat": 10000,
-  "userWallet": "0x1234..."
-}
-
-// Response
-{
-  "sessionId": "NRAMP_1234567890_abc123",
-  "status": "PENDING",
-  "checkoutUrl": "https://neonoble.it/ramp/checkout/NRAMP_...",
-  "details": { ... }
-}
-```
-
-#### POST /api/ramp-api-offramp-quote
-Get a quote for selling tokens for fiat.
-
-```json
-// Request
-{
-  "token": "NENO",
-  "chain": "BSC",
-  "tokens": 1
-}
-
-// Response
-{
-  "tokens": 1,
-  "amountFiat": 10000,
-  "rate": 10000,
-  "feeBase": 100
-}
-```
-
-#### POST /api/ramp-api-offramp
-Create an offramp session (sell tokens).
-
-```json
-// Request
-{
-  "token": "NENO",
-  "chain": "BSC",
-  "tokens": 1,
-  "userWallet": "0x1234...",
-  "payoutDestination": "DE89370400440532013000"
-}
-
-// Response
-{
-  "sessionId": "NRAMP_1234567890_xyz789",
-  "status": "PENDING",
-  "checkoutUrl": "https://neonoble.it/ramp/checkout/NRAMP_...",
-  "details": { ... }
-}
-```
-
-### User UI APIs (JWT-protected)
-
-- POST `/api/ui-ramp-onramp-quote` - Get onramp quote for logged-in users
-- POST `/api/ui-ramp-onramp` - Create onramp session for logged-in users
-- POST `/api/ui-ramp-offramp-quote` - Get offramp quote for logged-in users
-- POST `/api/ui-ramp-offramp` - Create offramp session for logged-in users
-
-These endpoints use the internal `platform_internal` API client automatically.
-
-### Developer Portal APIs
-
-- POST `/api/dev/register` - Register a developer account
-- POST `/api/dev/login` - Login to dev portal
-- GET `/api/dev/api-keys` - List API keys
-- POST `/api/dev/api-keys` - Create new API key
-
-### Admin APIs
-
-- GET `/api/admin/api-clients` - List all API clients (paginated)
-- POST `/api/admin/api-clients` - Create API client for a user
-
-## 🧪 Testing with Postman
-
-### Step 1: Create Environment Variables
-
-In Postman, create these variables:
-- `API_KEY`: Your API key from Dev Portal
-- `API_SECRET`: Your API secret
-- `BASE_URL`: `https://neonoble.it` or `http://localhost:3000`
-
-### Step 2: Pre-request Script
-
-Add this to your request's Pre-request Script tab:
-
-```javascript
-const timestamp = Date.now().toString();
-pm.environment.set("TIMESTAMP", timestamp);
-
-const bodyJson = pm.request.body.raw || "{}";
-const message = timestamp + bodyJson;
-const signature = CryptoJS.HmacSHA256(
-  message,
-  pm.environment.get("API_SECRET")
-).toString();
-
-pm.environment.set("SIGNATURE", signature);
-```
-
-### Step 3: Headers
-
-Add these headers:
-- `Content-Type`: `application/json`
-- `X-API-KEY`: `{{API_KEY}}`
-- `X-TIMESTAMP`: `{{TIMESTAMP}}`
-- `X-SIGNATURE`: `{{SIGNATURE}}`
 
 ### Example Request
-
-**URL**: `POST {{BASE_URL}}/api/ramp-api-onramp-quote`
-
-**Body**:
-```json
-{
-  "fromFiat": "EUR",
-  "toToken": "NENO",
-  "chain": "BSC",
-  "amountFiat": 10000
-}
-```
-
-**Expected Response** (1 NENO = €10,000):
-```json
-{
-  "amountFiat": 10000,
-  "estimatedTokens": 1,
-  "rate": 10000,
-  "feeBase": 100,
-  "token": "NENO",
-  "chain": "BSC"
-}
-```
-
-## 🐳 Docker Deployment
-
-### Build Docker Image
-
 ```bash
-docker build -t neonoble-ramp .
+curl -X POST https://your-api/api/ramp-api-onramp-quote \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: nn_live_xxx" \
+  -H "X-TIMESTAMP: 1234567890" \
+  -H "X-SIGNATURE: abc123..." \
+  -d '{"fiat_amount": 100, "crypto_currency": "BTC"}'
 ```
 
-### Run with Docker Compose
+## Commands
 
-Create a production `docker-compose.prod.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: neonoble
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: neonoble_ramp
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - neonoble-net
-
-  app:
-    image: neonoble-ramp
-    depends_on:
-      - postgres
-    environment:
-      DATABASE_URL: postgresql://neonoble:${POSTGRES_PASSWORD}@postgres:5432/neonoble_ramp
-      JWT_SECRET: ${JWT_SECRET}
-      NEXT_PUBLIC_BASE_URL: https://neonoble.it
-    ports:
-      - "3000:3000"
-    networks:
-      - neonoble-net
-
-volumes:
-  postgres_data:
-
-networks:
-  neonoble-net:
-```
-
-Run:
-
+### Start Services
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+# Restart both frontend and backend
+sudo supervisorctl restart all
+
+# Restart backend only
+sudo supervisorctl restart backend
+
+# Restart frontend only
+sudo supervisorctl restart frontend
 ```
 
-## 🚀 Production Deployment
-
-### 1. Environment Configuration
-
-For production at `https://neonoble.it`:
-
-```env
-DATABASE_URL="postgresql://user:pass@host:5432/neonoble_ramp"
-JWT_SECRET="generated-with-openssl-rand-hex-32"
-NODE_ENV="production"
-NEXT_PUBLIC_BASE_URL="https://neonoble.it"
-```
-
-### 2. Build for Production
-
+### Create Platform API Key (CLI)
 ```bash
-yarn build
+cd /app
+python scripts/create_platform_key.py --name="My Key" --description="For testing" --rate-limit=1000
 ```
 
-### 3. Start Production Server
-
+### Run E2E Tests
 ```bash
-yarn start
+cd /app
+python scripts/e2e_test.py
 ```
 
-### 4. Database Migrations
-
-Run migrations in production:
-
+### View Logs
 ```bash
-npx prisma migrate deploy
+# Backend logs
+tail -f /var/log/supervisor/backend.err.log
+
+# Frontend logs
+tail -f /var/log/supervisor/frontend.err.log
 ```
 
-### 5. Initialize Platform Client
+## E2E Test Checklist
 
-```bash
-node scripts/initDatabase.js
-```
+1. ✅ **Health Endpoints**
+   - `/api/health` returns healthy
+   - `/api/ramp-api-health` returns supported cryptos
 
-### 6. DNS Configuration
+2. ✅ **User Authentication**
+   - Signup with email/password
+   - Login returns JWT token
+   - Get current user info
 
-Point your domain to the server:
-- A record: `neonoble.it` → Server IP
-- Configure SSL/TLS certificate (Let's Encrypt recommended)
-- Use reverse proxy (nginx/Caddy) for SSL termination
+3. ✅ **Developer Authentication**
+   - Signup as developer
+   - Access developer portal
 
-### Recommended nginx Configuration
+4. ✅ **API Key Management**
+   - Create API key (returns key + secret)
+   - List API keys
+   - Revoke API key
 
-```nginx
-server {
-    listen 80;
-    server_name neonoble.it;
-    return 301 https://$server_name$request_uri;
-}
+5. ✅ **HMAC Authentication**
+   - Valid signature accepted
+   - Invalid signature rejected (401)
+   - Old timestamp rejected (replay protection)
 
-server {
-    listen 443 ssl http2;
-    server_name neonoble.it;
+6. ✅ **Pricing**
+   - BTC/ETH/etc use CoinGecko prices
+   - NENO fixed at €10,000
+   - 1.5% fee calculated correctly
 
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
+7. ✅ **Onramp Flow**
+   - Create quote
+   - Execute with wallet address
+   - Transaction recorded
 
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
+8. ✅ **Offramp Flow**
+   - Create quote
+   - Execute with bank account
+   - Transaction recorded
 
-## 📊 Database Schema
+## Security Features
 
-### User
-- id, email, passwordHash, role (USER/ADMIN)
+- **Password Hashing**: bcrypt with 12 rounds
+- **JWT Tokens**: 24-hour expiry
+- **API Secret Encryption**: AES-256-GCM
+- **HMAC Signatures**: SHA-256
+- **Replay Protection**: ±5 minute timestamp window
+- **Rate Limiting**: Per API key (configurable)
 
-### ApiClient
-- id, ownerId, name, apiKey, apiSecret, status, rateLimitDay, totalCalls, totalFeeBase
+## License
 
-### ApiCallLog
-- id, apiClientId, endpoint, method, statusCode, createdAt
-
-### RampSession
-- id, apiClientId, type (ONRAMP/OFFRAMP), tokenSymbol, chain, amountFiat, tokens, feeBase, status, checkoutUrl, userWallet, payoutDestination
-
-## 🔧 Prisma Commands
-
-```bash
-# Generate Prisma client
-npx prisma generate
-
-# Create migration
-npx prisma migrate dev --name migration_name
-
-# Deploy migrations (production)
-npx prisma migrate deploy
-
-# Open Prisma Studio (database GUI)
-npx prisma studio
-
-# Reset database (WARNING: deletes all data)
-npx prisma migrate reset
-```
-
-## 📝 Payment Flow (MOCKED for MVP)
-
-Currently, payment processing is MOCKED for MVP purposes:
-
-1. User creates onramp/offramp session
-2. Session is stored in database with status PENDING
-3. Success page is shown immediately
-4. In production, you would:
-   - Redirect to payment provider (Stripe, PayPal, etc.)
-   - Handle webhooks for payment confirmation
-   - Update session status to COMPLETED or FAILED
-   - Trigger blockchain transactions for token transfer
-
-## 🎯 Next Steps for Production
-
-1. **Payment Integration**: Integrate Stripe/PayPal for actual payments
-2. **Blockchain Integration**: Connect to BSC for token transfers
-3. **KYC/AML**: Add identity verification
-4. **Rate Limiting**: Implement API rate limiting
-5. **Monitoring**: Add logging and monitoring (Sentry, DataDog)
-6. **Testing**: Add comprehensive test suite
-7. **Security Audit**: Conduct security review
-
-## 📞 Support
-
-For questions or issues:
-- Dev Portal Documentation: http://localhost:3000/dev/docs
-- Email: support@neonoble.it
-
-## 📄 License
-
-Proprietary - All rights reserved
-
----
-
-**NeoNoble Ramp v1.0.0** - Production-ready crypto on/off-ramp platform
+MIT
