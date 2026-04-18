@@ -685,51 +685,95 @@ export default function NenoExchange() {
           </div>
         )}
 
-        {/* Swap */}
-        {tab === 'swap' && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-            <div className="grid grid-cols-5 gap-2 items-end">
-              <div className="col-span-2">
-                <label className="text-zinc-500 text-xs mb-1 block">Da</label>
-                <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} data-testid="swap-from-select"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm">
-                  {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => <option key={a} value={a}>{a}{balances[a] ? ` (${balances[a].toFixed(4)})` : ''}</option>)}
-                </select>
-              </div>
-              <div className="flex justify-center">
-                <button onClick={() => { setSwapFrom(swapTo); setSwapTo(swapFrom); }} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700">
-                  <ArrowRightLeft className="w-4 h-4 text-purple-400" />
-                </button>
-              </div>
-              <div className="col-span-2">
-                <label className="text-zinc-500 text-xs mb-1 block">A</label>
-                <select value={swapTo} onChange={e => setSwapTo(e.target.value)} data-testid="swap-to-select"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm">
-                  {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-zinc-500 text-xs mb-1 block">Quantita {swapFrom}</label>
-              <input type="number" value={swapAmt} onChange={e => setSwapAmt(e.target.value)} min="0" step="any" data-testid="swap-amount-input"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
-            </div>
-            {swapQuote && (
-              <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1" data-testid="swap-quote">
-                <div className="flex justify-between"><span className="text-zinc-500">Rate</span><span className="text-white">1 {swapFrom} = {swapQuote.rate?.toFixed(8)} {swapTo}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Fee ({swapQuote.fee_pct}%)</span><span className="text-amber-400">EUR {swapQuote.fee_eur}</span></div>
-                {swapQuote.mm_spread_bps && (
-                  <div className="flex justify-between"><span className="text-zinc-500">MM Spread</span><span className="text-amber-400">{swapQuote.mm_spread_bps?.toFixed(1)} bps</span></div>
-                )}
-                <div className="flex justify-between font-bold"><span className="text-zinc-300">Ricevi</span><span className="text-emerald-400">{swapQuote.receive_amount?.toFixed(8)} {swapTo}</span></div>
-              </div>
-            )}
-            <button onClick={handleSwap} disabled={loading || !swapAmt || parseFloat(swapAmt) <= 0 || swapFrom === swapTo} data-testid="swap-btn"
-              className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Swap ${swapAmt} ${swapFrom} → ${swapTo}`}
-            </button>
-          </div>
-        )}
+        {/* Swap - ON-CHAIN REALE */}
+{tab === 'swap' && (
+  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+    <div className="grid grid-cols-5 gap-2 items-end">
+      <div className="col-span-2">
+        <label className="text-zinc-500 text-xs mb-1 block">Da</label>
+        <select 
+          value={swapFrom} 
+          onChange={e => setSwapFrom(e.target.value)} 
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm"
+        >
+          {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => (
+            <option key={a} value={a}>{a}{balances[a] ? ` (${balances[a].toFixed(4)})` : ''}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex justify-center">
+        <button 
+          onClick={() => { setSwapFrom(swapTo); setSwapTo(swapFrom); }} 
+          className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700"
+        >
+          <ArrowRightLeft className="w-4 h-4 text-purple-400" />
+        </button>
+      </div>
+      <div className="col-span-2">
+        <label className="text-zinc-500 text-xs mb-1 block">A</label>
+        <select 
+          value={swapTo} 
+          onChange={e => setSwapTo(e.target.value)} 
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm"
+        >
+          {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label className="text-zinc-500 text-xs mb-1 block">Quantità {swapFrom}</label>
+      <input 
+        type="number" 
+        value={swapAmt} 
+        onChange={e => setSwapAmt(e.target.value)} 
+        min="0" 
+        step="any"
+        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" 
+      />
+    </div>
+
+    {/* Quote esistente */}
+    {swapQuote && (
+      <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1">
+        <div className="flex justify-between"><span className="text-zinc-500">Rate</span><span className="text-white">1 {swapFrom} = {swapQuote.rate?.toFixed(8)} {swapTo}</span></div>
+        <div className="flex justify-between font-bold"><span className="text-zinc-300">Ricevi stimato</span><span className="text-emerald-400">{swapQuote.receive_amount?.toFixed(8)} {swapTo}</span></div>
+      </div>
+    )}
+
+    {/* Pulsante Swap INTERNO (quello che avevi già) */}
+    <button 
+      onClick={handleSwap} 
+      disabled={loading || !swapAmt || parseFloat(swapAmt) <= 0 || swapFrom === swapTo}
+      className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50"
+    >
+      {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Swap Interno ${swapAmt} ${swapFrom} → ${swapTo}`}
+    </button>
+
+    {/* === NUOVO PULSANTE: SWAP ON-CHAIN REALE === */}
+    <button 
+      onClick={handleRealOnChainSwap} 
+      disabled={loading || !swapAmt || parseFloat(swapAmt) <= 0 || swapFrom === swapTo || !address}
+      className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-lg font-bold text-sm text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+    >
+      {loading ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : (
+        <>
+          <Shield className="w-4 h-4" />
+          Swap On-Chain Reale → {swapTo}
+        </>
+      )}
+    </button>
+
+    {!address && (
+      <p className="text-amber-400 text-xs text-center">Connetti MetaMask per usare lo Swap On-Chain</p>
+    )}
+  </div>
+)}
+
 
 
         {/* Deposit NENO Widget */}
